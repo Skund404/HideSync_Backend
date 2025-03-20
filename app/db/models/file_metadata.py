@@ -41,10 +41,10 @@ class FileMetadata(AbstractBase, ValidationMixin, TimestampMixin):
         description: User-provided description of the file
         is_public: Whether the file is publicly accessible
         thumbnail_path: Path to a thumbnail version of the file
-        metadata: Additional structured metadata for the file
+        meta_data: Additional structured meta_data for the file
     """
 
-    __tablename__ = "file_metadata"
+    __tablename__ = "file_meta_data"
 
     # File identification
     file_id = Column(String(36), nullable=False, default=lambda: str(uuid.uuid4()))
@@ -71,7 +71,7 @@ class FileMetadata(AbstractBase, ValidationMixin, TimestampMixin):
     deleted_at = Column(DateTime, nullable=True)
 
     # Additional metadata
-    metadata = Column(JSON, nullable=True)
+    meta_data = Column(JSON, nullable=True)
 
     # Relationships
     # user = relationship("User", back_populates="files")
@@ -114,5 +114,5 @@ class FileMetadata(AbstractBase, ValidationMixin, TimestampMixin):
             "is_public": self.is_public,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
-            "metadata": self.metadata,
+            "meta_data": self.meta_data,
         }

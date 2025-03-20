@@ -9,7 +9,7 @@ and metadata for project creation.
 
 from typing import List, Optional, Dict, Any, ClassVar, Set
 
-from sqlalchemy import Column, String, Text, Enum, Integer, Boolean, JSON, ForeignKey
+from sqlalchemy import Column, String, Text, Enum, Integer, Boolean, JSON, ForeignKey, Float
 from sqlalchemy.orm import relationship, validates
 
 from app.db.models.base import AbstractBase, ValidationMixin, TimestampMixin

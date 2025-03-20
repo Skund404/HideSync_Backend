@@ -10,7 +10,7 @@ These models support a knowledge base for users of the leathercraft system.
 from typing import List, Optional, Dict, Any, ClassVar, Set
 from datetime import datetime
 
-from sqlalchemy import Column, String, Text, Enum, Integer, ForeignKey, JSON
+from sqlalchemy import Column, String, Text, Enum, Integer, ForeignKey, JSON, DateTime, Float
 from sqlalchemy.orm import relationship, validates
 from sqlalchemy.ext.hybrid import hybrid_property
 

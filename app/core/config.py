@@ -10,7 +10,8 @@ import os
 import secrets
 from typing import Any, Dict, List, Optional, Union
 
-from pydantic import AnyHttpUrl, BaseSettings, EmailStr, PostgresDsn, validator
+from pydantic import AnyHttpUrl, EmailStr, validator, Field
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -59,7 +60,8 @@ class Settings(BaseSettings):
         raise ValueError(v)
 
     # Database
-    DATABASE_URL: Optional[PostgresDsn] = None
+    # Changed from PostgresDsn to str to support both SQLite and PostgreSQL
+    DATABASE_URL: Optional[str] = None
     DATABASE_HOST: Optional[str] = None
     DATABASE_PORT: Optional[str] = None
     DATABASE_USER: Optional[str] = None
@@ -106,16 +108,38 @@ class Settings(BaseSettings):
 
         # Build connection string from components if provided
         if (
-            values.get("DATABASE_HOST")
-            and values.get("DATABASE_PORT")
-            and values.get("DATABASE_USER")
-            and values.get("DATABASE_NAME")
+                values.get("DATABASE_HOST")
+                and values.get("DATABASE_PORT")
+                and values.get("DATABASE_USER")
+                and values.get("DATABASE_NAME")
         ):
             password = values.get("DATABASE_PASSWORD", "")
             return f"postgresql://{values['DATABASE_USER']}:{password}@{values['DATABASE_HOST']}:{values['DATABASE_PORT']}/{values['DATABASE_NAME']}"
 
         # Fall back to SQLite
         return f"sqlite:///{values.get('DATABASE_PATH', 'hidesync.db')}"
+
+    # Skip PostgreSQL validation for SQLite URLs
+    @validator("DATABASE_URL")
+    def validate_database_url(cls, v: Optional[str]) -> Optional[str]:
+        """
+        Validate database URL, allowing both PostgreSQL and SQLite.
+
+        Args:
+            v: Database URL string
+
+        Returns:
+            Validated database URL
+        """
+        if not v:
+            return v
+
+        # Skip validation for SQLite URLs
+        if v.startswith("sqlite:"):
+            return v
+
+        # For PostgreSQL URLs, you could add additional validation here if needed
+        return v
 
     # Email
     SMTP_TLS: bool = True

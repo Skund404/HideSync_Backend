@@ -1,3 +1,10 @@
+# MANUAL FIX REQUIRED:
+# In class HardwareMaterial, rename or remove the 'finish' column to resolve conflict with parent class Material
+# For example:
+#   - Rename 'finish' to 'hardware_finish'
+#   - Or add parameter 'use_existing_column=True' to the finish Column
+#   - Or remove the duplicate column definition
+# 
 # File: app/db/models/material.py
 """
 Material models for the Leathercraft ERP system.
@@ -225,9 +232,9 @@ class HardwareMaterial(Material):
     Attributes:
         hardware_type: Type of hardware
         hardware_material: Material the hardware is made of
-        finish: Finish type
+        hardware_finish: Finish type
         size: Size specification
-        color: Color description
+        hardware_color: Color description
     """
 
     __mapper_args__ = {"polymorphic_identity": "hardware"}
@@ -235,9 +242,9 @@ class HardwareMaterial(Material):
     # Hardware-specific attributes
     hardware_type = Column(Enum(HardwareType))
     hardware_material = Column(Enum(HardwareMaterialEnum))
-    finish = Column(Enum(HardwareFinish))
+    hardware_finish = Column(Enum(HardwareFinish))
     size = Column(String(50))
-    color = Column(String(50))
+    hardware_color = Column(String(50))
 
     def __repr__(self) -> str:
         """Return string representation of the HardwareMaterial."""
@@ -252,28 +259,28 @@ class SuppliesMaterial(Material):
 
     Attributes:
         supplies_material_type: Type of supply material
-        color: Color description
+        supplies_color: Color description
         thread_thickness: Thread thickness (for thread)
         material_composition: Material composition description
         volume: Volume (for liquids)
         length: Length (for thread, cord, etc.)
         drying_time: Drying time (for adhesives, dyes, etc.)
         application_method: Application method
-        finish: Finish type
+        supplies_finish: Finish type
     """
 
     __mapper_args__ = {"polymorphic_identity": "supplies"}
 
     # Supplies-specific attributes
     supplies_material_type = Column(String(50))
-    color = Column(String(50))
+    supplies_color = Column(String(50))
     thread_thickness = Column(String(50))
     material_composition = Column(String(100))
     volume = Column(Float)
     length = Column(Float)
     drying_time = Column(String(50))
     application_method = Column(String(100))
-    finish = Column(String(50))
+    supplies_finish = Column(String(50))
 
     def __repr__(self) -> str:
         """Return string representation of the SuppliesMaterial."""

@@ -40,7 +40,7 @@ class CustomerCommunication(AbstractBase, ValidationMixin, TimestampMixin):
         direction: Direction of communication (INBOUND or OUTBOUND)
         related_entity_type: Type of entity this communication relates to
         related_entity_id: ID of the related entity
-        metadata: Additional structured metadata for the communication
+        meta_data: Additional structured meta_data for the communication
         attachment_ids: IDs of any attached files
     """
 
@@ -64,7 +64,7 @@ class CustomerCommunication(AbstractBase, ValidationMixin, TimestampMixin):
     direction = Column(String(20), default="INBOUND")  # INBOUND or OUTBOUND
     related_entity_type = Column(String(50))  # project, sale, etc.
     related_entity_id = Column(String(50))
-    metadata = Column(Text)  # JSON serialized additional data
+    meta_data = Column(Text)  # JSON serialized additional data
     attachment_ids = Column(Text)  # JSON serialized array of file IDs
 
     # Relationships
@@ -131,6 +131,6 @@ class CustomerCommunication(AbstractBase, ValidationMixin, TimestampMixin):
             "related_entity_id": self.related_entity_id,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
-            "metadata": self.metadata,
+            "meta_data": self.meta_data,
             "attachment_ids": self.attachment_ids,
         }
