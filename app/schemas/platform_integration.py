@@ -24,7 +24,7 @@ class SyncEvent(BaseModel):
     message: Optional[str] = Field(None, description="Event message or error details")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class SyncEventCreate(BaseModel):
@@ -120,7 +120,7 @@ class PlatformIntegration(PlatformIntegrationBase):
     last_sync_at: Optional[datetime] = Field(None, description="Timestamp of last synchronization")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class PlatformIntegrationWithEvents(PlatformIntegration):
@@ -130,7 +130,7 @@ class PlatformIntegrationWithEvents(PlatformIntegration):
     events: List[SyncEvent] = Field([], description="Recent synchronization events")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class SyncResult(BaseModel):

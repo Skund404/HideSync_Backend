@@ -93,7 +93,7 @@ class SupplierInDB(SupplierBase):
     last_order_date: Optional[str] = Field(None, description="Date of the most recent order")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class SupplierRatingBase(BaseModel):
@@ -132,7 +132,7 @@ class SupplierRatingInDB(SupplierRatingBase):
     created_at: datetime = Field(..., description="Timestamp when the rating was created")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class SupplierHistoryBase(BaseModel):
@@ -160,8 +160,7 @@ class SupplierHistoryInDB(SupplierHistoryBase):
     created_at: datetime = Field(..., description="Timestamp when the entry was created")
 
     class Config:
-        orm_mode = True
-
+        from_attributes = True
 
 class SupplierResponse(SupplierInDB):
     """
@@ -176,7 +175,7 @@ class SupplierResponse(SupplierInDB):
     days_since_last_order: Optional[int] = Field(None, description="Days since the last order was placed")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class SupplierDetailResponse(SupplierResponse):
@@ -191,7 +190,7 @@ class SupplierDetailResponse(SupplierResponse):
                                                                 description="Materials available from this supplier")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class SupplierList(BaseModel):

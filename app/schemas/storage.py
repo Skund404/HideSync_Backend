@@ -49,8 +49,7 @@ class StorageCellInDB(StorageCellBase):
     storage_id: str = Field(..., description="ID of the storage location this cell belongs to")
 
     class Config:
-        orm_mode = True
-
+        from_attributes = True
 
 class StorageCellResponse(StorageCellInDB):
     """
@@ -59,7 +58,7 @@ class StorageCellResponse(StorageCellInDB):
     item_name: Optional[str] = Field(None, description="Name of the item stored in this cell")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class StorageLocationBase(BaseModel):
@@ -121,8 +120,7 @@ class StorageLocationInDB(StorageLocationBase):
     last_modified: Optional[str] = Field(None, description="Last modification timestamp")
 
     class Config:
-        orm_mode = True
-
+        from_attributes = True
 
 class StorageLocationResponse(StorageLocationInDB):
     """
@@ -134,7 +132,7 @@ class StorageLocationResponse(StorageLocationInDB):
     child_locations: Optional[List[str]] = Field(None, description="IDs of child storage locations")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class StorageLocationList(BaseModel):
@@ -189,7 +187,7 @@ class StorageAssignmentInDB(StorageAssignmentBase):
     assigned_by: Optional[str] = Field(None, description="User who made the assignment")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class StorageAssignmentResponse(StorageAssignmentInDB):
@@ -200,7 +198,7 @@ class StorageAssignmentResponse(StorageAssignmentInDB):
     storage_name: Optional[str] = Field(None, description="Name of the storage location")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class StorageMoveBase(BaseModel):
@@ -242,7 +240,7 @@ class StorageMoveInDB(StorageMoveBase):
     moved_by: Optional[str] = Field(None, description="User who performed the move")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class StorageMoveResponse(StorageMoveInDB):
@@ -254,7 +252,7 @@ class StorageMoveResponse(StorageMoveInDB):
     to_storage_name: Optional[str] = Field(None, description="Name of the destination storage location")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class StorageMoveList(BaseModel):

@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_active_user
 from app.db.session import get_db
-from app.schemas.material import (
+from app.schemas.compatibility import(
     Material,
     MaterialCreate,
     MaterialUpdate,
@@ -24,8 +24,9 @@ from app.services.material_service import MaterialService
 from app.core.exceptions import (
     EntityNotFoundException,
     BusinessRuleException,
-    InsufficientQuantityException,
+
 )
+from app.core.exceptions import InsufficientInventoryException as InsufficientQuantityException
 
 router = APIRouter()
 

@@ -54,7 +54,7 @@ class UserCreate(UserBase):
     password: str
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class UserUpdate(BaseModel):
@@ -76,7 +76,7 @@ class User(UserBase):
     updated_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class UserWithPermissions(User):
@@ -122,7 +122,7 @@ class Customer(BaseModel):
     updated_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class CustomerCreate(BaseModel):
@@ -188,7 +188,7 @@ class SaleItem(BaseModel):
     notes: Optional[str] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class SaleItemCreate(BaseModel):
@@ -234,7 +234,7 @@ class Sale(BaseModel):
     customization: Optional[str] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class SaleCreate(BaseModel):
@@ -351,7 +351,7 @@ class Material(BaseModel):
     updated_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class MaterialCreate(RootModel):
@@ -433,7 +433,7 @@ class TimelineTask(BaseModel):
     is_overdue: Optional[bool] = False
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class TimelineTaskCreate(BaseModel):
@@ -479,7 +479,7 @@ class Project(BaseModel):
     updated_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class ProjectCreate(BaseModel):
@@ -552,7 +552,7 @@ class Inventory(BaseModel):
     days_of_supply: Optional[int] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class InventoryTransaction(BaseModel):
@@ -573,7 +573,7 @@ class InventoryTransaction(BaseModel):
     item_name: Optional[str] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class InventoryTransactionCreate(BaseModel):
@@ -641,7 +641,7 @@ class StorageLocation(BaseModel):
     child_locations: Optional[List[str]] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class StorageLocationCreate(BaseModel):
@@ -684,7 +684,7 @@ class StorageCell(BaseModel):
     item_name: Optional[str] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class StorageCellCreate(BaseModel):
@@ -712,7 +712,7 @@ class StorageAssignment(BaseModel):
     storage_name: Optional[str] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class StorageAssignmentCreate(BaseModel):
@@ -743,7 +743,7 @@ class StorageMove(BaseModel):
     to_storage_name: Optional[str] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class StorageMoveCreate(BaseModel):
@@ -809,7 +809,7 @@ class Supplier(BaseModel):
     total_spent: Optional[float] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class SupplierCreate(BaseModel):
@@ -860,7 +860,7 @@ class SupplierRating(BaseModel):
     created_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class SupplierRatingCreate(BaseModel):
@@ -880,7 +880,7 @@ class SupplierHistory(BaseModel):
     created_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class SupplierHistoryCreate(BaseModel):
@@ -950,7 +950,7 @@ class Tool(BaseModel):
     is_checked_out: Optional[bool] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class ToolCreate(BaseModel):
@@ -1014,7 +1014,7 @@ class ToolMaintenance(BaseModel):
     updated_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class ToolMaintenanceCreate(BaseModel):
@@ -1071,7 +1071,7 @@ class ToolCheckout(BaseModel):
     days_checked_out: Optional[int] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class ToolCheckoutCreate(BaseModel):
@@ -1142,7 +1142,7 @@ class DocumentationResource(BaseModel):
     related_titles: Optional[List[str]] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class DocumentationResourceCreate(BaseModel):
@@ -1184,7 +1184,7 @@ class DocumentationCategory(BaseModel):
     resources: Optional[List[str]] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class DocumentationCategoryCreate(BaseModel):
@@ -1224,7 +1224,7 @@ class Refund(BaseModel):
     customer_name: Optional[str] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class RefundCreate(BaseModel):

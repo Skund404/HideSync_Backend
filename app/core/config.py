@@ -161,7 +161,7 @@ class Settings(BaseSettings):
 
     class Config:
         """Pydantic settings configuration."""
-
+        from_attributes = True
         case_sensitive = True
         env_file = ".env"
 

@@ -89,8 +89,7 @@ class ToolMaintenance(ToolMaintenanceBase):
     updated_at: datetime = Field(..., description="Last update timestamp")
 
     class Config:
-        orm_mode = True
-
+        from_attributes = True
 
 class ToolCheckoutBase(BaseModel):
     """
@@ -145,7 +144,7 @@ class ToolCheckout(ToolCheckoutBase):
     updated_at: datetime = Field(..., description="Last update timestamp")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class ToolBase(BaseModel):
@@ -235,7 +234,7 @@ class Tool(ToolBase):
     due_date: Optional[str] = Field(None, description="Date when the tool is due to be returned")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class ToolWithHistory(Tool):
@@ -246,7 +245,7 @@ class ToolWithHistory(Tool):
     checkout_history: List[ToolCheckout] = Field([], description="Checkout history")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class MaintenanceScheduleItem(BaseModel):

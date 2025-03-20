@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_active_user
 from app.db.session import get_db
-from app.schemas.supplier import (
+from app.schemas.compatibility import(
     Supplier,
     SupplierCreate,
     SupplierUpdate,

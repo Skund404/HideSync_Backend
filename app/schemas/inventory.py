@@ -57,7 +57,7 @@ class InventoryInDB(InventoryBase):
     id: int = Field(..., description="Unique identifier for the inventory record")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class InventoryResponse(InventoryInDB):
@@ -72,7 +72,7 @@ class InventoryResponse(InventoryInDB):
     storage_location_name: Optional[str] = Field(None, description="Name of the storage location")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class InventoryList(BaseModel):
@@ -142,7 +142,7 @@ class InventoryTransactionInDB(InventoryTransactionBase):
     created_by: Optional[str] = Field(None, description="User who created the transaction")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class InventoryTransactionResponse(InventoryTransactionInDB):
@@ -156,7 +156,7 @@ class InventoryTransactionResponse(InventoryTransactionInDB):
     value: Optional[float] = Field(None, description="Monetary value of the transaction")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class InventoryTransactionList(BaseModel):
@@ -220,3 +220,55 @@ class InventoryCountRequest(BaseModel):
     location: Optional[str] = Field(None, description="Location where the count was performed")
     counted_by: Optional[str] = Field(None, description="User who performed the count")
     notes: Optional[str] = Field(None, description="Additional notes")
+
+# Add these classes at the end of your existing inventory.py file:
+
+# Add this class to match what the endpoint is looking for
+class Inventory(InventoryResponse):
+    """
+    Schema for inventory responses in the API.
+    This is an alias of InventoryResponse for compatibility with endpoint imports.
+    """
+    pass
+
+
+# Add this class for the endpoint
+class InventoryTransaction(InventoryTransactionResponse):
+    """
+    Schema for inventory transaction responses in the API.
+    This is an alias of InventoryTransactionResponse for compatibility with endpoint imports.
+    """
+    pass
+
+
+# Add this class for the endpoint
+class InventorySearchParams(BaseModel):
+    """
+    Schema for inventory search parameters.
+    """
+    status: Optional[str] = None
+    location: Optional[str] = None
+    item_type: Optional[str] = None
+    search: Optional[str] = None
+
+
+# Add this class for the endpoint
+class InventoryAdjustment(InventoryAdjustmentRequest):
+    """
+    Schema for inventory adjustment.
+    This is an alias of InventoryAdjustmentRequest for compatibility with endpoint imports.
+    """
+    pass
+
+
+# Add this class for the endpoint
+class StockLevelReport(BaseModel):
+    """
+    Stock level report model.
+    """
+    total_value: float
+    category_breakdown: Dict[str, Any]
+    low_stock_items: List[Inventory]
+    out_of_stock_items: List[Inventory]
+    items_by_location: Dict[str, int]
+    reorder_recommendations: List[Dict[str, Any]]

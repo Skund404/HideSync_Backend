@@ -49,7 +49,7 @@ class DocumentationCategoryInDB(DocumentationCategoryBase):
     id: str = Field(..., description="Unique identifier for the category")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class DocumentationResourceBase(BaseModel):
@@ -103,7 +103,7 @@ class DocumentationResourceInDB(DocumentationResourceBase):
     last_updated: str = Field(..., description="Timestamp when the resource was last updated")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class DocumentationResourceResponse(DocumentationResourceInDB):
@@ -114,7 +114,7 @@ class DocumentationResourceResponse(DocumentationResourceInDB):
     related_titles: Optional[List[str]] = Field(None, description="Titles of related resources")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class DocumentationResourceList(BaseModel):
@@ -135,7 +135,7 @@ class DocumentationCategoryWithResources(DocumentationCategoryInDB):
     resources_list: List[DocumentationResourceResponse] = Field([], description="Resources in this category")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class DocumentationCategoryList(BaseModel):
@@ -146,7 +146,7 @@ class DocumentationCategoryList(BaseModel):
     total: int = Field(..., description="Total number of categories")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class RefundBase(BaseModel):
@@ -197,7 +197,7 @@ class RefundInDB(RefundBase):
     id: int = Field(..., description="Unique identifier for the refund")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class RefundResponse(RefundInDB):
@@ -208,7 +208,7 @@ class RefundResponse(RefundInDB):
     customer_name: Optional[str] = Field(None, description="Name of the customer")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class RefundList(BaseModel):

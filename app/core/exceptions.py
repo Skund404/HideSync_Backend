@@ -436,3 +436,49 @@ class SecurityException(HideSyncException):
         super().__init__(message)
         self.message = message
         self.status_code = 500  # Internal server error for security issues
+
+# Storage-related exceptions
+class StorageException(HideSyncException):
+    """Base exception for storage-related errors."""
+    CODE_PREFIX = "STORAGE_"
+
+# If you don't already have this class defined
+class StorageLocationNotFoundException(StorageException):
+    """Raised when a requested storage location does not exist."""
+
+    def __init__(self, location_id: Any):
+        """
+        Initialize storage location not found exception.
+
+        Args:
+            location_id: ID of the storage location that was not found
+        """
+        super().__init__(
+            f"Storage location with ID {location_id} not found",
+            f"{self.CODE_PREFIX}002",  # Using 002 to follow your pattern
+            {"location_id": location_id},
+        )
+
+
+# Tool-related exceptions
+class ToolException(HideSyncException):
+    """Base exception for tool-related errors."""
+    CODE_PREFIX = "TOOL_"
+
+
+class ToolNotAvailableException(ToolException):
+    """Raised when a tool is not available for checkout or use."""
+
+    def __init__(self, tool_id: int, reason: str = "Tool is currently unavailable"):
+        """
+        Initialize tool not available exception.
+
+        Args:
+            tool_id: ID of the tool
+            reason: Optional reason why the tool is unavailable
+        """
+        super().__init__(
+            f"Tool with ID {tool_id} is not available: {reason}",
+            f"{self.CODE_PREFIX}001",
+            {"tool_id": tool_id, "reason": reason},
+        )

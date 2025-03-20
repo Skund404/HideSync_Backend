@@ -7,8 +7,8 @@ Material schema and specialized schemas for leather, hardware, and supplies mate
 """
 
 from datetime import datetime
-from typing import Dict, List, Optional, Union, Any, ForwardRef
-from pydantic import BaseModel, Field, validator, root_validator
+from typing import Dict, List, Optional, Union, Any, ForwardRef, Literal
+from pydantic import BaseModel, Field, validator, root_validator, RootModel
 
 from app.db.models.enums import (
     MaterialType, MaterialStatus, MaterialQualityGrade,
@@ -46,7 +46,7 @@ class LeatherMaterialBase(MaterialBase):
     """
     Base schema for leather materials.
     """
-    material_type: MaterialType = Field(MaterialType.LEATHER, const=True, description="Type of material")
+    material_type: Literal[MaterialType.LEATHER] = Field(MaterialType.LEATHER, description="Type of material")
     leather_type: Optional[LeatherType] = Field(None, description="Type of leather")
     tannage: Optional[str] = Field(None, description="Tanning method")
     animal_source: Optional[str] = Field(None, description="Source animal")
@@ -62,7 +62,7 @@ class HardwareMaterialBase(MaterialBase):
     """
     Base schema for hardware materials.
     """
-    material_type: MaterialType = Field(MaterialType.HARDWARE, const=True, description="Type of material")
+    material_type: Literal[MaterialType.HARDWARE] = Field(MaterialType.HARDWARE, description="Type of material")
     hardware_type: Optional[HardwareType] = Field(None, description="Type of hardware")
     hardware_material: Optional[HardwareMaterial] = Field(None, description="Material the hardware is made of")
     finish: Optional[HardwareFinish] = Field(None, description="Finish of the hardware")
@@ -70,11 +70,12 @@ class HardwareMaterialBase(MaterialBase):
     color: Optional[str] = Field(None, description="Color of the hardware")
 
 
+
 class SuppliesMaterialBase(MaterialBase):
     """
     Base schema for supplies materials.
     """
-    material_type: MaterialType = Field(MaterialType.SUPPLIES, const=True, description="Type of material")
+    material_type: Literal[MaterialType.SUPPLIES] = Field(MaterialType.SUPPLIES, description="Type of material")
     supplies_material_type: Optional[str] = Field(None, description="Specific type of supplies")
     color: Optional[str] = Field(None, description="Color if applicable")
     thread_thickness: Optional[str] = Field(None, description="Thickness for thread")
@@ -86,16 +87,11 @@ class SuppliesMaterialBase(MaterialBase):
     finish: Optional[str] = Field(None, description="Finish characteristics")
 
 
-class MaterialCreate(BaseModel):
-    """
-    Schema for creating a new material.
-
-    This is a union type that allows creating any of the specialized material types.
-    """
-    __root__: Union[LeatherMaterialBase, HardwareMaterialBase, SuppliesMaterialBase] = Field(
-        ...,
-        description="Material data, specialized by type"
-    )
+MaterialCreate = RootModel[Union[LeatherMaterialBase, HardwareMaterialBase, SuppliesMaterialBase]]
+"""
+Schema for creating a new material.
+This is a union type that allows creating any of the specialized material types.
+"""
 
 
 class LeatherMaterialCreate(LeatherMaterialBase):
@@ -187,7 +183,7 @@ class MaterialInDB(MaterialBase):
     updated_at: datetime = Field(..., description="Timestamp when the material was last updated")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class LeatherMaterialInDB(LeatherMaterialBase, MaterialInDB):
@@ -196,7 +192,7 @@ class LeatherMaterialInDB(LeatherMaterialBase, MaterialInDB):
     """
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class HardwareMaterialInDB(HardwareMaterialBase, MaterialInDB):
@@ -205,7 +201,7 @@ class HardwareMaterialInDB(HardwareMaterialBase, MaterialInDB):
     """
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class SuppliesMaterialInDB(SuppliesMaterialBase, MaterialInDB):
@@ -214,7 +210,7 @@ class SuppliesMaterialInDB(SuppliesMaterialBase, MaterialInDB):
     """
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class MaterialResponse(MaterialInDB):
@@ -228,7 +224,7 @@ class MaterialResponse(MaterialInDB):
     is_low_stock: Optional[bool] = Field(None, description="Whether the material is below reorder point")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class LeatherMaterialResponse(LeatherMaterialInDB):
@@ -240,7 +236,7 @@ class LeatherMaterialResponse(LeatherMaterialInDB):
     is_low_stock: Optional[bool] = Field(None, description="Whether the material is below reorder point")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class HardwareMaterialResponse(HardwareMaterialInDB):
@@ -252,7 +248,7 @@ class HardwareMaterialResponse(HardwareMaterialInDB):
     is_low_stock: Optional[bool] = Field(None, description="Whether the material is below reorder point")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class SuppliesMaterialResponse(SuppliesMaterialInDB):
@@ -264,7 +260,7 @@ class SuppliesMaterialResponse(SuppliesMaterialInDB):
     is_low_stock: Optional[bool] = Field(None, description="Whether the material is below reorder point")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class MaterialList(BaseModel):

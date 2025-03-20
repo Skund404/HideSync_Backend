@@ -30,7 +30,7 @@ class CustomerWithSales(CustomerResponse):
     sales_count: int = Field(..., description="Total number of sales")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class MaterialWithInventory(MaterialResponse):
@@ -45,7 +45,7 @@ class MaterialWithInventory(MaterialResponse):
     usage_history_summary: Optional[Dict[str, Any]] = Field(None, description="Summary of usage history")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class ProjectWithDetails(ProjectResponse):
@@ -60,7 +60,7 @@ class ProjectWithDetails(ProjectResponse):
     resource_allocation: Optional[Dict[str, Any]] = Field(None, description="Allocated resources")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class SaleWithDetails(SaleResponse):
@@ -75,7 +75,7 @@ class SaleWithDetails(SaleResponse):
     profit_analysis: Optional[Dict[str, Any]] = Field(None, description="Profit analysis")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class SupplierWithDetails(SupplierResponse):
@@ -89,8 +89,7 @@ class SupplierWithDetails(SupplierResponse):
     contact_history: Optional[List[Dict[str, Any]]] = Field(None, description="Contact history")
 
     class Config:
-        orm_mode = True
-
+        from_attributes = True
 
 class InventoryWithHistory(InventoryResponse):
     """
@@ -102,4 +101,4 @@ class InventoryWithHistory(InventoryResponse):
     usage_pattern: Optional[Dict[str, Any]] = Field(None, description="Usage pattern analysis")
 
     class Config:
-        orm_mode = True
+        from_attributes = True

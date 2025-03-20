@@ -77,7 +77,7 @@ class SaleItemInDB(SaleItemBase):
     tax: float = Field(..., description="Tax amount for this item")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class SaleBase(BaseModel):
@@ -205,7 +205,7 @@ class SaleItemResponse(SaleItemInDB):
     line_total: float = Field(..., description="Total price for this line item (price × quantity)")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class SaleInDB(SaleBase):
@@ -218,8 +218,7 @@ class SaleInDB(SaleBase):
     updated_at: datetime = Field(..., description="Timestamp when the sale was last updated")
 
     class Config:
-        orm_mode = True
-
+        from_attributes = True
 
 class SaleResponse(SaleInDB):
     """
@@ -230,7 +229,7 @@ class SaleResponse(SaleInDB):
     days_since_creation: Optional[int] = Field(None, description="Days elapsed since the sale was created")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class SaleList(BaseModel):

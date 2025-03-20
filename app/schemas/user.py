@@ -81,7 +81,7 @@ class User(UserBase):
     created_at: datetime = Field(..., description="Timestamp when the user was created")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class UserWithPermissions(User):
@@ -93,7 +93,7 @@ class UserWithPermissions(User):
     last_login: Optional[datetime] = Field(None, description="Last login timestamp")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class PasswordReset(BaseModel):

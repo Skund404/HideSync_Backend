@@ -68,8 +68,7 @@ class TimelineTaskInDB(TimelineTaskBase):
     updated_at: datetime = Field(..., description="Timestamp when the task was last updated")
 
     class Config:
-        orm_mode = True
-
+        from_attributes = True
 
 class TimelineTaskResponse(TimelineTaskInDB):
     """
@@ -79,7 +78,7 @@ class TimelineTaskResponse(TimelineTaskInDB):
     is_overdue: Optional[bool] = Field(None, description="Whether the task is overdue")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class ProjectComponentBase(BaseModel):
@@ -112,7 +111,7 @@ class ProjectComponentInDB(ProjectComponentBase):
     project_id: int = Field(..., description="ID of the project")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class ProjectComponentResponse(ProjectComponentInDB):
@@ -123,7 +122,7 @@ class ProjectComponentResponse(ProjectComponentInDB):
     component_type: Optional[ComponentType] = Field(None, description="Type of the component")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class ProjectBase(BaseModel):
@@ -199,7 +198,7 @@ class ProjectInDB(ProjectBase):
     completed_date: Optional[datetime] = Field(None, description="Date when the project was completed")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class ProjectResponse(ProjectInDB):
@@ -213,7 +212,7 @@ class ProjectResponse(ProjectInDB):
     customer_name: Optional[str] = Field(None, description="Full name of the associated customer")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class ProjectList(BaseModel):
@@ -291,7 +290,7 @@ class ProjectTemplateComponentInDB(ProjectTemplateComponentBase):
     template_id: int = Field(..., description="ID of the template")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class ProjectTemplateComponentResponse(ProjectTemplateComponentInDB):
@@ -302,7 +301,7 @@ class ProjectTemplateComponentResponse(ProjectTemplateComponentInDB):
     component_type: Optional[ComponentType] = Field(None, description="Type of the component")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class ProjectTemplateInDB(ProjectTemplateBase):
@@ -314,7 +313,7 @@ class ProjectTemplateInDB(ProjectTemplateBase):
     updated_at: datetime = Field(..., description="Timestamp when the template was last updated")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class ProjectTemplateResponse(ProjectTemplateInDB):
@@ -325,7 +324,7 @@ class ProjectTemplateResponse(ProjectTemplateInDB):
     usage_count: Optional[int] = Field(None, description="Number of projects created from this template")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class ProjectTemplateList(BaseModel):
