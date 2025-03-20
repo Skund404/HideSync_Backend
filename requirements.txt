@@ -1,0 +1,30 @@
+# Application Framework and ASGI Server
+fastapi
+uvicorn
+
+# ORM and Database
+SQLAlchemy>=1.4
+alembic
+
+# Data Validation and Settings
+pydantic>=1.10.0
+python-dotenv>=0.21.1
+
+# JWT and Security
+python-jose[cryptography]>=3.3.0
+cryptography>=41.0.0
+
+# Encryption for SQLCipher (SQLite with encryption)
+sqlcipher3
+pysqlcipher3
+
+black==25.1.0
+click==8.1.8
+colorama==0.4.6
+greenlet==3.1.1
+mypy-extensions==1.0.0
+packaging==24.2
+pathspec==0.12.1
+platformdirs==4.3.6
+SQLAlchemy==2.0.39
+typing_extensions==4.12.2
