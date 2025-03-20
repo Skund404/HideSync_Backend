@@ -14,7 +14,7 @@ from app.db.models.enums import (
     CommunicationType,
 )
 from app.repositories.customer_repository import CustomerRepository
-from app.repositories.communication_repository import CustomerCommunicationRepository
+from app.repositories.communication_repository import CommunicationRepository
 from app.core.exceptions import (
     CustomerNotFoundException,
     ValidationException,
@@ -166,7 +166,7 @@ class CustomerService(BaseService[Customer]):
         self.cache_service = cache_service
         self.key_service = key_service
         self.communication_repository = (
-            communication_repository or CustomerCommunicationRepository(session)
+            communication_repository or CommunicationRepository(session)
         )
 
     @validate_input(validate_customer)

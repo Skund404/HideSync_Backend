@@ -34,8 +34,13 @@ class KeyManager:
             SecurityException: If key cannot be securely retrieved
         """
         # For development/testing environments, use the config value
-        if settings.ENVIRONMENT in ("development", "testing") and not settings.PRODUCTION:
-            logger.warning("Using development key management method - NOT SECURE FOR PRODUCTION")
+        if (
+            settings.ENVIRONMENT in ("development", "testing")
+            and not settings.PRODUCTION
+        ):
+            logger.warning(
+                "Using development key management method - NOT SECURE FOR PRODUCTION"
+            )
             return settings.DATABASE_ENCRYPTION_KEY
 
         # For production, use the configured key management method
@@ -81,9 +86,11 @@ class KeyManager:
             file_stats = os.stat(key_file)
 
             # On Unix systems, check if group or others have any permissions
-            if hasattr(stat, 'S_IRWXG') and hasattr(stat, 'S_IRWXO'):
+            if hasattr(stat, "S_IRWXG") and hasattr(stat, "S_IRWXO"):
                 if file_stats.st_mode & (stat.S_IRWXG | stat.S_IRWXO):
-                    logger.warning(f"Key file has unsafe permissions: {oct(file_stats.st_mode)}")
+                    logger.warning(
+                        f"Key file has unsafe permissions: {oct(file_stats.st_mode)}"
+                    )
 
                     if settings.ENFORCE_KEY_FILE_PERMISSIONS:
                         raise SecurityException("Key file has unsafe permissions")
@@ -145,17 +152,14 @@ class KeyManager:
             region = settings.AWS_REGION
 
             # Create a Secrets Manager client
-            client = boto3.client(
-                service_name='secretsmanager',
-                region_name=region
-            )
+            client = boto3.client(service_name="secretsmanager", region_name=region)
 
             # Get the secret value
             response = client.get_secret_value(SecretId=secret_name)
 
             # The secret can be either a string or binary, handle both
-            if 'SecretString' in response:
-                secret = response['SecretString']
+            if "SecretString" in response:
+                secret = response["SecretString"]
                 # If the secret is a JSON string, parse it
                 try:
                     secret_dict = json.loads(secret)
@@ -169,11 +173,14 @@ class KeyManager:
             else:
                 # Binary secret, decode it
                 import base64
-                binary_secret = response['SecretBinary']
-                return base64.b64decode(binary_secret).decode('utf-8')
+
+                binary_secret = response["SecretBinary"]
+                return base64.b64decode(binary_secret).decode("utf-8")
 
         except ImportError:
-            raise SecurityException("boto3 library not installed, required for AWS Secrets Manager")
+            raise SecurityException(
+                "boto3 library not installed, required for AWS Secrets Manager"
+            )
         except Exception as e:
             logger.error(f"Error retrieving key from AWS Secrets Manager: {str(e)}")
             raise SecurityException(f"Failed to retrieve key from AWS: {str(e)}")
@@ -212,7 +219,9 @@ class KeyManager:
             return retrieved_secret.value
 
         except ImportError:
-            raise SecurityException("azure-keyvault-secrets library not installed, required for Azure Key Vault")
+            raise SecurityException(
+                "azure-keyvault-secrets library not installed, required for Azure Key Vault"
+            )
         except Exception as e:
             logger.error(f"Error retrieving key from Azure Key Vault: {str(e)}")
             raise SecurityException(f"Failed to retrieve key from Azure: {str(e)}")
@@ -253,7 +262,8 @@ class KeyManager:
 
         except ImportError:
             raise SecurityException(
-                "google-cloud-secret-manager library not installed, required for GCP Secret Manager")
+                "google-cloud-secret-manager library not installed, required for GCP Secret Manager"
+            )
         except Exception as e:
             logger.error(f"Error retrieving key from Google Secret Manager: {str(e)}")
             raise SecurityException(f"Failed to retrieve key from GCP: {str(e)}")
@@ -275,6 +285,7 @@ class KeyManager:
         # Generate a key if not provided
         if key is None:
             import secrets
+
             key = secrets.token_hex(32)  # 256-bit key
 
         # Get the key file path

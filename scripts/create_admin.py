@@ -26,8 +26,12 @@ def init() -> None:
     from app.core.config import settings
 
     admin_email = os.getenv("HIDESYNC_ADMIN_EMAIL", settings.FIRST_SUPERUSER)
-    admin_password = os.getenv("HIDESYNC_ADMIN_PASSWORD", settings.FIRST_SUPERUSER_PASSWORD)
-    admin_username = os.getenv("HIDESYNC_ADMIN_USERNAME", settings.FIRST_SUPERUSER_USERNAME)
+    admin_password = os.getenv(
+        "HIDESYNC_ADMIN_PASSWORD", settings.FIRST_SUPERUSER_PASSWORD
+    )
+    admin_username = os.getenv(
+        "HIDESYNC_ADMIN_USERNAME", settings.FIRST_SUPERUSER_USERNAME
+    )
 
     db = SessionLocal()
     try:

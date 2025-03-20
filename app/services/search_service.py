@@ -25,6 +25,7 @@ repository layer for data access while providing a consistent interface
 for search operations throughout the application.
 """
 import uuid
+import re
 from typing import List, Dict, Any, Optional, Union, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_, func, text

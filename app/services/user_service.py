@@ -74,7 +74,9 @@ class UserService(BaseService[User]):
         self.db.refresh(db_obj)
         return db_obj
 
-    def update_user(self, user_id: int, obj_in: Union[UserUpdate, Dict[str, Any]]) -> User:
+    def update_user(
+        self, user_id: int, obj_in: Union[UserUpdate, Dict[str, Any]]
+    ) -> User:
         """
         Update a user's information.
 
@@ -93,7 +95,9 @@ class UserService(BaseService[User]):
             raise EntityNotFoundException("User not found")
 
         # Convert to dict if it's a Pydantic model
-        update_data = obj_in if isinstance(obj_in, dict) else obj_in.dict(exclude_unset=True)
+        update_data = (
+            obj_in if isinstance(obj_in, dict) else obj_in.dict(exclude_unset=True)
+        )
 
         # Handle password update - hash the new password
         if "password" in update_data and update_data["password"]:

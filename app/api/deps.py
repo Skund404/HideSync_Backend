@@ -16,9 +16,7 @@ from app.services.user_service import UserService
 from app.db.models.user import User
 
 # OAuth2 token URL for authentication
-oauth2_scheme = OAuth2PasswordBearer(
-    tokenUrl=settings.TOKEN_URL
-)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl=settings.TOKEN_URL)
 
 
 def get_db() -> Generator:
@@ -36,7 +34,7 @@ def get_db() -> Generator:
 
 
 def get_current_user(
-        db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)
+    db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)
 ) -> User:
     """
     Get current authenticated user from JWT token.
@@ -74,7 +72,7 @@ def get_current_user(
 
 
 def get_current_active_user(
-        current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ) -> User:
     """
     Get current user and verify user is active.
@@ -96,7 +94,7 @@ def get_current_active_user(
 
 
 def get_current_active_superuser(
-        current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ) -> User:
     """
     Get current user and verify user has superuser permissions.
@@ -113,8 +111,7 @@ def get_current_active_superuser(
     user_service = UserService(SessionLocal())
     if not user_service.is_superuser(current_user):
         raise HTTPException(
-            status_code=403,
-            detail="The user doesn't have sufficient privileges"
+            status_code=403, detail="The user doesn't have sufficient privileges"
         )
 
     return current_user

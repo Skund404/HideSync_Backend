@@ -306,7 +306,12 @@ class BusinessRuleException(HideSyncException):
 
     CODE_PREFIX = "BUSINESS_"
 
-    def __init__(self, message: str, rule_name: Optional[str] = None, details: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self,
+        message: str,
+        rule_name: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ):
         """
         Initialize business rule exception.
 
@@ -329,6 +334,7 @@ class BusinessRuleError(BusinessRuleException):
     This class exists to maintain compatibility with existing code that
     might use BusinessRuleError instead of BusinessRuleException.
     """
+
     pass
 
 
@@ -352,8 +358,8 @@ class DuplicateEntityException(HideSyncException):
             {
                 "entity_type": entity_type,
                 "identifier": identifier,
-                "identifier_type": identifier_type
-            }
+                "identifier_type": identifier_type,
+            },
         )
 
 
@@ -363,7 +369,12 @@ class ConcurrentOperationException(HideSyncException):
 
     CODE_PREFIX = "CONCURRENT_"
 
-    def __init__(self, message: str, operation: Optional[str] = None, details: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self,
+        message: str,
+        operation: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ):
         """
         Initialize concurrent operation exception.
 
@@ -417,8 +428,10 @@ class InvalidPathException(StorageException):
 
         super().__init__(message, details)
 
+
 class SecurityException(HideSyncException):
     """Exception raised for security-related errors."""
+
     def __init__(self, message: str):
         super().__init__(message)
         self.message = message

@@ -85,7 +85,7 @@ class LogExporter:
         for metric in metrics:
             self.metrics_logger.log(
                 self.log_level,
-                f"METRIC: {metric.name} = {metric.get_value()} {metric.tags}"
+                f"METRIC: {metric.name} = {metric.get_value()} {metric.tags}",
             )
 
     def shutdown(self) -> None:
@@ -138,7 +138,9 @@ class FileExporter:
             # Time to rotate
             self.current_file_timestamp = interval_start
             timestamp = datetime.fromtimestamp(interval_start).strftime("%Y%m%d-%H%M%S")
-            self.current_file = os.path.join(self.directory, f"{self.prefix}-{timestamp}.json")
+            self.current_file = os.path.join(
+                self.directory, f"{self.prefix}-{timestamp}.json"
+            )
 
             # Clean up old files
             self._cleanup_old_files()
@@ -151,7 +153,7 @@ class FileExporter:
             files = [
                 os.path.join(self.directory, f)
                 for f in os.listdir(self.directory)
-                if f.startswith(self.prefix) and f.endswith('.json')
+                if f.startswith(self.prefix) and f.endswith(".json")
             ]
 
             # Sort by modification time (oldest first)
@@ -159,7 +161,7 @@ class FileExporter:
 
             # Delete oldest files if we have too many
             if len(files) > self.max_files:
-                for old_file in files[:-self.max_files]:
+                for old_file in files[: -self.max_files]:
                     os.remove(old_file)
                     logger.debug(f"Deleted old metrics file: {old_file}")
         except Exception as e:
@@ -185,13 +187,16 @@ class FileExporter:
                 # Create or append to file
                 export_data = {
                     "timestamp": datetime.now().isoformat(),
-                    "metrics": metric_dicts
+                    "metrics": metric_dicts,
                 }
 
-                with open(file_path, 'a') as f:
+                with open(file_path, "a") as f:
                     f.write(json.dumps(export_data) + "\n")
             except Exception as e:
-                logger.error(f"Error exporting metrics to file {file_path}: {str(e)}", exc_info=True)
+                logger.error(
+                    f"Error exporting metrics to file {file_path}: {str(e)}",
+                    exc_info=True,
+                )
 
     def shutdown(self) -> None:
         """No specific resources to release for file exporter."""
@@ -225,7 +230,9 @@ class PrometheusExporter:
         # We would typically start a HTTP server here, but for simplicity
         # we'll just store the metrics text and assume it's integrated
         # with the main application server
-        logger.info(f"Prometheus metrics available at http://localhost:{self.port}{self.endpoint}")
+        logger.info(
+            f"Prometheus metrics available at http://localhost:{self.port}{self.endpoint}"
+        )
 
     def export(self, metrics: List[MetricProtocol]) -> None:
         """
@@ -260,7 +267,7 @@ class PrometheusExporter:
                     lines.append(f"{metric_name}_count{labels} {value['count']}")
 
                     # Add buckets
-                    for bucket, count in value['buckets'].items():
+                    for bucket, count in value["buckets"].items():
                         bucket_labels = labels[:-1] + f',le="{bucket}"{labels[-1:]}'
                         lines.append(f"{metric_name}_bucket{bucket_labels} {count}")
                 else:

@@ -17,5 +17,5 @@ from app.api.endpoints import (
     sales,
     storage,
     suppliers,
-    tools
+    tools,
 )

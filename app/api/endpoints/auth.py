@@ -19,8 +19,7 @@ router = APIRouter()
 
 @router.post("/login", response_model=schemas.Token)
 def login_access_token(
-        db: Session = Depends(deps.get_db),
-        form_data: OAuth2PasswordRequestForm = Depends()
+    db: Session = Depends(deps.get_db), form_data: OAuth2PasswordRequestForm = Depends()
 ) -> Any:
     """
     OAuth2 compatible token login, get an access token for future requests.
@@ -31,7 +30,7 @@ def login_access_token(
     # Authenticate user
     user = user_service.authenticate(
         email=form_data.username,  # OAuth2 form uses 'username' field for email
-        password=form_data.password
+        password=form_data.password,
     )
 
     # Validate authentication result
@@ -43,8 +42,7 @@ def login_access_token(
         )
     elif not user_service.is_active(user):
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Inactive user"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Inactive user"
         )
 
     # Create access token
@@ -59,9 +57,9 @@ def login_access_token(
 
 @router.post("/signup", response_model=schemas.User)
 def create_user(
-        *,
-        db: Session = Depends(deps.get_db),
-        user_in: schemas.UserCreate,
+    *,
+    db: Session = Depends(deps.get_db),
+    user_in: schemas.UserCreate,
 ) -> Any:
     """
     Create new user without the need to be logged in.
@@ -87,9 +85,7 @@ def create_user(
 
 
 @router.get("/me", response_model=schemas.User)
-def get_current_user(
-        current_user: User = Depends(deps.get_current_user)
-) -> Any:
+def get_current_user(current_user: User = Depends(deps.get_current_user)) -> Any:
     """
     Get current user information.
     """

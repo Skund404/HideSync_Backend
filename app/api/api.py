@@ -19,7 +19,7 @@ from app.api.endpoints import (
     tools,
     platform_integrations,
     documentation,
-    storage
+    storage,
 )
 from app.core.config import settings
 
@@ -35,6 +35,10 @@ api_router.include_router(inventory.router, prefix="/inventory", tags=["Inventor
 api_router.include_router(sales.router, prefix="/sales", tags=["Sales"])
 api_router.include_router(suppliers.router, prefix="/suppliers", tags=["Suppliers"])
 api_router.include_router(tools.router, prefix="/tools", tags=["Tools"])
-api_router.include_router(platform_integrations.router, prefix="/integrations", tags=["Platform Integrations"])
-api_router.include_router(documentation.router, prefix="/documentation", tags=["Documentation"])
+api_router.include_router(
+    platform_integrations.router, prefix="/integrations", tags=["Platform Integrations"]
+)
+api_router.include_router(
+    documentation.router, prefix="/documentation", tags=["Documentation"]
+)
 api_router.include_router(storage.router, prefix="/storage", tags=["Storage"])

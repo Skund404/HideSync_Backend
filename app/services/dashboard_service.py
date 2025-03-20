@@ -20,11 +20,11 @@ class DashboardService:
     """
 
     def __init__(
-            self,
-            session: Session,
-            service_factory=None,
-            cache_service=None,
-            metrics_service=None,
+        self,
+        session: Session,
+        service_factory=None,
+        cache_service=None,
+        metrics_service=None,
     ):
         """
         Initialize dashboard service with dependencies.
@@ -44,34 +44,27 @@ class DashboardService:
 
         # Initialize dashboard metrics
         self.dashboard_requests = counter(
-            "dashboard.requests.total",
-            "Total dashboard data requests"
+            "dashboard.requests.total", "Total dashboard data requests"
         )
         self.dashboard_generation_time = timer(
-            "dashboard.generation_time",
-            "Dashboard data generation time in seconds"
+            "dashboard.generation_time", "Dashboard data generation time in seconds"
         )
 
         # Create gauges for key metrics
         self.active_projects_gauge = gauge(
-            "dashboard.active_projects",
-            "Number of active projects"
+            "dashboard.active_projects", "Number of active projects"
         )
         self.pending_orders_gauge = gauge(
-            "dashboard.pending_orders",
-            "Number of pending orders"
+            "dashboard.pending_orders", "Number of pending orders"
         )
         self.low_stock_materials_gauge = gauge(
-            "dashboard.low_stock_materials",
-            "Number of materials with low stock"
+            "dashboard.low_stock_materials", "Number of materials with low stock"
         )
         self.total_customers_gauge = gauge(
-            "dashboard.total_customers",
-            "Total number of customers"
+            "dashboard.total_customers", "Total number of customers"
         )
         self.monthly_revenue_gauge = gauge(
-            "dashboard.monthly_revenue",
-            "Monthly revenue amount"
+            "dashboard.monthly_revenue", "Monthly revenue amount"
         )
 
     @record_execution_time("dashboard_summary")
@@ -124,11 +117,19 @@ class DashboardService:
                 }
 
                 # Update metrics gauges
-                self.active_projects_gauge.set(summary["projects"].get("active_projects", 0))
+                self.active_projects_gauge.set(
+                    summary["projects"].get("active_projects", 0)
+                )
                 self.pending_orders_gauge.set(summary["sales"].get("pending_orders", 0))
-                self.low_stock_materials_gauge.set(summary["materials"].get("materials_to_reorder", 0))
-                self.total_customers_gauge.set(summary["customers"].get("total_customers", 0))
-                self.monthly_revenue_gauge.set(summary["sales"].get("monthly_revenue", 0))
+                self.low_stock_materials_gauge.set(
+                    summary["materials"].get("materials_to_reorder", 0)
+                )
+                self.total_customers_gauge.set(
+                    summary["customers"].get("total_customers", 0)
+                )
+                self.monthly_revenue_gauge.set(
+                    summary["sales"].get("monthly_revenue", 0)
+                )
 
                 # Cache the result
                 if self.cache_service:
@@ -169,7 +170,7 @@ class DashboardService:
 
         # Build projects data with more detail than the summary
         try:
-            from app.models.enums import ProjectStatus
+            from app.db.models.enums import ProjectStatus
 
             # Get counts by status
             status_counts = {}
@@ -271,7 +272,7 @@ class DashboardService:
         material_service = self.service_factory.get_material_service()
 
         try:
-            from app.models.enums import MaterialType, InventoryStatus
+            from app.db.models.enums import MaterialType, InventoryStatus
 
             # Get low stock materials
             low_stock = material_service.get_low_stock_materials()
@@ -344,7 +345,9 @@ class DashboardService:
                 f"Error generating inventory overview: {str(e)}", exc_info=True
             )
             # Record error in metrics
-            counter("dashboard.errors.inventory", "Inventory overview errors").increment()
+            counter(
+                "dashboard.errors.inventory", "Inventory overview errors"
+            ).increment()
             return {"timestamp": datetime.now().isoformat(), "error": str(e)}
 
     @record_execution_time("sales_overview")
@@ -366,7 +369,7 @@ class DashboardService:
         sale_service = self.service_factory.get_sale_service()
 
         try:
-            from app.models.enums import SaleStatus, PaymentStatus
+            from app.db.models.enums import SaleStatus, PaymentStatus
 
             # Get sales counts by status
             status_counts = {}
@@ -401,7 +404,7 @@ class DashboardService:
             result = {
                 "timestamp": datetime.now().isoformat(),
                 "pending_orders": status_counts.get("CONFIRMED", 0)
-                                  + status_counts.get("IN_PRODUCTION", 0),
+                + status_counts.get("IN_PRODUCTION", 0),
                 "completed_orders": status_counts.get("COMPLETED", 0),
                 "status_counts": status_counts,
                 "payment_counts": payment_counts,
@@ -465,7 +468,7 @@ class DashboardService:
         customer_service = self.service_factory.get_customer_service()
 
         try:
-            from app.models.enums import CustomerStatus, CustomerTier
+            from app.db.models.enums import CustomerStatus, CustomerTier
 
             # Get customer counts by status
             status_counts = {}
@@ -537,7 +540,9 @@ class DashboardService:
                 f"Error generating customers overview: {str(e)}", exc_info=True
             )
             # Record error in metrics
-            counter("dashboard.errors.customers", "Customer overview errors").increment()
+            counter(
+                "dashboard.errors.customers", "Customer overview errors"
+            ).increment()
             return {"timestamp": datetime.now().isoformat(), "error": str(e)}
 
     @record_execution_time("performance_metrics")
@@ -582,7 +587,7 @@ class DashboardService:
                 "http": http_metrics,
                 "database": db_metrics,
                 "application": app_metrics,
-                "services": service_metrics
+                "services": service_metrics,
             }
 
         except Exception as e:
@@ -618,7 +623,9 @@ class DashboardService:
                         f"Error generating performance metrics: {str(e)}", exc_info=True
                     )
                     # Record error in metrics
-                    counter("dashboard.errors.performance", "Performance metrics errors").increment()
+                    counter(
+                        "dashboard.errors.performance", "Performance metrics errors"
+                    ).increment()
                     return {"timestamp": datetime.now().isoformat(), "error": str(e)}
 
             return {
@@ -640,7 +647,7 @@ class DashboardService:
             Dictionary with project summary data
         """
         try:
-            from app.models.enums import ProjectStatus
+            from app.db.models.enums import ProjectStatus
 
             # Get count of projects by status
             active_projects = len(
@@ -661,8 +668,8 @@ class DashboardService:
                 "planning_projects": planning_projects,
                 "completed_projects": completed_projects,
                 "total_projects": active_projects
-                                  + planning_projects
-                                  + completed_projects,
+                + planning_projects
+                + completed_projects,
                 "completion_rate": self._calculate_completion_rate(
                     completed_projects,
                     active_projects + planning_projects + completed_projects,
@@ -688,7 +695,9 @@ class DashboardService:
             }
         except Exception as e:
             logger.error(f"Error getting project summary: {str(e)}", exc_info=True)
-            counter("dashboard.errors.project_summary", "Project summary errors").increment()
+            counter(
+                "dashboard.errors.project_summary", "Project summary errors"
+            ).increment()
             return {"error": str(e)}
 
     @record_execution_time("material_summary")
@@ -703,7 +712,7 @@ class DashboardService:
             Dictionary with material summary data
         """
         try:
-            from app.models.enums import MaterialType
+            from app.db.models.enums import MaterialType
 
             # Get low stock materials
             low_stock = material_service.get_low_stock_materials()
@@ -746,7 +755,9 @@ class DashboardService:
             }
         except Exception as e:
             logger.error(f"Error getting material summary: {str(e)}", exc_info=True)
-            counter("dashboard.errors.material_summary", "Material summary errors").increment()
+            counter(
+                "dashboard.errors.material_summary", "Material summary errors"
+            ).increment()
             return {"error": str(e)}
 
     @record_execution_time("sales_summary")
@@ -795,11 +806,11 @@ class DashboardService:
             revenue_trend = 0
             if prev_month_revenue > 0:
                 revenue_trend = (
-                                        (current_month_revenue - prev_month_revenue) / prev_month_revenue
-                                ) * 100
+                    (current_month_revenue - prev_month_revenue) / prev_month_revenue
+                ) * 100
 
             # Get pending orders
-            from app.models.enums import SaleStatus, PaymentStatus
+            from app.db.models.enums import SaleStatus, PaymentStatus
 
             pending_orders = len(
                 sale_service.list(
@@ -837,7 +848,9 @@ class DashboardService:
             }
         except Exception as e:
             logger.error(f"Error getting sales summary: {str(e)}", exc_info=True)
-            counter("dashboard.errors.sales_summary", "Sales summary errors").increment()
+            counter(
+                "dashboard.errors.sales_summary", "Sales summary errors"
+            ).increment()
             return {
                 "pending_orders": 0,
                 "monthly_revenue": 0,
@@ -858,7 +871,7 @@ class DashboardService:
             Dictionary with purchase summary data
         """
         try:
-            from app.models.enums import PurchaseStatus
+            from app.db.models.enums import PurchaseStatus
 
             # Get pending purchases
             pending_purchases = len(
@@ -918,7 +931,9 @@ class DashboardService:
             }
         except Exception as e:
             logger.error(f"Error getting purchase summary: {str(e)}", exc_info=True)
-            counter("dashboard.errors.purchase_summary", "Purchase summary errors").increment()
+            counter(
+                "dashboard.errors.purchase_summary", "Purchase summary errors"
+            ).increment()
             return {
                 "pending_purchases": 0,
                 "monthly_spending": 0,
@@ -952,7 +967,7 @@ class DashboardService:
             )
 
             # Get customer tiers
-            from app.models.enums import CustomerTier
+            from app.db.models.enums import CustomerTier
 
             vip_customers = len(customer_service.list(tier=CustomerTier.VIP.value))
 
@@ -969,7 +984,9 @@ class DashboardService:
             }
         except Exception as e:
             logger.error(f"Error getting customer summary: {str(e)}", exc_info=True)
-            counter("dashboard.errors.customer_summary", "Customer summary errors").increment()
+            counter(
+                "dashboard.errors.customer_summary", "Customer summary errors"
+            ).increment()
             return {
                 "total_customers": 0,
                 "new_customers_this_month": 0,
@@ -1029,12 +1046,12 @@ class DashboardService:
                         "type": "inventory_change",
                         "title": f"Inventory Change: {change['material_name']}",
                         "description": f"{abs(change['quantity_change'])} {change['unit']} "
-                                       + (
-                                           "added to"
-                                           if change["quantity_change"] > 0
-                                           else "removed from"
-                                       )
-                                       + f" inventory - {change['reason']}",
+                        + (
+                            "added to"
+                            if change["quantity_change"] > 0
+                            else "removed from"
+                        )
+                        + f" inventory - {change['reason']}",
                         "timestamp": (
                             change["transaction_date"].isoformat()
                             if isinstance(change["transaction_date"], datetime)
@@ -1077,7 +1094,9 @@ class DashboardService:
 
         except Exception as e:
             logger.error(f"Error getting recent activity: {str(e)}", exc_info=True)
-            counter("dashboard.errors.recent_activity", "Recent activity errors").increment()
+            counter(
+                "dashboard.errors.recent_activity", "Recent activity errors"
+            ).increment()
             return [
                 {
                     "id": "error",
@@ -1120,7 +1139,7 @@ class DashboardService:
         return min(int(percentage), 100)
 
     def _get_material_stock_distribution(
-            self, material_service
+        self, material_service
     ) -> List[Dict[str, Any]]:
         """
         Get material stock level distribution for visualization.
@@ -1163,5 +1182,7 @@ class DashboardService:
             logger.error(
                 f"Error getting material stock distribution: {str(e)}", exc_info=True
             )
-            counter("dashboard.errors.stock_distribution", "Stock distribution errors").increment()
+            counter(
+                "dashboard.errors.stock_distribution", "Stock distribution errors"
+            ).increment()
             return []

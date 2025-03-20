@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.repositories import communication_repository
 from app.services.base_service import BaseService
 from app.core.events import EventBus
-from app.core.security import KeyService
+from app.core.key_manager import KeyManager as KeyService
 
 
 class ServiceFactory:

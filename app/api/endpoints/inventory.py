@@ -19,14 +19,14 @@ from app.schemas.inventory import (
     InventoryTransactionCreate,
     InventorySearchParams,
     InventoryAdjustment,
-    StockLevelReport
+    StockLevelReport,
 )
 from app.services.inventory_service import InventoryService
 from app.core.exceptions import (
     EntityNotFoundException,
     BusinessRuleException,
     InsufficientQuantityException,
-    StorageLocationNotFoundException
+    StorageLocationNotFoundException,
 )
 
 router = APIRouter()
@@ -34,15 +34,19 @@ router = APIRouter()
 
 @router.get("/", response_model=List[Inventory])
 def list_inventory(
-        *,
-        db: Session = Depends(get_db),
-        current_user: Any = Depends(get_current_active_user),
-        skip: int = Query(0, ge=0, description="Number of records to skip"),
-        limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
-        status: Optional[str] = Query(None, description="Filter by inventory status"),
-        location: Optional[str] = Query(None, description="Filter by storage location"),
-        item_type: Optional[str] = Query(None, description="Filter by item type (material/product/tool)"),
-        search: Optional[str] = Query(None, description="Search term for item name")
+    *,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_active_user),
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(
+        100, ge=1, le=1000, description="Maximum number of records to return"
+    ),
+    status: Optional[str] = Query(None, description="Filter by inventory status"),
+    location: Optional[str] = Query(None, description="Filter by storage location"),
+    item_type: Optional[str] = Query(
+        None, description="Filter by item type (material/product/tool)"
+    ),
+    search: Optional[str] = Query(None, description="Search term for item name"),
 ) -> List[Inventory]:
     """
     Retrieve inventory items with optional filtering and pagination.
@@ -61,31 +65,34 @@ def list_inventory(
         List of inventory records
     """
     search_params = InventorySearchParams(
-        status=status,
-        location=location,
-        item_type=item_type,
-        search=search
+        status=status, location=location, item_type=item_type, search=search
     )
 
     inventory_service = InventoryService(db)
     return inventory_service.get_inventory_items(
-        skip=skip,
-        limit=limit,
-        search_params=search_params
+        skip=skip, limit=limit, search_params=search_params
     )
 
 
 @router.get("/transactions", response_model=List[InventoryTransaction])
 def list_inventory_transactions(
-        *,
-        db: Session = Depends(get_db),
-        current_user: Any = Depends(get_current_active_user),
-        skip: int = Query(0, ge=0, description="Number of records to skip"),
-        limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
-        item_id: Optional[int] = Query(None, ge=1, description="Filter by item ID"),
-        transaction_type: Optional[str] = Query(None, description="Filter by transaction type"),
-        start_date: Optional[str] = Query(None, description="Filter by start date (YYYY-MM-DD)"),
-        end_date: Optional[str] = Query(None, description="Filter by end date (YYYY-MM-DD)")
+    *,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_active_user),
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(
+        100, ge=1, le=1000, description="Maximum number of records to return"
+    ),
+    item_id: Optional[int] = Query(None, ge=1, description="Filter by item ID"),
+    transaction_type: Optional[str] = Query(
+        None, description="Filter by transaction type"
+    ),
+    start_date: Optional[str] = Query(
+        None, description="Filter by start date (YYYY-MM-DD)"
+    ),
+    end_date: Optional[str] = Query(
+        None, description="Filter by end date (YYYY-MM-DD)"
+    ),
 ) -> List[InventoryTransaction]:
     """
     Retrieve inventory transactions with optional filtering and pagination.
@@ -110,16 +117,20 @@ def list_inventory_transactions(
         item_id=item_id,
         transaction_type=transaction_type,
         start_date=start_date,
-        end_date=end_date
+        end_date=end_date,
     )
 
 
-@router.post("/transactions", response_model=InventoryTransaction, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/transactions",
+    response_model=InventoryTransaction,
+    status_code=status.HTTP_201_CREATED,
+)
 def create_inventory_transaction(
-        *,
-        db: Session = Depends(get_db),
-        transaction_in: InventoryTransactionCreate,
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    transaction_in: InventoryTransactionCreate,
+    current_user: Any = Depends(get_current_active_user),
 ) -> InventoryTransaction:
     """
     Create a new inventory transaction.
@@ -139,28 +150,22 @@ def create_inventory_transaction(
     try:
         return inventory_service.create_transaction(transaction_in, current_user.id)
     except EntityNotFoundException as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except InsufficientQuantityException:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Insufficient quantity available for this transaction"
+            detail="Insufficient quantity available for this transaction",
         )
     except BusinessRuleException as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.post("/adjust", response_model=Inventory)
 def adjust_inventory(
-        *,
-        db: Session = Depends(get_db),
-        adjustment: InventoryAdjustment,
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    adjustment: InventoryAdjustment,
+    current_user: Any = Depends(get_current_active_user),
 ) -> Inventory:
     """
     Adjust inventory quantity.
@@ -181,31 +186,29 @@ def adjust_inventory(
         return inventory_service.adjust_inventory(adjustment, current_user.id)
     except EntityNotFoundException:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Inventory item not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"Inventory item not found"
         )
     except InsufficientQuantityException:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Insufficient quantity available for this adjustment"
+            detail="Insufficient quantity available for this adjustment",
         )
     except BusinessRuleException as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.post("/transfer", response_model=Inventory)
 def transfer_inventory(
-        *,
-        db: Session = Depends(get_db),
-        item_id: int = Body(..., ge=1, embed=True, description="ID of the inventory item"),
-        quantity: float = Body(..., gt=0, embed=True, description="Quantity to transfer"),
-        source_location: str = Body(..., embed=True, description="Source storage location"),
-        target_location: str = Body(..., embed=True, description="Target storage location"),
-        notes: Optional[str] = Body(None, embed=True, description="Notes for this transfer"),
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    item_id: int = Body(..., ge=1, embed=True, description="ID of the inventory item"),
+    quantity: float = Body(..., gt=0, embed=True, description="Quantity to transfer"),
+    source_location: str = Body(..., embed=True, description="Source storage location"),
+    target_location: str = Body(..., embed=True, description="Target storage location"),
+    notes: Optional[str] = Body(
+        None, embed=True, description="Notes for this transfer"
+    ),
+    current_user: Any = Depends(get_current_active_user),
 ) -> Inventory:
     """
     Transfer inventory between storage locations.
@@ -233,32 +236,30 @@ def transfer_inventory(
     except EntityNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Inventory item with ID {item_id} not found"
+            detail=f"Inventory item with ID {item_id} not found",
         )
     except StorageLocationNotFoundException as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except InsufficientQuantityException:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Insufficient quantity at source location"
+            detail=f"Insufficient quantity at source location",
         )
     except BusinessRuleException as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.get("/low-stock", response_model=List[Inventory])
 def get_low_stock_items(
-        *,
-        db: Session = Depends(get_db),
-        current_user: Any = Depends(get_current_active_user),
-        threshold_percentage: Optional[float] = Query(20.0, ge=0, le=100, description="Low stock threshold percentage"),
-        item_type: Optional[str] = Query(None, description="Filter by item type (material/product/tool)")
+    *,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_active_user),
+    threshold_percentage: Optional[float] = Query(
+        20.0, ge=0, le=100, description="Low stock threshold percentage"
+    ),
+    item_type: Optional[str] = Query(
+        None, description="Filter by item type (material/product/tool)"
+    ),
 ) -> List[Inventory]:
     """
     Get items with low stock levels.
@@ -278,11 +279,15 @@ def get_low_stock_items(
 
 @router.get("/report", response_model=StockLevelReport)
 def get_stock_level_report(
-        *,
-        db: Session = Depends(get_db),
-        current_user: Any = Depends(get_current_active_user),
-        item_type: Optional[str] = Query(None, description="Filter by item type (material/product/tool)"),
-        group_by: Optional[str] = Query("type", description="Group by field (type, location, status)")
+    *,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_active_user),
+    item_type: Optional[str] = Query(
+        None, description="Filter by item type (material/product/tool)"
+    ),
+    group_by: Optional[str] = Query(
+        "type", description="Group by field (type, location, status)"
+    ),
 ) -> StockLevelReport:
     """
     Get stock level report.

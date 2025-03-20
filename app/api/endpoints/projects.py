@@ -23,25 +23,31 @@ from app.schemas.project import (
     ProjectComponentCreate,
     TimelineTask,
     TimelineTaskCreate,
-    TimelineTaskUpdate
+    TimelineTaskUpdate,
 )
 from app.services.project_service import ProjectService
-from app.core.exceptions import EntityNotFoundException, BusinessRuleException, InvalidStatusTransitionException
+from app.core.exceptions import (
+    EntityNotFoundException,
+    BusinessRuleException,
+    InvalidStatusTransitionException,
+)
 
 router = APIRouter()
 
 
 @router.get("/", response_model=List[Project])
 def list_projects(
-        *,
-        db: Session = Depends(get_db),
-        current_user: Any = Depends(get_current_active_user),
-        skip: int = Query(0, ge=0, description="Number of records to skip"),
-        limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
-        status: Optional[str] = Query(None, description="Filter by project status"),
-        type: Optional[str] = Query(None, description="Filter by project type"),
-        customer_id: Optional[int] = Query(None, ge=1, description="Filter by customer ID"),
-        search: Optional[str] = Query(None, description="Search term for project name")
+    *,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_active_user),
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(
+        100, ge=1, le=1000, description="Maximum number of records to return"
+    ),
+    status: Optional[str] = Query(None, description="Filter by project status"),
+    type: Optional[str] = Query(None, description="Filter by project type"),
+    customer_id: Optional[int] = Query(None, ge=1, description="Filter by customer ID"),
+    search: Optional[str] = Query(None, description="Search term for project name"),
 ) -> List[Project]:
     """
     Retrieve projects with optional filtering and pagination.
@@ -60,26 +66,21 @@ def list_projects(
         List of project records
     """
     search_params = ProjectSearchParams(
-        status=status,
-        type=type,
-        customer_id=customer_id,
-        search=search
+        status=status, type=type, customer_id=customer_id, search=search
     )
 
     project_service = ProjectService(db)
     return project_service.get_projects(
-        skip=skip,
-        limit=limit,
-        search_params=search_params
+        skip=skip, limit=limit, search_params=search_params
     )
 
 
 @router.post("/", response_model=Project, status_code=status.HTTP_201_CREATED)
 def create_project(
-        *,
-        db: Session = Depends(get_db),
-        project_in: ProjectCreate,
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    project_in: ProjectCreate,
+    current_user: Any = Depends(get_current_active_user),
 ) -> Project:
     """
     Create a new project.
@@ -99,18 +100,15 @@ def create_project(
     try:
         return project_service.create_project(project_in, current_user.id)
     except BusinessRuleException as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.get("/{project_id}", response_model=ProjectWithDetails)
 def get_project(
-        *,
-        db: Session = Depends(get_db),
-        project_id: int = Path(..., ge=1, description="The ID of the project to retrieve"),
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    project_id: int = Path(..., ge=1, description="The ID of the project to retrieve"),
+    current_user: Any = Depends(get_current_active_user),
 ) -> ProjectWithDetails:
     """
     Get detailed information about a specific project.
@@ -132,17 +130,17 @@ def get_project(
     except EntityNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Project with ID {project_id} not found"
+            detail=f"Project with ID {project_id} not found",
         )
 
 
 @router.put("/{project_id}", response_model=Project)
 def update_project(
-        *,
-        db: Session = Depends(get_db),
-        project_id: int = Path(..., ge=1, description="The ID of the project to update"),
-        project_in: ProjectUpdate,
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    project_id: int = Path(..., ge=1, description="The ID of the project to update"),
+    project_in: ProjectUpdate,
+    current_user: Any = Depends(get_current_active_user),
 ) -> Project:
     """
     Update a project.
@@ -161,27 +159,22 @@ def update_project(
     """
     project_service = ProjectService(db)
     try:
-        return project_service.update_project(
-            project_id, project_in, current_user.id
-        )
+        return project_service.update_project(project_id, project_in, current_user.id)
     except EntityNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Project with ID {project_id} not found"
+            detail=f"Project with ID {project_id} not found",
         )
     except BusinessRuleException as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_project(
-        *,
-        db: Session = Depends(get_db),
-        project_id: int = Path(..., ge=1, description="The ID of the project to delete"),
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    project_id: int = Path(..., ge=1, description="The ID of the project to delete"),
+    current_user: Any = Depends(get_current_active_user),
 ) -> None:
     """
     Delete a project.
@@ -200,22 +193,19 @@ def delete_project(
     except EntityNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Project with ID {project_id} not found"
+            detail=f"Project with ID {project_id} not found",
         )
     except BusinessRuleException as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.put("/{project_id}/status", response_model=Project)
 def update_project_status(
-        *,
-        db: Session = Depends(get_db),
-        project_id: int = Path(..., ge=1, description="The ID of the project"),
-        status: str = Body(..., embed=True, description="New project status"),
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    project_id: int = Path(..., ge=1, description="The ID of the project"),
+    status: str = Body(..., embed=True, description="New project status"),
+    current_user: Any = Depends(get_current_active_user),
 ) -> Project:
     """
     Update a project's status.
@@ -240,22 +230,19 @@ def update_project_status(
     except EntityNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Project with ID {project_id} not found"
+            detail=f"Project with ID {project_id} not found",
         )
     except InvalidStatusTransitionException as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 # Project Components
 @router.get("/{project_id}/components", response_model=List[ProjectComponent])
 def list_project_components(
-        *,
-        db: Session = Depends(get_db),
-        project_id: int = Path(..., ge=1, description="The ID of the project"),
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    project_id: int = Path(..., ge=1, description="The ID of the project"),
+    current_user: Any = Depends(get_current_active_user),
 ) -> List[ProjectComponent]:
     """
     List all components for a project.
@@ -277,17 +264,21 @@ def list_project_components(
     except EntityNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Project with ID {project_id} not found"
+            detail=f"Project with ID {project_id} not found",
         )
 
 
-@router.post("/{project_id}/components", response_model=ProjectComponent, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{project_id}/components",
+    response_model=ProjectComponent,
+    status_code=status.HTTP_201_CREATED,
+)
 def add_project_component(
-        *,
-        db: Session = Depends(get_db),
-        project_id: int = Path(..., ge=1, description="The ID of the project"),
-        component_in: ProjectComponentCreate,
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    project_id: int = Path(..., ge=1, description="The ID of the project"),
+    component_in: ProjectComponentCreate,
+    current_user: Any = Depends(get_current_active_user),
 ) -> ProjectComponent:
     """
     Add a component to a project.
@@ -312,22 +303,19 @@ def add_project_component(
     except EntityNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Project with ID {project_id} not found"
+            detail=f"Project with ID {project_id} not found",
         )
     except BusinessRuleException as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 # Timeline Tasks
 @router.get("/{project_id}/timeline", response_model=List[TimelineTask])
 def list_timeline_tasks(
-        *,
-        db: Session = Depends(get_db),
-        project_id: int = Path(..., ge=1, description="The ID of the project"),
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    project_id: int = Path(..., ge=1, description="The ID of the project"),
+    current_user: Any = Depends(get_current_active_user),
 ) -> List[TimelineTask]:
     """
     List all timeline tasks for a project.
@@ -349,17 +337,21 @@ def list_timeline_tasks(
     except EntityNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Project with ID {project_id} not found"
+            detail=f"Project with ID {project_id} not found",
         )
 
 
-@router.post("/{project_id}/timeline", response_model=TimelineTask, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{project_id}/timeline",
+    response_model=TimelineTask,
+    status_code=status.HTTP_201_CREATED,
+)
 def add_timeline_task(
-        *,
-        db: Session = Depends(get_db),
-        project_id: int = Path(..., ge=1, description="The ID of the project"),
-        task_in: TimelineTaskCreate,
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    project_id: int = Path(..., ge=1, description="The ID of the project"),
+    task_in: TimelineTaskCreate,
+    current_user: Any = Depends(get_current_active_user),
 ) -> TimelineTask:
     """
     Add a timeline task to a project.
@@ -378,29 +370,24 @@ def add_timeline_task(
     """
     project_service = ProjectService(db)
     try:
-        return project_service.add_timeline_task(
-            project_id, task_in, current_user.id
-        )
+        return project_service.add_timeline_task(project_id, task_in, current_user.id)
     except EntityNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Project with ID {project_id} not found"
+            detail=f"Project with ID {project_id} not found",
         )
     except BusinessRuleException as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.put("/{project_id}/timeline/{task_id}", response_model=TimelineTask)
 def update_timeline_task(
-        *,
-        db: Session = Depends(get_db),
-        project_id: int = Path(..., ge=1, description="The ID of the project"),
-        task_id: int = Path(..., ge=1, description="The ID of the task"),
-        task_in: TimelineTaskUpdate,
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    project_id: int = Path(..., ge=1, description="The ID of the project"),
+    task_id: int = Path(..., ge=1, description="The ID of the task"),
+    task_in: TimelineTaskUpdate,
+    current_user: Any = Depends(get_current_active_user),
 ) -> TimelineTask:
     """
     Update a timeline task.
@@ -424,12 +411,6 @@ def update_timeline_task(
             project_id, task_id, task_in, current_user.id
         )
     except EntityNotFoundException as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except BusinessRuleException as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

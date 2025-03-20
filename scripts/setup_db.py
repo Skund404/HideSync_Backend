@@ -22,12 +22,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
 def main() -> None:
     """Set up the database with tables and initial data."""
     logger.info("Setting up the database...")
     # Initialize SQLCipher database and create tables
     init_db_main()
     logger.info("Database setup completed successfully")
+
 
 if __name__ == "__main__":
     main()

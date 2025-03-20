@@ -9,10 +9,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 import logging
 
-from app.core.metrics import (
-    counter, histogram, timer, gauge,
-    DB_QUERY_LATENCY
-)
+from app.core.metrics import counter, histogram, timer, gauge, DB_QUERY_LATENCY
 
 logger = logging.getLogger(__name__)
 
@@ -27,16 +24,22 @@ db_pool_size = gauge("db.pool.size", "Database connection pool size")
 db_pool_overflow = gauge("db.pool.overflow", "Database connection pool overflow count")
 db_pool_timeout = counter("db.pool.timeout", "Database connection pool timeout count")
 db_transaction_count = counter("db.transactions.total", "Total database transactions")
-db_transaction_commit = counter("db.transactions.commits", "Database transaction commits")
-db_transaction_rollback = counter("db.transactions.rollbacks", "Database transaction rollbacks")
+db_transaction_commit = counter(
+    "db.transactions.commits", "Database transaction commits"
+)
+db_transaction_rollback = counter(
+    "db.transactions.rollbacks", "Database transaction rollbacks"
+)
 db_deadlocks = counter("db.deadlocks", "Database deadlock count")
 
 # Connection states
 connection_states = {
     "idle": gauge("db.connections.idle", "Idle database connections"),
     "active": gauge("db.connections.active", "Active database connections"),
-    "checked_out": gauge("db.connections.checked_out", "Checked out database connections"),
-    "checked_in": gauge("db.connections.checked_in", "Checked in database connections")
+    "checked_out": gauge(
+        "db.connections.checked_out", "Checked out database connections"
+    ),
+    "checked_in": gauge("db.connections.checked_in", "Checked in database connections"),
 }
 
 
@@ -128,13 +131,13 @@ def _register_execution_events(engine: Engine) -> None:
     @event.listens_for(engine, "before_execute")
     def before_execute(conn, clauseelement, multiparams, params, execution_options):
         """Record query start time."""
-        conn.info.setdefault('query_start_time', {})
-        conn.info['query_start_time'][id(clauseelement)] = time.time()
+        conn.info.setdefault("query_start_time", {})
+        conn.info["query_start_time"][id(clauseelement)] = time.time()
 
     @event.listens_for(engine, "after_execute")
     def after_execute(conn, clauseelement, multiparams, params, result):
         """Record query metrics."""
-        start_time = conn.info.get('query_start_time', {}).pop(id(clauseelement), None)
+        start_time = conn.info.get("query_start_time", {}).pop(id(clauseelement), None)
         if start_time is not None:
             duration = time.time() - start_time
             DB_QUERY_LATENCY.observe(duration)
@@ -147,8 +150,7 @@ def _register_execution_events(engine: Engine) -> None:
             query_type = _get_query_type(clauseelement)
             if query_type not in db_queries_by_type:
                 db_queries_by_type[query_type] = counter(
-                    f"db.queries.{query_type}",
-                    f"Database {query_type} queries"
+                    f"db.queries.{query_type}", f"Database {query_type} queries"
                 )
             db_queries_by_type[query_type].increment()
 
@@ -201,24 +203,26 @@ def _get_query_type(clauseelement) -> str:
     # Get statement type based on class name
     stmt_type = type(clauseelement).__name__.lower()
 
-    if hasattr(clauseelement, 'type') and hasattr(clauseelement.type, '_get_select_raw_columns'):
+    if hasattr(clauseelement, "type") and hasattr(
+        clauseelement.type, "_get_select_raw_columns"
+    ):
         return "select"
-    elif 'insert' in stmt_type:
+    elif "insert" in stmt_type:
         return "insert"
-    elif 'update' in stmt_type:
+    elif "update" in stmt_type:
         return "update"
-    elif 'delete' in stmt_type:
+    elif "delete" in stmt_type:
         return "delete"
-    elif 'create' in stmt_type:
+    elif "create" in stmt_type:
         return "create"
-    elif 'drop' in stmt_type:
+    elif "drop" in stmt_type:
         return "drop"
-    elif 'execute' in stmt_type:
+    elif "execute" in stmt_type:
         return "execute"
-    elif 'text' in stmt_type:
+    elif "text" in stmt_type:
         # Try to guess type from SQL text
         sql_text = str(clauseelement).lower()
-        for stmt_key in ['select', 'insert', 'update', 'delete', 'create', 'drop']:
+        for stmt_key in ["select", "insert", "update", "delete", "create", "drop"]:
             if sql_text.startswith(stmt_key):
                 return stmt_key
         return "text"
@@ -257,7 +261,7 @@ def with_db_metrics(func):
         function_timer = timer(
             timer_name,
             f"Execution time of database function {func.__name__}",
-            {"function": func.__name__, "module": func.__module__}
+            {"function": func.__name__, "module": func.__module__},
         )
 
         with function_timer.time():
@@ -268,7 +272,7 @@ def with_db_metrics(func):
                 error_counter = counter(
                     f"db.function.errors.{func.__module__}.{func.__name__}",
                     f"Error count of database function {func.__name__}",
-                    {"function": func.__name__, "module": func.__module__}
+                    {"function": func.__name__, "module": func.__module__},
                 )
                 error_counter.increment()
                 raise

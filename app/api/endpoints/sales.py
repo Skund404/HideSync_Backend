@@ -22,13 +22,13 @@ from app.schemas.sales import (
     SaleSearchParams,
     SaleWithDetails,
     SaleStatusUpdate,
-    PaymentUpdate
+    PaymentUpdate,
 )
 from app.services.sale_service import SaleService
 from app.core.exceptions import (
     EntityNotFoundException,
     BusinessRuleException,
-    InvalidStatusTransitionException
+    InvalidStatusTransitionException,
 )
 
 router = APIRouter()
@@ -36,17 +36,23 @@ router = APIRouter()
 
 @router.get("/", response_model=List[Sale])
 def list_sales(
-        *,
-        db: Session = Depends(get_db),
-        current_user: Any = Depends(get_current_active_user),
-        skip: int = Query(0, ge=0, description="Number of records to skip"),
-        limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
-        status: Optional[str] = Query(None, description="Filter by sale status"),
-        customer_id: Optional[int] = Query(None, ge=1, description="Filter by customer ID"),
-        start_date: Optional[str] = Query(None, description="Filter by start date (YYYY-MM-DD)"),
-        end_date: Optional[str] = Query(None, description="Filter by end date (YYYY-MM-DD)"),
-        payment_status: Optional[str] = Query(None, description="Filter by payment status"),
-        search: Optional[str] = Query(None, description="Search term")
+    *,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_active_user),
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(
+        100, ge=1, le=1000, description="Maximum number of records to return"
+    ),
+    status: Optional[str] = Query(None, description="Filter by sale status"),
+    customer_id: Optional[int] = Query(None, ge=1, description="Filter by customer ID"),
+    start_date: Optional[str] = Query(
+        None, description="Filter by start date (YYYY-MM-DD)"
+    ),
+    end_date: Optional[str] = Query(
+        None, description="Filter by end date (YYYY-MM-DD)"
+    ),
+    payment_status: Optional[str] = Query(None, description="Filter by payment status"),
+    search: Optional[str] = Query(None, description="Search term"),
 ) -> List[Sale]:
     """
     Retrieve sales with optional filtering and pagination.
@@ -72,23 +78,19 @@ def list_sales(
         start_date=start_date,
         end_date=end_date,
         payment_status=payment_status,
-        search=search
+        search=search,
     )
 
     sale_service = SaleService(db)
-    return sale_service.get_sales(
-        skip=skip,
-        limit=limit,
-        search_params=search_params
-    )
+    return sale_service.get_sales(skip=skip, limit=limit, search_params=search_params)
 
 
 @router.post("/", response_model=Sale, status_code=status.HTTP_201_CREATED)
 def create_sale(
-        *,
-        db: Session = Depends(get_db),
-        sale_in: SaleCreate,
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    sale_in: SaleCreate,
+    current_user: Any = Depends(get_current_active_user),
 ) -> Sale:
     """
     Create a new sale.
@@ -108,23 +110,17 @@ def create_sale(
     try:
         return sale_service.create_sale(sale_in, current_user.id)
     except EntityNotFoundException as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except BusinessRuleException as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.get("/{sale_id}", response_model=SaleWithDetails)
 def get_sale(
-        *,
-        db: Session = Depends(get_db),
-        sale_id: int = Path(..., ge=1, description="The ID of the sale to retrieve"),
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    sale_id: int = Path(..., ge=1, description="The ID of the sale to retrieve"),
+    current_user: Any = Depends(get_current_active_user),
 ) -> SaleWithDetails:
     """
     Get detailed information about a specific sale.
@@ -146,17 +142,17 @@ def get_sale(
     except EntityNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Sale with ID {sale_id} not found"
+            detail=f"Sale with ID {sale_id} not found",
         )
 
 
 @router.put("/{sale_id}", response_model=Sale)
 def update_sale(
-        *,
-        db: Session = Depends(get_db),
-        sale_id: int = Path(..., ge=1, description="The ID of the sale to update"),
-        sale_in: SaleUpdate,
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    sale_id: int = Path(..., ge=1, description="The ID of the sale to update"),
+    sale_in: SaleUpdate,
+    current_user: Any = Depends(get_current_active_user),
 ) -> Sale:
     """
     Update a sale.
@@ -175,27 +171,22 @@ def update_sale(
     """
     sale_service = SaleService(db)
     try:
-        return sale_service.update_sale(
-            sale_id, sale_in, current_user.id
-        )
+        return sale_service.update_sale(sale_id, sale_in, current_user.id)
     except EntityNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Sale with ID {sale_id} not found"
+            detail=f"Sale with ID {sale_id} not found",
         )
     except BusinessRuleException as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.delete("/{sale_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_sale(
-        *,
-        db: Session = Depends(get_db),
-        sale_id: int = Path(..., ge=1, description="The ID of the sale to delete"),
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    sale_id: int = Path(..., ge=1, description="The ID of the sale to delete"),
+    current_user: Any = Depends(get_current_active_user),
 ) -> None:
     """
     Delete a sale.
@@ -214,22 +205,19 @@ def delete_sale(
     except EntityNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Sale with ID {sale_id} not found"
+            detail=f"Sale with ID {sale_id} not found",
         )
     except BusinessRuleException as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.put("/{sale_id}/status", response_model=Sale)
 def update_sale_status(
-        *,
-        db: Session = Depends(get_db),
-        sale_id: int = Path(..., ge=1, description="The ID of the sale"),
-        status_update: SaleStatusUpdate,
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    sale_id: int = Path(..., ge=1, description="The ID of the sale"),
+    status_update: SaleStatusUpdate,
+    current_user: Any = Depends(get_current_active_user),
 ) -> Sale:
     """
     Update a sale's status.
@@ -248,28 +236,23 @@ def update_sale_status(
     """
     sale_service = SaleService(db)
     try:
-        return sale_service.update_sale_status(
-            sale_id, status_update, current_user.id
-        )
+        return sale_service.update_sale_status(sale_id, status_update, current_user.id)
     except EntityNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Sale with ID {sale_id} not found"
+            detail=f"Sale with ID {sale_id} not found",
         )
     except InvalidStatusTransitionException as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.put("/{sale_id}/payment", response_model=Sale)
 def update_payment_status(
-        *,
-        db: Session = Depends(get_db),
-        sale_id: int = Path(..., ge=1, description="The ID of the sale"),
-        payment_update: PaymentUpdate,
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    sale_id: int = Path(..., ge=1, description="The ID of the sale"),
+    payment_update: PaymentUpdate,
+    current_user: Any = Depends(get_current_active_user),
 ) -> Sale:
     """
     Update a sale's payment status.
@@ -294,22 +277,21 @@ def update_payment_status(
     except EntityNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Sale with ID {sale_id} not found"
+            detail=f"Sale with ID {sale_id} not found",
         )
     except BusinessRuleException as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.post("/{sale_id}/items", response_model=SaleItem, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{sale_id}/items", response_model=SaleItem, status_code=status.HTTP_201_CREATED
+)
 def add_sale_item(
-        *,
-        db: Session = Depends(get_db),
-        sale_id: int = Path(..., ge=1, description="The ID of the sale"),
-        item_in: SaleItemCreate,
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    sale_id: int = Path(..., ge=1, description="The ID of the sale"),
+    item_in: SaleItemCreate,
+    current_user: Any = Depends(get_current_active_user),
 ) -> SaleItem:
     """
     Add an item to a sale.
@@ -328,28 +310,20 @@ def add_sale_item(
     """
     sale_service = SaleService(db)
     try:
-        return sale_service.add_sale_item(
-            sale_id, item_in, current_user.id
-        )
+        return sale_service.add_sale_item(sale_id, item_in, current_user.id)
     except EntityNotFoundException as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except BusinessRuleException as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.delete("/{sale_id}/items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
 def remove_sale_item(
-        *,
-        db: Session = Depends(get_db),
-        sale_id: int = Path(..., ge=1, description="The ID of the sale"),
-        item_id: int = Path(..., ge=1, description="The ID of the item"),
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    sale_id: int = Path(..., ge=1, description="The ID of the sale"),
+    item_id: int = Path(..., ge=1, description="The ID of the item"),
+    current_user: Any = Depends(get_current_active_user),
 ) -> None:
     """
     Remove an item from a sale.
@@ -365,16 +339,8 @@ def remove_sale_item(
     """
     sale_service = SaleService(db)
     try:
-        sale_service.remove_sale_item(
-            sale_id, item_id, current_user.id
-        )
+        sale_service.remove_sale_item(sale_id, item_id, current_user.id)
     except EntityNotFoundException as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except BusinessRuleException as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

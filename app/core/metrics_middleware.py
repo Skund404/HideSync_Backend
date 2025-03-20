@@ -7,8 +7,13 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
 from app.core.metrics import (
-    gauge, counter, histogram, timer,
-    ACTIVE_REQUESTS, REQUEST_LATENCY, ERROR_COUNT
+    gauge,
+    counter,
+    histogram,
+    timer,
+    ACTIVE_REQUESTS,
+    REQUEST_LATENCY,
+    ERROR_COUNT,
 )
 
 
@@ -19,11 +24,7 @@ class MetricsMiddleware(BaseHTTPMiddleware):
     Tracks request counts, durations, error rates, etc.
     """
 
-    def __init__(
-            self,
-            app: ASGIApp,
-            exclude_paths: list[str] = None
-    ):
+    def __init__(self, app: ASGIApp, exclude_paths: list[str] = None):
         """
         Initialize metrics middleware.
 
@@ -36,21 +37,23 @@ class MetricsMiddleware(BaseHTTPMiddleware):
 
         # Initialize request metrics
         self.request_counter = counter("http.requests.total", "Total HTTP requests")
-        self.request_timer = timer("http.requests.duration", "HTTP request duration in seconds")
+        self.request_timer = timer(
+            "http.requests.duration", "HTTP request duration in seconds"
+        )
         self.status_counters = {}
 
         # Request size metrics
         self.request_size = histogram(
             "http.requests.size",
             "HTTP request size in bytes",
-            buckets=[64, 256, 1024, 4096, 16384, 65536, 262144, 1048576]
+            buckets=[64, 256, 1024, 4096, 16384, 65536, 262144, 1048576],
         )
 
         # Response size metrics
         self.response_size = histogram(
             "http.responses.size",
             "HTTP response size in bytes",
-            buckets=[64, 256, 1024, 4096, 16384, 65536, 262144, 1048576]
+            buckets=[64, 256, 1024, 4096, 16384, 65536, 262144, 1048576],
         )
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
@@ -76,10 +79,7 @@ class MetricsMiddleware(BaseHTTPMiddleware):
         ACTIVE_REQUESTS.increment()
 
         # Create tags for this request
-        tags = {
-            "method": request.method,
-            "path": path
-        }
+        tags = {"method": request.method, "path": path}
 
         # Increment request counter with tags
         self.request_counter.increment()
@@ -105,7 +105,7 @@ class MetricsMiddleware(BaseHTTPMiddleware):
             if status_class not in self.status_counters:
                 self.status_counters[status_class] = counter(
                     f"http.requests.status.{status_class}",
-                    f"HTTP {status_class} responses"
+                    f"HTTP {status_class} responses",
                 )
             self.status_counters[status_class].increment()
 
@@ -168,10 +168,9 @@ def add_metrics_endpoint(app: FastAPI, endpoint: str = "/metrics") -> None:
 
         registry = get_registry()
         for exporter in registry._exporters:
-            if hasattr(exporter, 'get_metrics_text'):
+            if hasattr(exporter, "get_metrics_text"):
                 return Response(
-                    content=exporter.get_metrics_text(),
-                    media_type="text/plain"
+                    content=exporter.get_metrics_text(), media_type="text/plain"
                 )
 
         # Fall back to JSON if no Prometheus exporter

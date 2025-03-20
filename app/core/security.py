@@ -17,7 +17,7 @@ ALGORITHM = settings.JWT_ALGORITHM
 
 
 def create_access_token(
-        subject: Union[str, Any], expires_delta: Optional[timedelta] = None
+    subject: Union[str, Any], expires_delta: Optional[timedelta] = None
 ) -> str:
     """
     Create a JWT access token.

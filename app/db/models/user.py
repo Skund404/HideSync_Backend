@@ -13,6 +13,7 @@ class User(Base, AuditMixin, TimestampMixin):
 
     Stores user account information, credentials, and permission levels.
     """
+
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)

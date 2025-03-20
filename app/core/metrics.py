@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 import uuid
 
 # Type for decorated functions
-F = TypeVar('F', bound=Callable[..., Any])
+F = TypeVar("F", bound=Callable[..., Any])
 
 logger = logging.getLogger(__name__)
 
@@ -23,14 +23,16 @@ DEFAULT_CONFIG = {
     "export_interval_seconds": 60,
     "retention_days": 7,
     "sample_rate": 1.0,  # 100% sampling by default
-    "export_backends": ["log"]  # Default to logging backend only
+    "export_backends": ["log"],  # Default to logging backend only
 }
 
 
 class Metric:
     """Base class for all metrics."""
 
-    def __init__(self, name: str, description: str = "", tags: Optional[Dict[str, str]] = None):
+    def __init__(
+        self, name: str, description: str = "", tags: Optional[Dict[str, str]] = None
+    ):
         """
         Initialize a metric.
 
@@ -57,7 +59,7 @@ class Metric:
             "tags": self.tags,
             "type": self.__class__.__name__,
             "value": self.get_value(),
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
 
 
@@ -68,7 +70,9 @@ class Counter(Metric):
     Used for counting events, operations, errors, etc.
     """
 
-    def __init__(self, name: str, description: str = "", tags: Optional[Dict[str, str]] = None):
+    def __init__(
+        self, name: str, description: str = "", tags: Optional[Dict[str, str]] = None
+    ):
         """Initialize a counter with a zero value."""
         super().__init__(name, description, tags)
         self._value = 0
@@ -96,7 +100,9 @@ class Gauge(Metric):
     queue sizes, active connections, etc.
     """
 
-    def __init__(self, name: str, description: str = "", tags: Optional[Dict[str, str]] = None):
+    def __init__(
+        self, name: str, description: str = "", tags: Optional[Dict[str, str]] = None
+    ):
         """Initialize a gauge with a zero value."""
         super().__init__(name, description, tags)
         self._value = 0
@@ -145,11 +151,11 @@ class Histogram(Metric):
     """
 
     def __init__(
-            self,
-            name: str,
-            description: str = "",
-            tags: Optional[Dict[str, str]] = None,
-            buckets: Optional[List[float]] = None
+        self,
+        name: str,
+        description: str = "",
+        tags: Optional[Dict[str, str]] = None,
+        buckets: Optional[List[float]] = None,
     ):
         """
         Initialize a histogram.
@@ -162,7 +168,19 @@ class Histogram(Metric):
         """
         super().__init__(name, description, tags)
         self._values = []
-        self._buckets = buckets or [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10]
+        self._buckets = buckets or [
+            0.005,
+            0.01,
+            0.025,
+            0.05,
+            0.1,
+            0.25,
+            0.5,
+            1,
+            2.5,
+            5,
+            10,
+        ]
         self._count = 0
         self._sum = 0
         self._min = None
@@ -204,7 +222,7 @@ class Histogram(Metric):
                 "p90": None,
                 "p95": None,
                 "p99": None,
-                "buckets": {str(b): 0 for b in self._buckets}
+                "buckets": {str(b): 0 for b in self._buckets},
             }
 
         # Calculate percentiles
@@ -225,10 +243,22 @@ class Histogram(Metric):
             "max": self._max,
             "mean": statistics.mean(self._values) if self._values else None,
             "median": statistics.median(self._values) if self._values else None,
-            "p90": sorted_values[p90_idx] if p90_idx < len(sorted_values) else sorted_values[-1],
-            "p95": sorted_values[p95_idx] if p95_idx < len(sorted_values) else sorted_values[-1],
-            "p99": sorted_values[p99_idx] if p99_idx < len(sorted_values) else sorted_values[-1],
-            "buckets": buckets
+            "p90": (
+                sorted_values[p90_idx]
+                if p90_idx < len(sorted_values)
+                else sorted_values[-1]
+            ),
+            "p95": (
+                sorted_values[p95_idx]
+                if p95_idx < len(sorted_values)
+                else sorted_values[-1]
+            ),
+            "p99": (
+                sorted_values[p99_idx]
+                if p99_idx < len(sorted_values)
+                else sorted_values[-1]
+            ),
+            "buckets": buckets,
         }
 
 
@@ -240,15 +270,29 @@ class Timer(Histogram):
     """
 
     def __init__(
-            self,
-            name: str,
-            description: str = "",
-            tags: Optional[Dict[str, str]] = None,
-            buckets: Optional[List[float]] = None
+        self,
+        name: str,
+        description: str = "",
+        tags: Optional[Dict[str, str]] = None,
+        buckets: Optional[List[float]] = None,
     ):
         """Initialize a timer with appropriate bucket defaults for seconds."""
         # Default buckets for time measurements in seconds
-        default_buckets = [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30]
+        default_buckets = [
+            0.001,
+            0.005,
+            0.01,
+            0.025,
+            0.05,
+            0.1,
+            0.25,
+            0.5,
+            1,
+            2.5,
+            5,
+            10,
+            30,
+        ]
         super().__init__(name, description, tags, buckets or default_buckets)
 
     @contextlib.contextmanager
@@ -292,7 +336,7 @@ class MetricsRegistry:
     _lock = threading.Lock()
 
     @classmethod
-    def get_instance(cls) -> 'MetricsRegistry':
+    def get_instance(cls) -> "MetricsRegistry":
         """Get singleton instance of metrics registry."""
         if cls._instance is None:
             with cls._lock:
@@ -322,15 +366,19 @@ class MetricsRegistry:
         for backend in backends:
             if backend == "log":
                 from app.core.metrics_exporters import LogExporter
+
                 self._exporters.append(LogExporter())
             elif backend == "prometheus" and "prometheus" in self._config:
                 from app.core.metrics_exporters import PrometheusExporter
+
                 self._exporters.append(PrometheusExporter(self._config["prometheus"]))
             elif backend == "statsd" and "statsd" in self._config:
                 from app.core.metrics_exporters import StatsDExporter
+
                 self._exporters.append(StatsDExporter(self._config["statsd"]))
             elif backend == "file" and "file" in self._config:
                 from app.core.metrics_exporters import FileExporter
+
                 self._exporters.append(FileExporter(self._config["file"]))
 
     def _start_export_thread(self) -> None:
@@ -347,9 +395,7 @@ class MetricsRegistry:
                     logger.error(f"Error exporting metrics: {str(e)}", exc_info=True)
 
         self._export_thread = threading.Thread(
-            target=export_loop,
-            name="metrics-export",
-            daemon=True
+            target=export_loop, name="metrics-export", daemon=True
         )
         self._export_thread.start()
 
@@ -386,7 +432,7 @@ class MetricsRegistry:
 
         # Shutdown exporters
         for exporter in self._exporters:
-            if hasattr(exporter, 'shutdown'):
+            if hasattr(exporter, "shutdown"):
                 exporter.shutdown()
 
     def register(self, metric: Metric) -> Metric:
@@ -406,7 +452,9 @@ class MetricsRegistry:
         self._metrics[metric_id] = metric
         return metric
 
-    def counter(self, name: str, description: str = "", tags: Optional[Dict[str, str]] = None) -> Counter:
+    def counter(
+        self, name: str, description: str = "", tags: Optional[Dict[str, str]] = None
+    ) -> Counter:
         """
         Create and register a counter.
 
@@ -420,7 +468,9 @@ class MetricsRegistry:
         """
         return self.register(Counter(name, description, tags))
 
-    def gauge(self, name: str, description: str = "", tags: Optional[Dict[str, str]] = None) -> Gauge:
+    def gauge(
+        self, name: str, description: str = "", tags: Optional[Dict[str, str]] = None
+    ) -> Gauge:
         """
         Create and register a gauge.
 
@@ -435,11 +485,11 @@ class MetricsRegistry:
         return self.register(Gauge(name, description, tags))
 
     def histogram(
-            self,
-            name: str,
-            description: str = "",
-            tags: Optional[Dict[str, str]] = None,
-            buckets: Optional[List[float]] = None
+        self,
+        name: str,
+        description: str = "",
+        tags: Optional[Dict[str, str]] = None,
+        buckets: Optional[List[float]] = None,
     ) -> Histogram:
         """
         Create and register a histogram.
@@ -456,11 +506,11 @@ class MetricsRegistry:
         return self.register(Histogram(name, description, tags, buckets))
 
     def timer(
-            self,
-            name: str,
-            description: str = "",
-            tags: Optional[Dict[str, str]] = None,
-            buckets: Optional[List[float]] = None
+        self,
+        name: str,
+        description: str = "",
+        tags: Optional[Dict[str, str]] = None,
+        buckets: Optional[List[float]] = None,
     ) -> Timer:
         """
         Create and register a timer.
@@ -476,7 +526,9 @@ class MetricsRegistry:
         """
         return self.register(Timer(name, description, tags, buckets))
 
-    def get_metric(self, name: str, tags: Optional[Dict[str, str]] = None) -> Optional[Metric]:
+    def get_metric(
+        self, name: str, tags: Optional[Dict[str, str]] = None
+    ) -> Optional[Metric]:
         """
         Get a registered metric by name and tags.
 
@@ -505,7 +557,10 @@ class MetricsRegistry:
             try:
                 exporter.export(metrics)
             except Exception as e:
-                logger.error(f"Error exporting metrics with {exporter.__class__.__name__}: {str(e)}", exc_info=True)
+                logger.error(
+                    f"Error exporting metrics with {exporter.__class__.__name__}: {str(e)}",
+                    exc_info=True,
+                )
 
     def clear_metrics(self) -> None:
         """Clear all registered metrics (primarily for testing)."""
@@ -513,6 +568,7 @@ class MetricsRegistry:
 
 
 # Convenience functions for working with metrics
+
 
 def get_registry() -> MetricsRegistry:
     """Get the global metrics registry instance."""
@@ -529,7 +585,9 @@ def configure(config: Dict[str, Any]) -> None:
     get_registry().configure(config)
 
 
-def counter(name: str, description: str = "", tags: Optional[Dict[str, str]] = None) -> Counter:
+def counter(
+    name: str, description: str = "", tags: Optional[Dict[str, str]] = None
+) -> Counter:
     """
     Create and register a counter.
 
@@ -544,7 +602,9 @@ def counter(name: str, description: str = "", tags: Optional[Dict[str, str]] = N
     return get_registry().counter(name, description, tags)
 
 
-def gauge(name: str, description: str = "", tags: Optional[Dict[str, str]] = None) -> Gauge:
+def gauge(
+    name: str, description: str = "", tags: Optional[Dict[str, str]] = None
+) -> Gauge:
     """
     Create and register a gauge.
 
@@ -560,10 +620,10 @@ def gauge(name: str, description: str = "", tags: Optional[Dict[str, str]] = Non
 
 
 def histogram(
-        name: str,
-        description: str = "",
-        tags: Optional[Dict[str, str]] = None,
-        buckets: Optional[List[float]] = None
+    name: str,
+    description: str = "",
+    tags: Optional[Dict[str, str]] = None,
+    buckets: Optional[List[float]] = None,
 ) -> Histogram:
     """
     Create and register a histogram.
@@ -581,10 +641,10 @@ def histogram(
 
 
 def timer(
-        name: str,
-        description: str = "",
-        tags: Optional[Dict[str, str]] = None,
-        buckets: Optional[List[float]] = None
+    name: str,
+    description: str = "",
+    tags: Optional[Dict[str, str]] = None,
+    buckets: Optional[List[float]] = None,
 ) -> Timer:
     """
     Create and register a timer.
@@ -602,6 +662,7 @@ def timer(
 
 
 # Decorators for easy metric creation and use
+
 
 def record_execution_time(name: Union[str, Callable]) -> Union[Callable[[F], F], F]:
     """
@@ -630,7 +691,7 @@ def record_execution_time(name: Union[str, Callable]) -> Union[Callable[[F], F],
         timer_instance = timer(
             timer_name,
             f"Execution time of {func.__name__}",
-            {"function": func.__name__, "module": func.__module__}
+            {"function": func.__name__, "module": func.__module__},
         )
         return timer_instance.time_function(func)
     else:
@@ -639,7 +700,7 @@ def record_execution_time(name: Union[str, Callable]) -> Union[Callable[[F], F],
             timer_instance = timer(
                 name,
                 f"Execution time of {func.__name__}",
-                {"function": func.__name__, "module": func.__module__}
+                {"function": func.__name__, "module": func.__module__},
             )
             return timer_instance.time_function(func)
 
@@ -673,7 +734,7 @@ def count_calls(name: Union[str, Callable]) -> Union[Callable[[F], F], F]:
         counter_instance = counter(
             counter_name,
             f"Call count of {func.__name__}",
-            {"function": func.__name__, "module": func.__module__}
+            {"function": func.__name__, "module": func.__module__},
         )
 
         @functools.wraps(func)
@@ -688,7 +749,7 @@ def count_calls(name: Union[str, Callable]) -> Union[Callable[[F], F], F]:
             counter_instance = counter(
                 name,
                 f"Call count of {func.__name__}",
-                {"function": func.__name__, "module": func.__module__}
+                {"function": func.__name__, "module": func.__module__},
             )
 
             @functools.wraps(func)
@@ -728,7 +789,7 @@ def track_errors(name: Union[str, Callable]) -> Union[Callable[[F], F], F]:
         error_counter = counter(
             error_counter_name,
             f"Error count of {func.__name__}",
-            {"function": func.__name__, "module": func.__module__}
+            {"function": func.__name__, "module": func.__module__},
         )
 
         @functools.wraps(func)
@@ -747,7 +808,7 @@ def track_errors(name: Union[str, Callable]) -> Union[Callable[[F], F], F]:
             error_counter = counter(
                 name,
                 f"Error count of {func.__name__}",
-                {"function": func.__name__, "module": func.__module__}
+                {"function": func.__name__, "module": func.__module__},
             )
 
             @functools.wraps(func)
@@ -772,5 +833,7 @@ PROCESS_START_TIME.set(STARTUP_TIME)
 # Application metrics (to be updated by other components)
 ACTIVE_REQUESTS = gauge("hidesync.active_requests", "Number of active HTTP requests")
 REQUEST_LATENCY = histogram("hidesync.request_latency", "Request latency in seconds")
-DB_QUERY_LATENCY = histogram("hidesync.db_query_latency", "Database query latency in seconds")
+DB_QUERY_LATENCY = histogram(
+    "hidesync.db_query_latency", "Database query latency in seconds"
+)
 ERROR_COUNT = counter("hidesync.errors", "Number of application errors")

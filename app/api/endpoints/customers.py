@@ -18,7 +18,7 @@ from app.schemas.customer import (
     CustomerCreate,
     CustomerUpdate,
     CustomerSearchParams,
-    CustomerWithSales
+    CustomerWithSales,
 )
 from app.services.customer_service import CustomerService
 from app.core.exceptions import EntityNotFoundException, BusinessRuleException
@@ -28,14 +28,16 @@ router = APIRouter()
 
 @router.get("/", response_model=List[Customer])
 def list_customers(
-        *,
-        db: Session = Depends(get_db),
-        current_user: Any = Depends(get_current_active_user),
-        skip: int = Query(0, ge=0, description="Number of records to skip"),
-        limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
-        status: Optional[str] = Query(None, description="Filter by customer status"),
-        tier: Optional[str] = Query(None, description="Filter by customer tier"),
-        search: Optional[str] = Query(None, description="Search term for name or email")
+    *,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_active_user),
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(
+        100, ge=1, le=1000, description="Maximum number of records to return"
+    ),
+    status: Optional[str] = Query(None, description="Filter by customer status"),
+    tier: Optional[str] = Query(None, description="Filter by customer tier"),
+    search: Optional[str] = Query(None, description="Search term for name or email"),
 ) -> List[Customer]:
     """
     Retrieve customers with optional filtering and pagination.
@@ -52,26 +54,20 @@ def list_customers(
     Returns:
         List of customer records
     """
-    search_params = CustomerSearchParams(
-        status=status,
-        tier=tier,
-        search=search
-    )
+    search_params = CustomerSearchParams(status=status, tier=tier, search=search)
 
     customer_service = CustomerService(db)
     return customer_service.get_customers(
-        skip=skip,
-        limit=limit,
-        search_params=search_params
+        skip=skip, limit=limit, search_params=search_params
     )
 
 
 @router.post("/", response_model=Customer, status_code=status.HTTP_201_CREATED)
 def create_customer(
-        *,
-        db: Session = Depends(get_db),
-        customer_in: CustomerCreate,
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    customer_in: CustomerCreate,
+    current_user: Any = Depends(get_current_active_user),
 ) -> Customer:
     """
     Create a new customer.
@@ -91,18 +87,17 @@ def create_customer(
     try:
         return customer_service.create_customer(customer_in, current_user.id)
     except BusinessRuleException as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.get("/{customer_id}", response_model=Customer)
 def get_customer(
-        *,
-        db: Session = Depends(get_db),
-        customer_id: int = Path(..., ge=1, description="The ID of the customer to retrieve"),
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    customer_id: int = Path(
+        ..., ge=1, description="The ID of the customer to retrieve"
+    ),
+    current_user: Any = Depends(get_current_active_user),
 ) -> Customer:
     """
     Get detailed information about a specific customer.
@@ -124,16 +119,16 @@ def get_customer(
     except EntityNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Customer with ID {customer_id} not found"
+            detail=f"Customer with ID {customer_id} not found",
         )
 
 
 @router.get("/{customer_id}/with-sales", response_model=CustomerWithSales)
 def get_customer_with_sales(
-        *,
-        db: Session = Depends(get_db),
-        customer_id: int = Path(..., ge=1, description="The ID of the customer"),
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    customer_id: int = Path(..., ge=1, description="The ID of the customer"),
+    current_user: Any = Depends(get_current_active_user),
 ) -> CustomerWithSales:
     """
     Get customer information with their sales history.
@@ -155,17 +150,17 @@ def get_customer_with_sales(
     except EntityNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Customer with ID {customer_id} not found"
+            detail=f"Customer with ID {customer_id} not found",
         )
 
 
 @router.put("/{customer_id}", response_model=Customer)
 def update_customer(
-        *,
-        db: Session = Depends(get_db),
-        customer_id: int = Path(..., ge=1, description="The ID of the customer to update"),
-        customer_in: CustomerUpdate,
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    customer_id: int = Path(..., ge=1, description="The ID of the customer to update"),
+    customer_in: CustomerUpdate,
+    current_user: Any = Depends(get_current_active_user),
 ) -> Customer:
     """
     Update a customer.
@@ -190,21 +185,18 @@ def update_customer(
     except EntityNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Customer with ID {customer_id} not found"
+            detail=f"Customer with ID {customer_id} not found",
         )
     except BusinessRuleException as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.delete("/{customer_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_customer(
-        *,
-        db: Session = Depends(get_db),
-        customer_id: int = Path(..., ge=1, description="The ID of the customer to delete"),
-        current_user: Any = Depends(get_current_active_superuser)
+    *,
+    db: Session = Depends(get_db),
+    customer_id: int = Path(..., ge=1, description="The ID of the customer to delete"),
+    current_user: Any = Depends(get_current_active_superuser),
 ) -> None:
     """
     Delete a customer.
@@ -225,10 +217,7 @@ def delete_customer(
     except EntityNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Customer with ID {customer_id} not found"
+            detail=f"Customer with ID {customer_id} not found",
         )
     except BusinessRuleException as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

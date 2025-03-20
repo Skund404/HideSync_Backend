@@ -23,7 +23,7 @@ from app.schemas.supplier import (
     SupplierRatingCreate,
     SupplierHistory,
     SupplierHistoryCreate,
-    PurchaseHistorySummary
+    PurchaseHistorySummary,
 )
 from app.services.supplier_service import SupplierService
 from app.core.exceptions import EntityNotFoundException, BusinessRuleException
@@ -33,15 +33,19 @@ router = APIRouter()
 
 @router.get("/", response_model=List[Supplier])
 def list_suppliers(
-        *,
-        db: Session = Depends(get_db),
-        current_user: Any = Depends(get_current_active_user),
-        skip: int = Query(0, ge=0, description="Number of records to skip"),
-        limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
-        status: Optional[str] = Query(None, description="Filter by supplier status"),
-        category: Optional[str] = Query(None, description="Filter by supplier category"),
-        material_category: Optional[str] = Query(None, description="Filter by material category"),
-        search: Optional[str] = Query(None, description="Search term for name or contact")
+    *,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_active_user),
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(
+        100, ge=1, le=1000, description="Maximum number of records to return"
+    ),
+    status: Optional[str] = Query(None, description="Filter by supplier status"),
+    category: Optional[str] = Query(None, description="Filter by supplier category"),
+    material_category: Optional[str] = Query(
+        None, description="Filter by material category"
+    ),
+    search: Optional[str] = Query(None, description="Search term for name or contact"),
 ) -> List[Supplier]:
     """
     Retrieve suppliers with optional filtering and pagination.
@@ -63,23 +67,21 @@ def list_suppliers(
         status=status,
         category=category,
         material_category=material_category,
-        search=search
+        search=search,
     )
 
     supplier_service = SupplierService(db)
     return supplier_service.get_suppliers(
-        skip=skip,
-        limit=limit,
-        search_params=search_params
+        skip=skip, limit=limit, search_params=search_params
     )
 
 
 @router.post("/", response_model=Supplier, status_code=status.HTTP_201_CREATED)
 def create_supplier(
-        *,
-        db: Session = Depends(get_db),
-        supplier_in: SupplierCreate,
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    supplier_in: SupplierCreate,
+    current_user: Any = Depends(get_current_active_user),
 ) -> Supplier:
     """
     Create a new supplier.
@@ -99,18 +101,17 @@ def create_supplier(
     try:
         return supplier_service.create_supplier(supplier_in, current_user.id)
     except BusinessRuleException as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.get("/{supplier_id}", response_model=SupplierWithDetails)
 def get_supplier(
-        *,
-        db: Session = Depends(get_db),
-        supplier_id: int = Path(..., ge=1, description="The ID of the supplier to retrieve"),
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    supplier_id: int = Path(
+        ..., ge=1, description="The ID of the supplier to retrieve"
+    ),
+    current_user: Any = Depends(get_current_active_user),
 ) -> SupplierWithDetails:
     """
     Get detailed information about a specific supplier.
@@ -132,17 +133,17 @@ def get_supplier(
     except EntityNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Supplier with ID {supplier_id} not found"
+            detail=f"Supplier with ID {supplier_id} not found",
         )
 
 
 @router.put("/{supplier_id}", response_model=Supplier)
 def update_supplier(
-        *,
-        db: Session = Depends(get_db),
-        supplier_id: int = Path(..., ge=1, description="The ID of the supplier to update"),
-        supplier_in: SupplierUpdate,
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    supplier_id: int = Path(..., ge=1, description="The ID of the supplier to update"),
+    supplier_in: SupplierUpdate,
+    current_user: Any = Depends(get_current_active_user),
 ) -> Supplier:
     """
     Update a supplier.
@@ -167,21 +168,18 @@ def update_supplier(
     except EntityNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Supplier with ID {supplier_id} not found"
+            detail=f"Supplier with ID {supplier_id} not found",
         )
     except BusinessRuleException as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.delete("/{supplier_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_supplier(
-        *,
-        db: Session = Depends(get_db),
-        supplier_id: int = Path(..., ge=1, description="The ID of the supplier to delete"),
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    supplier_id: int = Path(..., ge=1, description="The ID of the supplier to delete"),
+    current_user: Any = Depends(get_current_active_user),
 ) -> None:
     """
     Delete a supplier.
@@ -200,21 +198,18 @@ def delete_supplier(
     except EntityNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Supplier with ID {supplier_id} not found"
+            detail=f"Supplier with ID {supplier_id} not found",
         )
     except BusinessRuleException as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.get("/{supplier_id}/ratings", response_model=List[SupplierRating])
 def get_supplier_ratings(
-        *,
-        db: Session = Depends(get_db),
-        supplier_id: int = Path(..., ge=1, description="The ID of the supplier"),
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    supplier_id: int = Path(..., ge=1, description="The ID of the supplier"),
+    current_user: Any = Depends(get_current_active_user),
 ) -> List[SupplierRating]:
     """
     Get ratings for a supplier.
@@ -236,17 +231,21 @@ def get_supplier_ratings(
     except EntityNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Supplier with ID {supplier_id} not found"
+            detail=f"Supplier with ID {supplier_id} not found",
         )
 
 
-@router.post("/{supplier_id}/ratings", response_model=SupplierRating, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{supplier_id}/ratings",
+    response_model=SupplierRating,
+    status_code=status.HTTP_201_CREATED,
+)
 def create_supplier_rating(
-        *,
-        db: Session = Depends(get_db),
-        supplier_id: int = Path(..., ge=1, description="The ID of the supplier"),
-        rating_in: SupplierRatingCreate,
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    supplier_id: int = Path(..., ge=1, description="The ID of the supplier"),
+    rating_in: SupplierRatingCreate,
+    current_user: Any = Depends(get_current_active_user),
 ) -> SupplierRating:
     """
     Create a rating for a supplier.
@@ -271,21 +270,18 @@ def create_supplier_rating(
     except EntityNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Supplier with ID {supplier_id} not found"
+            detail=f"Supplier with ID {supplier_id} not found",
         )
     except BusinessRuleException as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.get("/{supplier_id}/history", response_model=List[SupplierHistory])
 def get_supplier_history(
-        *,
-        db: Session = Depends(get_db),
-        supplier_id: int = Path(..., ge=1, description="The ID of the supplier"),
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    supplier_id: int = Path(..., ge=1, description="The ID of the supplier"),
+    current_user: Any = Depends(get_current_active_user),
 ) -> List[SupplierHistory]:
     """
     Get history entries for a supplier.
@@ -307,17 +303,21 @@ def get_supplier_history(
     except EntityNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Supplier with ID {supplier_id} not found"
+            detail=f"Supplier with ID {supplier_id} not found",
         )
 
 
-@router.post("/{supplier_id}/history", response_model=SupplierHistory, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{supplier_id}/history",
+    response_model=SupplierHistory,
+    status_code=status.HTTP_201_CREATED,
+)
 def add_supplier_history(
-        *,
-        db: Session = Depends(get_db),
-        supplier_id: int = Path(..., ge=1, description="The ID of the supplier"),
-        history_in: SupplierHistoryCreate,
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    supplier_id: int = Path(..., ge=1, description="The ID of the supplier"),
+    history_in: SupplierHistoryCreate,
+    current_user: Any = Depends(get_current_active_user),
 ) -> SupplierHistory:
     """
     Add a history entry for a supplier.
@@ -342,18 +342,18 @@ def add_supplier_history(
     except EntityNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Supplier with ID {supplier_id} not found"
+            detail=f"Supplier with ID {supplier_id} not found",
         )
 
 
 @router.get("/{supplier_id}/purchases", response_model=PurchaseHistorySummary)
 def get_supplier_purchase_history(
-        *,
-        db: Session = Depends(get_db),
-        supplier_id: int = Path(..., ge=1, description="The ID of the supplier"),
-        start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
-        end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    supplier_id: int = Path(..., ge=1, description="The ID of the supplier"),
+    start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
+    current_user: Any = Depends(get_current_active_user),
 ) -> PurchaseHistorySummary:
     """
     Get purchase history summary for a supplier.
@@ -373,11 +373,9 @@ def get_supplier_purchase_history(
     """
     supplier_service = SupplierService(db)
     try:
-        return supplier_service.get_purchase_history(
-            supplier_id, start_date, end_date
-        )
+        return supplier_service.get_purchase_history(supplier_id, start_date, end_date)
     except EntityNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Supplier with ID {supplier_id} not found"
+            detail=f"Supplier with ID {supplier_id} not found",
         )

@@ -40,9 +40,13 @@ if settings.USE_SQLCIPHER:
         import pysqlcipher3.dbapi2 as sqlcipher
 
         SQLCIPHER_AVAILABLE = True
-        logger.info("SQLCipher libraries detected and will be used for database encryption")
+        logger.info(
+            "SQLCipher libraries detected and will be used for database encryption"
+        )
     except ImportError:
-        logger.warning("SQLCipher requested but libraries not found. Falling back to standard SQLite.")
+        logger.warning(
+            "SQLCipher requested but libraries not found. Falling back to standard SQLite."
+        )
         SQLCIPHER_AVAILABLE = False
 else:
     SQLCIPHER_AVAILABLE = False
@@ -64,13 +68,12 @@ if SQLCIPHER_AVAILABLE and settings.USE_SQLCIPHER:
         cursor.close()
         return conn
 
-
     # Create SQLAlchemy engine with SQLCipher support
     engine = create_engine(
         f"sqlite:///{settings.DATABASE_PATH}",
         module=sqlcipher,
         creator=_get_sqlcipher_connection,
-        connect_args={"check_same_thread": False}  # Only for SQLite
+        connect_args={"check_same_thread": False},  # Only for SQLite
     )
     logger.info(f"Using SQLCipher encrypted database: {settings.DATABASE_PATH}")
 else:
@@ -78,7 +81,11 @@ else:
     engine = create_engine(
         settings.DATABASE_URL,
         pool_pre_ping=True,
-        connect_args={"check_same_thread": False} if "sqlite" in str(settings.DATABASE_URL) else {}
+        connect_args=(
+            {"check_same_thread": False}
+            if "sqlite" in str(settings.DATABASE_URL)
+            else {}
+        ),
     )
     logger.info(f"Using standard database connection: {settings.DATABASE_URL}")
 
@@ -116,7 +123,9 @@ def init_db() -> None:
             # Test query to verify encryption
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
             tables = cursor.fetchall()
-            logger.info(f"Verified database encryption is working (found {len(tables)} tables)")
+            logger.info(
+                f"Verified database encryption is working (found {len(tables)} tables)"
+            )
             cursor.close()
             conn.close()
         except Exception as e:

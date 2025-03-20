@@ -21,13 +21,13 @@ from app.schemas.platform_integration import (
     SyncEventCreate,
     SyncSettings,
     PlatformIntegrationWithEvents,
-    SyncResult
+    SyncResult,
 )
 from app.services.platform_integration_service import PlatformIntegrationService
 from app.core.exceptions import (
     EntityNotFoundException,
     BusinessRuleException,
-    IntegrationException
+    IntegrationException,
 )
 
 router = APIRouter()
@@ -35,11 +35,11 @@ router = APIRouter()
 
 @router.get("/", response_model=List[PlatformIntegration])
 def list_integrations(
-        *,
-        db: Session = Depends(get_db),
-        current_user: Any = Depends(get_current_active_user),
-        active: Optional[bool] = Query(None, description="Filter by active status"),
-        platform: Optional[str] = Query(None, description="Filter by platform type")
+    *,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_active_user),
+    active: Optional[bool] = Query(None, description="Filter by active status"),
+    platform: Optional[str] = Query(None, description="Filter by platform type"),
 ) -> List[PlatformIntegration]:
     """
     Retrieve platform integrations with optional filtering.
@@ -54,18 +54,17 @@ def list_integrations(
         List of platform integration records
     """
     integration_service = PlatformIntegrationService(db)
-    return integration_service.get_integrations(
-        active=active,
-        platform=platform
-    )
+    return integration_service.get_integrations(active=active, platform=platform)
 
 
-@router.post("/", response_model=PlatformIntegration, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/", response_model=PlatformIntegration, status_code=status.HTTP_201_CREATED
+)
 def create_integration(
-        *,
-        db: Session = Depends(get_db),
-        integration_in: PlatformIntegrationCreate,
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    integration_in: PlatformIntegrationCreate,
+    current_user: Any = Depends(get_current_active_user),
 ) -> PlatformIntegration:
     """
     Create a new platform integration.
@@ -85,18 +84,17 @@ def create_integration(
     try:
         return integration_service.create_integration(integration_in, current_user.id)
     except BusinessRuleException as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.get("/{integration_id}", response_model=PlatformIntegrationWithEvents)
 def get_integration(
-        *,
-        db: Session = Depends(get_db),
-        integration_id: str = Path(..., description="The ID of the integration to retrieve"),
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    integration_id: str = Path(
+        ..., description="The ID of the integration to retrieve"
+    ),
+    current_user: Any = Depends(get_current_active_user),
 ) -> PlatformIntegrationWithEvents:
     """
     Get detailed information about a specific platform integration.
@@ -118,17 +116,17 @@ def get_integration(
     except EntityNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Platform integration with ID {integration_id} not found"
+            detail=f"Platform integration with ID {integration_id} not found",
         )
 
 
 @router.put("/{integration_id}", response_model=PlatformIntegration)
 def update_integration(
-        *,
-        db: Session = Depends(get_db),
-        integration_id: str = Path(..., description="The ID of the integration to update"),
-        integration_in: PlatformIntegrationUpdate,
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    integration_id: str = Path(..., description="The ID of the integration to update"),
+    integration_in: PlatformIntegrationUpdate,
+    current_user: Any = Depends(get_current_active_user),
 ) -> PlatformIntegration:
     """
     Update a platform integration.
@@ -153,21 +151,18 @@ def update_integration(
     except EntityNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Platform integration with ID {integration_id} not found"
+            detail=f"Platform integration with ID {integration_id} not found",
         )
     except BusinessRuleException as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.delete("/{integration_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_integration(
-        *,
-        db: Session = Depends(get_db),
-        integration_id: str = Path(..., description="The ID of the integration to delete"),
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    integration_id: str = Path(..., description="The ID of the integration to delete"),
+    current_user: Any = Depends(get_current_active_user),
 ) -> None:
     """
     Delete a platform integration.
@@ -186,23 +181,24 @@ def delete_integration(
     except EntityNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Platform integration with ID {integration_id} not found"
+            detail=f"Platform integration with ID {integration_id} not found",
         )
     except BusinessRuleException as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.post("/{integration_id}/sync", response_model=SyncResult)
 def trigger_sync(
-        *,
-        db: Session = Depends(get_db),
-        integration_id: str = Path(..., description="The ID of the integration"),
-        sync_direction: str = Query("import", description="Sync direction: import, export, or bidirectional"),
-        entity_type: Optional[str] = Query(None, description="Entity type to sync: product, order, inventory, or all"),
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    integration_id: str = Path(..., description="The ID of the integration"),
+    sync_direction: str = Query(
+        "import", description="Sync direction: import, export, or bidirectional"
+    ),
+    entity_type: Optional[str] = Query(
+        None, description="Entity type to sync: product, order, inventory, or all"
+    ),
+    current_user: Any = Depends(get_current_active_user),
 ) -> SyncResult:
     """
     Trigger synchronization with external platform.
@@ -228,22 +224,22 @@ def trigger_sync(
     except EntityNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Platform integration with ID {integration_id} not found"
+            detail=f"Platform integration with ID {integration_id} not found",
         )
     except IntegrationException as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Synchronization failed: {str(e)}"
+            detail=f"Synchronization failed: {str(e)}",
         )
 
 
 @router.put("/{integration_id}/settings", response_model=PlatformIntegration)
 def update_sync_settings(
-        *,
-        db: Session = Depends(get_db),
-        integration_id: str = Path(..., description="The ID of the integration"),
-        settings: SyncSettings,
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    integration_id: str = Path(..., description="The ID of the integration"),
+    settings: SyncSettings,
+    current_user: Any = Depends(get_current_active_user),
 ) -> PlatformIntegration:
     """
     Update synchronization settings for a platform integration.
@@ -268,23 +264,22 @@ def update_sync_settings(
     except EntityNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Platform integration with ID {integration_id} not found"
+            detail=f"Platform integration with ID {integration_id} not found",
         )
     except BusinessRuleException as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.get("/{integration_id}/events", response_model=List[SyncEvent])
 def get_sync_events(
-        *,
-        db: Session = Depends(get_db),
-        integration_id: str = Path(..., description="The ID of the integration"),
-        skip: int = Query(0, ge=0, description="Number of records to skip"),
-        limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    integration_id: str = Path(..., description="The ID of the integration"),
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(
+        100, ge=1, le=1000, description="Maximum number of records to return"
+    ),
+    current_user: Any = Depends(get_current_active_user),
 ) -> List[SyncEvent]:
     """
     Get synchronization events for a platform integration.
@@ -304,23 +299,25 @@ def get_sync_events(
     """
     integration_service = PlatformIntegrationService(db)
     try:
-        return integration_service.get_sync_events(
-            integration_id, skip, limit
-        )
+        return integration_service.get_sync_events(integration_id, skip, limit)
     except EntityNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Platform integration with ID {integration_id} not found"
+            detail=f"Platform integration with ID {integration_id} not found",
         )
 
 
-@router.post("/{integration_id}/events", response_model=SyncEvent, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{integration_id}/events",
+    response_model=SyncEvent,
+    status_code=status.HTTP_201_CREATED,
+)
 def create_sync_event(
-        *,
-        db: Session = Depends(get_db),
-        integration_id: str = Path(..., description="The ID of the integration"),
-        event_in: SyncEventCreate,
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    integration_id: str = Path(..., description="The ID of the integration"),
+    event_in: SyncEventCreate,
+    current_user: Any = Depends(get_current_active_user),
 ) -> SyncEvent:
     """
     Create a sync event manually.
@@ -345,18 +342,22 @@ def create_sync_event(
     except EntityNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Platform integration with ID {integration_id} not found"
+            detail=f"Platform integration with ID {integration_id} not found",
         )
 
 
 @router.post("/{integration_id}/connect", response_model=Dict[str, Any])
 def connect_platform(
-        *,
-        db: Session = Depends(get_db),
-        integration_id: str = Path(..., description="The ID of the integration"),
-        auth_code: Optional[str] = Query(None, description="Authorization code (if using OAuth)"),
-        shop_url: Optional[str] = Query(None, description="Shop URL (for certain platforms)"),
-        current_user: Any = Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    integration_id: str = Path(..., description="The ID of the integration"),
+    auth_code: Optional[str] = Query(
+        None, description="Authorization code (if using OAuth)"
+    ),
+    shop_url: Optional[str] = Query(
+        None, description="Shop URL (for certain platforms)"
+    ),
+    current_user: Any = Depends(get_current_active_user),
 ) -> Dict[str, Any]:
     """
     Connect to a platform using OAuth or other authentication methods.
@@ -382,10 +383,10 @@ def connect_platform(
     except EntityNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Platform integration with ID {integration_id} not found"
+            detail=f"Platform integration with ID {integration_id} not found",
         )
     except IntegrationException as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Connection failed: {str(e)}"
+            detail=f"Connection failed: {str(e)}",
         )

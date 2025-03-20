@@ -990,10 +990,11 @@ class TimelineTaskService(BaseService[TimelineTask]):
                 ))
 
                 # Create notification
+                fallback_name = f"Task {task.get('id')}"
                 self.notification_service.create_notification({
                     "user_id": task.get('assignedTo'),
                     "type": "TASK_OVERDUE",
-                    "title": f"Task Overdue: {task.get('name', f'Task {task.get('id')}')}",
+                    "title": f"Task Overdue: {task.get('name', fallback_name)}",
                     "message": f"Task is overdue by {days_overdue} day(s). Due date was {end_date.strftime('%Y-%m-%d')}.",
                     "link": f"/projects/{task.get('project_id')}/tasks/{task.get('id')}",
                     "priority": "HIGH"
@@ -1014,15 +1015,15 @@ class TimelineTaskService(BaseService[TimelineTask]):
                 ))
 
                 # Create notification
+                fallback_name = f"Task {task.get('id')}"
                 self.notification_service.create_notification({
                     "user_id": task.get('assignedTo'),
                     "type": "TASK_DUE_SOON",
-                    "title": f"Task Due Soon: {task.get('name', f'Task {task.get('id')}')}",
+                    "title": f"Task Due Soon: {task.get('name', fallback_name)}",
                     "message": f"Task is due in {days_remaining} day(s). Due date is {end_date.strftime('%Y-%m-%d')}.",
                     "link": f"/projects/{task.get('project_id')}/tasks/{task.get('id')}",
                     "priority": "MEDIUM"
                 })
-
         return {
             "overdue_tasks": overdue_tasks,
             "due_soon_tasks": due_soon_tasks

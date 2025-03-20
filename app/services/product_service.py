@@ -42,7 +42,7 @@ from app.core.exceptions import (
     ConcurrentOperationException,
 )
 from app.core.validation import validate_input, validate_entity
-from app.db.models.enums import ProductType, InventoryStatus
+from app.db.models.enums import ProjectType, InventoryStatus
 from app.db.models.inventory import Product
 from app.repositories.product_repository import ProductRepository
 from app.services.base_service import BaseService
@@ -706,7 +706,7 @@ class ProductService(BaseService[Product]):
             return updated_product
 
     def get_products_by_type(
-        self, product_type: Union[ProductType, str]
+        self, product_type: Union[ProjectType, str]
     ) -> List[Product]:
         """
         Get products by type.
@@ -720,7 +720,7 @@ class ProductService(BaseService[Product]):
         # Convert string to enum if needed
         if isinstance(product_type, str):
             try:
-                product_type = ProductType[product_type.upper()]
+                product_type = ProjectType[product_type.upper()]
                 product_type = product_type.value
             except (KeyError, AttributeError):
                 pass

@@ -28,25 +28,24 @@ logger = logging.getLogger(__name__)
 
 def parse_args():
     """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description="Generate a secure encryption key for HideSync")
-    parser.add_argument(
-        "--key",
-        help="Provide a specific key (not recommended). If not provided, a secure random key will be generated."
+    parser = argparse.ArgumentParser(
+        description="Generate a secure encryption key for HideSync"
     )
     parser.add_argument(
-        "--path",
-        help=f"Path to store the key file (default: {settings.KEY_FILE_PATH})"
+        "--key",
+        help="Provide a specific key (not recommended). If not provided, a secure random key will be generated.",
+    )
+    parser.add_argument(
+        "--path", help=f"Path to store the key file (default: {settings.KEY_FILE_PATH})"
     )
     parser.add_argument(
         "--length",
         type=int,
         default=32,
-        help="Length of the generated key in bytes (default: 32 = 256 bits)"
+        help="Length of the generated key in bytes (default: 32 = 256 bits)",
     )
     parser.add_argument(
-        "--force",
-        action="store_true",
-        help="Overwrite existing key file if it exists"
+        "--force", action="store_true", help="Overwrite existing key file if it exists"
     )
 
     return parser.parse_args()
@@ -61,12 +60,16 @@ def main():
 
     # Check if key file exists
     if os.path.exists(key_path) and not args.force:
-        logger.error(f"Key file already exists at {key_path}. Use --force to overwrite.")
+        logger.error(
+            f"Key file already exists at {key_path}. Use --force to overwrite."
+        )
         return 1
 
     # Generate or use provided key
     if args.key:
-        logger.warning("Using provided key. This is less secure than generating a random key.")
+        logger.warning(
+            "Using provided key. This is less secure than generating a random key."
+        )
         key = args.key
     else:
         key = secrets.token_hex(args.length)
@@ -80,7 +83,7 @@ def main():
             logger.info(f"Created key directory: {key_dir}")
 
         # Write key to file with secure permissions
-        with open(key_path, 'w') as f:
+        with open(key_path, "w") as f:
             f.write(key)
 
         # Set permissions to read-only by owner (0400)
