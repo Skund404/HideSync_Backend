@@ -19,7 +19,9 @@ class SupplierRating(AbstractBase, ValidationMixin, TimestampMixin):
     __tablename__ = "supplier_rating"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    supplier_id = Column(Integer, ForeignKey("supplier.id"), nullable=False, index=True)
+    supplier_id = Column(
+        Integer, ForeignKey("suppliers.id"), nullable=False, index=True
+    )
     previous_rating = Column(Integer, nullable=False)
     new_rating = Column(Integer, nullable=False)
     comments = Column(Text, nullable=True)

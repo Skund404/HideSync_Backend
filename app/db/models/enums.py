@@ -1591,25 +1591,27 @@ class CommunicationType(Enum):
     PRODUCT_INFORMATION = "product_information"
     OTHER = "other"
 
+
 class MaterialStatus(Enum):
-  IN_STOCK = "in_stock",
-  LOW_STOCK = "low_stock",
-  OUT_OF_STOCK = "out_of_stock",
-  DISCONTINUED = "discontinued",
-  ON_ORDER = "on_order",
+    IN_STOCK = ("in_stock",)
+    LOW_STOCK = ("low_stock",)
+    OUT_OF_STOCK = ("out_of_stock",)
+    DISCONTINUED = ("discontinued",)
+    ON_ORDER = ("on_order",)
+
 
 class PatternFileType(Enum):
-    SVG = 'SVG',
-    PDF = 'PDF',
-    IMAGE = 'IMAGE',
+    SVG = ("SVG",)
+    PDF = ("PDF",)
+    IMAGE = ("IMAGE",)
 
 
 class FulfillmentStatus(Enum):
-    PENDING = 'pending',
-    PICKING = 'picking',
-    IN_PRODUCTION = 'in_production',
-    READY_TO_SHIP = 'ready_to_ship',
-    SHIPPED = 'shipped',
-    DELIVERED = 'delivered',
-    RETURNED = 'returned',
-    CANCELLED = 'cancelled',
+    PENDING = ("pending",)
+    PICKING = ("picking",)
+    IN_PRODUCTION = ("in_production",)
+    READY_TO_SHIP = ("ready_to_ship",)
+    SHIPPED = ("shipped",)
+    DELIVERED = ("delivered",)
+    RETURNED = ("returned",)
+    CANCELLED = ("cancelled",)

@@ -12,11 +12,31 @@ from datetime import datetime
 
 from app.db.session import SessionLocal
 from app.db.models import (
-    Customer, Supplier, Material, LeatherMaterial, HardwareMaterial, SuppliesMaterial,
-    Tool, StorageLocation, Pattern, Project, ProjectComponent, Sale, SaleItem,
-    Purchase, PurchaseItem, TimelineTask, StorageCell, StorageAssignment, ProjectTemplate,
-    DocumentationCategory, DocumentationResource, PickingList, PickingListItem,
-    ToolMaintenance, ToolCheckout
+    Customer,
+    Supplier,
+    Material,
+    LeatherMaterial,
+    HardwareMaterial,
+    SuppliesMaterial,
+    Tool,
+    StorageLocation,
+    Pattern,
+    Project,
+    ProjectComponent,
+    Sale,
+    SaleItem,
+    Purchase,
+    PurchaseItem,
+    TimelineTask,
+    StorageCell,
+    StorageAssignment,
+    ProjectTemplate,
+    DocumentationCategory,
+    DocumentationResource,
+    PickingList,
+    PickingListItem,
+    ToolMaintenance,
+    ToolCheckout,
 )
 
 logger = logging.getLogger(__name__)
@@ -57,7 +77,7 @@ def seed_database(seed_data: Dict[str, Any]) -> None:
             "picking_lists",
             "picking_list_items",
             "storage_assignments",
-            "tool_checkouts"
+            "tool_checkouts",
         ]
 
         # Dictionary to store created entity IDs for reference
@@ -79,8 +99,12 @@ def seed_database(seed_data: Dict[str, Any]) -> None:
         session.close()
 
 
-def seed_entity(session, entity_type: str, entities_data: List[Dict[str, Any]],
-                entity_ids: Dict[str, Dict[int, int]]) -> None:
+def seed_entity(
+    session,
+    entity_type: str,
+    entities_data: List[Dict[str, Any]],
+    entity_ids: Dict[str, Dict[int, int]],
+) -> None:
     """
     Seed a specific entity type.
 
@@ -138,10 +162,12 @@ def seed_entity(session, entity_type: str, entities_data: List[Dict[str, Any]],
                 # Handle dates and timestamps
                 for key, value in item_data.items():
                     if isinstance(value, str) and (
-                            key.endswith('Date') or key.endswith('At') or key == 'timestamp'
+                        key.endswith("Date") or key.endswith("At") or key == "timestamp"
                     ):
                         try:
-                            data[key] = datetime.fromisoformat(value.replace('Z', '+00:00'))
+                            data[key] = datetime.fromisoformat(
+                                value.replace("Z", "+00:00")
+                            )
                         except ValueError:
                             # If date parsing fails, keep as string
                             pass
@@ -158,12 +184,15 @@ def seed_entity(session, entity_type: str, entities_data: List[Dict[str, Any]],
                 entity_ids[entity_type][idx] = entity.id
 
             except Exception as e:
-                logger.error(f"Error creating {entity_type} entity (index {idx}): {str(e)}")
+                logger.error(
+                    f"Error creating {entity_type} entity (index {idx}): {str(e)}"
+                )
                 raise
 
 
-def seed_materials(session, materials_data: List[Dict[str, Any]],
-                   entity_ids: Dict[str, Dict[int, int]]) -> None:
+def seed_materials(
+    session, materials_data: List[Dict[str, Any]], entity_ids: Dict[str, Dict[int, int]]
+) -> None:
     """
     Seed materials with appropriate handling for material types.
 
@@ -206,7 +235,9 @@ def seed_materials(session, materials_data: List[Dict[str, Any]],
             raise
 
 
-def resolve_foreign_keys(data: Dict[str, Any], entity_ids: Dict[str, Dict[int, int]]) -> Dict[str, Any]:
+def resolve_foreign_keys(
+    data: Dict[str, Any], entity_ids: Dict[str, Dict[int, int]]
+) -> Dict[str, Any]:
     """
     Resolve foreign key references in seed data.
 
@@ -222,29 +253,33 @@ def resolve_foreign_keys(data: Dict[str, Any], entity_ids: Dict[str, Dict[int, i
 
     # Define foreign key mappings (field name -> entity type)
     fk_mappings = {
-        'supplierId': 'suppliers',
-        'customerId': 'customers',
-        'materialId': 'materials',
-        'storageId': 'storage_locations',
-        'patternId': 'patterns',
-        'projectId': 'projects',
-        'project_id': 'projects',
-        'templateId': 'project_templates',
-        'saleId': 'sales',
-        'sale_id': 'sales',
-        'purchaseId': 'purchases',
-        'purchase_id': 'purchases',
-        'toolId': 'tools',
-        'picking_list_id': 'picking_lists',
-        'component_id': 'components',
-        'fromStorageId': 'storage_locations',
-        'toStorageId': 'storage_locations',
-        'categoryId': 'documentation_categories'
+        "supplierId": "suppliers",
+        "customerId": "customers",
+        "materialId": "materials",
+        "storageId": "storage_locations",
+        "patternId": "patterns",
+        "projectId": "projects",
+        "project_id": "projects",
+        "templateId": "project_templates",
+        "saleId": "sales",
+        "sale_id": "sales",
+        "purchaseId": "purchases",
+        "purchase_id": "purchases",
+        "toolId": "tools",
+        "picking_list_id": "picking_lists",
+        "component_id": "components",
+        "fromStorageId": "storage_locations",
+        "toStorageId": "storage_locations",
+        "categoryId": "documentation_categories",
     }
 
     # Replace seed indices with actual database IDs
     for field, entity_type in fk_mappings.items():
-        if field in result and isinstance(result[field], int) and entity_type in entity_ids:
+        if (
+            field in result
+            and isinstance(result[field], int)
+            and entity_type in entity_ids
+        ):
             seed_index = result[field]
             if seed_index in entity_ids[entity_type]:
                 result[field] = entity_ids[entity_type][seed_index]

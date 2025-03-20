@@ -1,10 +1,3 @@
-# MANUAL FIX REQUIRED:
-# In class HardwareMaterial, rename or remove the 'finish' column to resolve conflict with parent class Material
-# For example:
-#   - Rename 'finish' to 'hardware_finish'
-#   - Or add parameter 'use_existing_column=True' to the finish Column
-#   - Or remove the duplicate column definition
-# 
 # File: app/db/models/material.py
 """
 Material models for the Leathercraft ERP system.
@@ -106,9 +99,26 @@ class Material(AbstractBase, ValidationMixin, CostingMixin, TimestampMixin):
     # Relationships
     component_materials = relationship("ComponentMaterial", back_populates="material")
     supplier_rel = relationship("Supplier", back_populates="materials")
+    picking_list_items = relationship(
+        "PickingListItem", back_populates="material", cascade="all, delete-orphan"
+    )
 
     @validates("quantity")
     def validate_quantity(self, key: str, quantity: float) -> float:
+        if quantity < 0:
+            raise ValueError("Quantity cannot be negative")
+
+        # Use a default value if reorder_point is None
+        reorder_point = self.reorder_point if self.reorder_point is not None else 0.0
+
+        if quantity <= 0:
+            self.status = InventoryStatus.OUT_OF_STOCK
+        elif quantity <= reorder_point:
+            self.status = InventoryStatus.LOW_STOCK
+        else:
+            self.status = InventoryStatus.IN_STOCK
+
+        return quantity
         """
         Validate and update quantity, updating status if needed.
 

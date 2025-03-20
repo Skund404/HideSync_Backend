@@ -10,12 +10,42 @@ These models support a knowledge base for users of the leathercraft system.
 from typing import List, Optional, Dict, Any, ClassVar, Set
 from datetime import datetime
 
-from sqlalchemy import Column, String, Text, Enum, Integer, ForeignKey, JSON, DateTime, Float
-from sqlalchemy.orm import relationship, validates
+from sqlalchemy import (
+    Column,
+    String,
+    Text,
+    Enum,
+    Integer,
+    ForeignKey,
+    JSON,
+    DateTime,
+    Float,
+    Table,
+)
+from sqlalchemy.orm import relationship, validates, foreign, remote
 from sqlalchemy.ext.hybrid import hybrid_property
-
+from sqlalchemy.orm import mapped_column
 from app.db.models.base import AbstractBase, ValidationMixin, TimestampMixin
 from app.db.models.enums import SkillLevel
+
+
+# Association table for many-to-many relationship between resources and categories
+documentation_resource_category = Table(
+    "documentation_resource_category",
+    AbstractBase.metadata,
+    Column(
+        "resource_id",
+        Integer,
+        ForeignKey("documentation_resources.id"),
+        primary_key=True,
+    ),
+    Column(
+        "category_id",
+        Integer,
+        ForeignKey("documentation_categories.id"),
+        primary_key=True,
+    ),
+)
 
 
 class DocumentationCategory(AbstractBase, ValidationMixin, TimestampMixin):
@@ -24,14 +54,6 @@ class DocumentationCategory(AbstractBase, ValidationMixin, TimestampMixin):
 
     This model defines categories for documentation, enabling organization
     of content into logical sections for easier navigation.
-
-    Attributes:
-        name: Category name
-        description: Category description
-        icon: Icon name/identifier
-        resources: IDs of resources in this category
-        parent_id: ID of parent category (for hierarchical organization)
-        order: Display order within parent category
     """
 
     __tablename__ = "documentation_categories"
@@ -50,13 +72,26 @@ class DocumentationCategory(AbstractBase, ValidationMixin, TimestampMixin):
     order = Column(Integer, default=0)
 
     # Relationships
+    from sqlalchemy.orm import remote, foreign
+
+    # Then define the relationship
     parent = relationship(
-        "DocumentationCategory", remote_side=[id], backref="subcategories"
+        "DocumentationCategory",
+        back_populates="subcategories",
+        primaryjoin="foreign(DocumentationCategory.parent_id)==DocumentationCategory.id",
+        remote_side="DocumentationCategory.id",
     )
+
+    subcategories = relationship(
+        "DocumentationCategory",
+        back_populates="parent",
+        primaryjoin="DocumentationCategory.parent_id==foreign(DocumentationCategory.id)",
+    )
+
     resources_rel = relationship(
         "DocumentationResource",
         back_populates="categories",
-        secondary="documentation_resource_category",
+        secondary=documentation_resource_category,
     )
 
     @validates("name")
@@ -110,7 +145,7 @@ class DocumentationCategory(AbstractBase, ValidationMixin, TimestampMixin):
         Returns:
             True if category has subcategories, False otherwise
         """
-        return hasattr(self, "subcategories") and len(self.subcategories) > 0
+        return len(self.subcategories) > 0
 
     def get_all_resources(self) -> List[int]:
         """
@@ -139,10 +174,8 @@ class DocumentationCategory(AbstractBase, ValidationMixin, TimestampMixin):
             all_resources.extend([r.id for r in self.resources_rel])
 
         # Add resources from subcategories
-        if hasattr(self, "subcategories"):
-            for subcategory in self.subcategories:
-                if hasattr(subcategory, "get_all_resources"):
-                    all_resources.extend(subcategory.get_all_resources())
+        for subcategory in self.subcategories:
+            all_resources.extend(subcategory.get_all_resources())
 
         return list(set(all_resources))  # Remove duplicates
 
@@ -175,47 +208,12 @@ class DocumentationCategory(AbstractBase, ValidationMixin, TimestampMixin):
         return f"<DocumentationCategory(id={self.id}, name='{self.name}')>"
 
 
-# Association table for many-to-many relationship between resources and categories
-from sqlalchemy import Table
-
-documentation_resource_category = Table(
-    "documentation_resource_category",
-    AbstractBase.metadata,
-    Column(
-        "resource_id",
-        Integer,
-        ForeignKey("documentation_resources.id"),
-        primary_key=True,
-    ),
-    Column(
-        "category_id",
-        Integer,
-        ForeignKey("documentation_categories.id"),
-        primary_key=True,
-    ),
-)
-
-
 class DocumentationResource(AbstractBase, ValidationMixin, TimestampMixin):
     """
     DocumentationResource model for storing documentation content.
 
     This model represents individual documentation resources, such as guides,
     tutorials, and reference documentation, with content and metadata.
-
-    Attributes:
-        title: Resource title
-        description: Brief resource description
-        content: Main content
-        category: Primary category
-        type: Resource type (GUIDE/TUTORIAL/REFERENCE)
-        skill_level: Required skill level
-        tags: Tags for categorization
-        related_resources: IDs of related resources
-        last_updated: Last update date
-        author: Resource author
-        contextual_help_keys: Context identifiers for in-app help
-        videos: Video references
     """
 
     __tablename__ = "documentation_resources"
@@ -391,16 +389,6 @@ class Refund(AbstractBase, ValidationMixin, TimestampMixin):
 
     This model represents refund transactions for sales, including
     amount, reason, and status information.
-
-    Attributes:
-        sale_id: ID of the associated sale
-        refund_date: Date of refund
-        refund_amount: Refund amount
-        reason: Reason for refund
-        status: Refund status
-        processed_by: Person who processed the refund
-        payment_method: Method of refund payment
-        transaction_id: External transaction ID
     """
 
     __tablename__ = "refunds"

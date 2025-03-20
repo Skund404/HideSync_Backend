@@ -19,7 +19,9 @@ class SupplierHistory(AbstractBase, ValidationMixin, TimestampMixin):
     __tablename__ = "supplier_history"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    supplier_id = Column(Integer, ForeignKey("supplier.id"), nullable=False, index=True)
+    supplier_id = Column(
+        Integer, ForeignKey("suppliers.id"), nullable=False, index=True
+    )
     previous_status = Column(String(50), nullable=False)
     new_status = Column(String(50), nullable=False)
     reason = Column(Text, nullable=True)

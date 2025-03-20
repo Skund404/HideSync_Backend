@@ -123,6 +123,10 @@ class Sale(AbstractBase, ValidationMixin, CostingMixin, TimestampMixin):
     picking_list = relationship("PickingList", back_populates="sale", uselist=False)
     shipment = relationship("Shipment", back_populates="sale", uselist=False)
     refund = relationship("Refund", back_populates="sale", uselist=False)
+    platform_integration_id = Column(
+        Integer, ForeignKey("platform_integrations.id"), nullable=True
+    )
+    platform_integration = relationship("PlatformIntegration", back_populates="sales")
 
     @validates("customer_id")
     def validate_customer_id(self, key: str, customer_id: int) -> int:

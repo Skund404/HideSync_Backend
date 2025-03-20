@@ -24,30 +24,12 @@ class CustomerCommunication(AbstractBase, ValidationMixin, TimestampMixin):
 
     Stores information about interactions with customers across various channels,
     including emails, phone calls, text messages, social media, etc.
-
-    Attributes:
-        id: Unique identifier for the communication
-        customer_id: ID of the customer
-        communication_date: Date and time of the communication
-        channel: Communication channel (EMAIL, PHONE, etc.)
-        communication_type: Type of communication (INQUIRY, ORDER_CONFIRMATION, etc.)
-        subject: Subject or title of the communication
-        content: Full content of the communication
-        needs_response: Whether this communication requires a response
-        response_content: Content of the response (if any)
-        response_date: Date and time of the response (if any)
-        staff_id: ID of the staff member involved in the communication
-        direction: Direction of communication (INBOUND or OUTBOUND)
-        related_entity_type: Type of entity this communication relates to
-        related_entity_id: ID of the related entity
-        meta_data: Additional structured meta_data for the communication
-        attachment_ids: IDs of any attached files
     """
 
     __tablename__ = "customer_communication"
 
     # Core fields
-    customer_id = Column(Integer, ForeignKey("customer.id"), nullable=False)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
     communication_date = Column(DateTime, nullable=False, default=datetime.now)
     channel = Column(Enum(CommunicationChannel), nullable=False)
     communication_type = Column(Enum(CommunicationType), nullable=False)
@@ -60,7 +42,7 @@ class CustomerCommunication(AbstractBase, ValidationMixin, TimestampMixin):
     response_date = Column(DateTime)
 
     # Metadata
-    staff_id = Column(Integer, ForeignKey("user.id"))
+    staff_id = Column(Integer, ForeignKey("users.id"))
     direction = Column(String(20), default="INBOUND")  # INBOUND or OUTBOUND
     related_entity_type = Column(String(50))  # project, sale, etc.
     related_entity_id = Column(String(50))
@@ -68,8 +50,8 @@ class CustomerCommunication(AbstractBase, ValidationMixin, TimestampMixin):
     attachment_ids = Column(Text)  # JSON serialized array of file IDs
 
     # Relationships
-    # customer = relationship("Customer", back_populates="communications")
-    # staff = relationship("User", back_populates="customer_communications")
+    customer = relationship("Customer", back_populates="communications")
+    staff = relationship("User", back_populates="customer_communications")
 
     @validates("channel")
     def validate_channel(self, key, value):

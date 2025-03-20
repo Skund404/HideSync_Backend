@@ -108,10 +108,10 @@ class Settings(BaseSettings):
 
         # Build connection string from components if provided
         if (
-                values.get("DATABASE_HOST")
-                and values.get("DATABASE_PORT")
-                and values.get("DATABASE_USER")
-                and values.get("DATABASE_NAME")
+            values.get("DATABASE_HOST")
+            and values.get("DATABASE_PORT")
+            and values.get("DATABASE_USER")
+            and values.get("DATABASE_NAME")
         ):
             password = values.get("DATABASE_PASSWORD", "")
             return f"postgresql://{values['DATABASE_USER']}:{password}@{values['DATABASE_HOST']}:{values['DATABASE_PORT']}/{values['DATABASE_NAME']}"

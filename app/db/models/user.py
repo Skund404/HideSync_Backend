@@ -25,9 +25,13 @@ class User(Base, AuditMixin, TimestampMixin):
     is_superuser = Column(Boolean, default=False)
     last_login = Column(DateTime, nullable=True)
 
-    # Define relationships if needed
-    # projects = relationship("Project", back_populates="owner")
-    # sales = relationship("Sale", back_populates="created_by")
+    # Relationships
+    customer_communications = relationship(
+        "CustomerCommunication", back_populates="staff"
+    )
+    files = relationship(
+        "FileMetadata", back_populates="user", cascade="all, delete-orphan"
+    )
 
     # Add sensitive fields marker for encryption
     SENSITIVE_FIELDS = ["hashed_password"]

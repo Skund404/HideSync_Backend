@@ -1,4 +1,3 @@
-# File: setup_database.py
 """
 Comprehensive database setup script for HideSync.
 
@@ -35,20 +34,18 @@ def parse_arguments():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Set up the HideSync database.")
     parser.add_argument(
-        "--seed",
-        action="store_true",
-        help="Seed the database with initial data"
+        "--seed", action="store_true", help="Seed the database with initial data"
     )
     parser.add_argument(
         "--seed-file",
         type=str,
         default="./app/db/seed_data.json",
-        help="Path to the seed data JSON file"
+        help="Path to the seed data JSON file",
     )
     parser.add_argument(
         "--reset",
         action="store_true",
-        help="Reset the database (delete and recreate it)"
+        help="Reset the database (delete and recreate it)",
     )
     return parser.parse_args()
 
@@ -120,15 +117,57 @@ def initialize_database_schema():
         from app.db.models.base import Base
         from app.db.session import engine
 
-        # Create the tables
-        Base.metadata.create_all(bind=engine)
+        # Debug: Print engine details
+        logger.info(f"Engine details: {engine}")
+
+        # Debug: Print all registered models
+        logger.info("Registered models:")
+        for table_name, table in Base.metadata.tables.items():
+            logger.info(f"- {table_name}")
+
+        # Try to create tables with more verbose error handling
+        try:
+            Base.metadata.create_all(bind=engine)
+        except Exception as create_error:
+            logger.error(f"Detailed create_all error: {create_error}")
+            logger.error(f"Error type: {type(create_error)}")
+            import traceback
+
+            logger.error(traceback.format_exc())
+            raise
 
         logger.info("Database tables created successfully")
         return True
     except Exception as e:
         logger.error(f"Error creating database tables: {str(e)}")
+        logger.error(f"Error type: {type(e)}")
+        import traceback
+
+        logger.error(traceback.format_exc())
         return False
 
+
+import os
+import json
+import logging
+
+# Configure logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+# Define project root directory (adjust as necessary)
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+import os
+import json
+import logging
+
+# Configure logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+# Define project root directory (adjust as necessary)
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def seed_database(seed_file):
     """Seed the database with initial data."""
@@ -136,7 +175,7 @@ def seed_database(seed_file):
         # Try alternative paths
         alt_paths = [
             os.path.join("app", "db", "seed_data.json"),
-            os.path.join(project_root, "app", "db", "seed_data.json")
+            os.path.join(project_root, "app", "db", "seed_data.json"),
         ]
 
         for path in alt_paths:
@@ -150,7 +189,7 @@ def seed_database(seed_file):
 
     try:
         # Load the seed data
-        with open(seed_file, 'r') as f:
+        with open(seed_file, "r") as f:
             seed_data = json.load(f)
 
         # Import the session factory
@@ -183,16 +222,36 @@ def seed_database(seed_file):
                 "picking_lists",
                 "picking_list_items",
                 "storage_assignments",
-                "tool_checkouts"
+                "tool_checkouts",
             ]
 
             # Import all models
             from app.db.models import (
-                Customer, Supplier, Material, LeatherMaterial, HardwareMaterial, SuppliesMaterial,
-                Tool, StorageLocation, Pattern, Project, ProjectComponent, Sale, SaleItem,
-                Purchase, PurchaseItem, TimelineTask, StorageCell, StorageAssignment, ProjectTemplate,
-                DocumentationCategory, DocumentationResource, PickingList, PickingListItem,
-                ToolMaintenance, ToolCheckout
+                Customer,
+                Supplier,
+                Material,
+                LeatherMaterial,
+                HardwareMaterial,
+                SuppliesMaterial,
+                Tool,
+                StorageLocation,
+                Pattern,
+                Project,
+                ProjectComponent,
+                Sale,
+                SaleItem,
+                Purchase,
+                PurchaseItem,
+                TimelineTask,
+                StorageCell,
+                StorageAssignment,
+                ProjectTemplate,
+                DocumentationCategory,
+                DocumentationResource,
+                PickingList,
+                PickingListItem,
+                ToolMaintenance,
+                ToolCheckout,
             )
 
             # Map entity types to model classes
@@ -215,7 +274,7 @@ def seed_database(seed_file):
                 "timeline_tasks": TimelineTask,
                 "sales": Sale,
                 "sale_items": SaleItem,
-                "purchases": Purchase,
+                "purchases": PurchaseItem,
                 "purchase_items": PurchaseItem,
                 "picking_lists": PickingList,
                 "picking_list_items": PickingListItem,
@@ -243,21 +302,49 @@ def seed_database(seed_file):
 
                             # Handle dates
                             for key, value in item_data.items():
-                                if isinstance(value, str) and (key.endswith('Date') or key.endswith('At')):
+                                if isinstance(value, str) and (
+                                        key.endswith("Date") or key.endswith("At")
+                                ):
                                     try:
-                                        data[key] = datetime.fromisoformat(value.replace('Z', '+00:00'))
+                                        data[key] = datetime.fromisoformat(
+                                            value.replace("Z", "+00:00")
+                                        )
                                     except ValueError:
                                         pass
 
                             # Handle foreign keys
                             for key in list(data.keys()):
-                                if key.endswith('Id') and isinstance(data[key], int):
-                                    fk_type = key[:-2].lower() + 's'  # e.g., supplierId -> suppliers
-                                    if fk_type in entity_ids and data[key] in entity_ids[fk_type]:
+                                if key.endswith("Id") and isinstance(data[key], int):
+                                    fk_type = (
+                                            key[:-2].lower() + "s"
+                                    )  # e.g., supplierId -> suppliers
+                                    if (
+                                            fk_type in entity_ids
+                                            and data[key] in entity_ids[fk_type]
+                                    ):
                                         data[key] = entity_ids[fk_type][data[key]]
 
                             # Create the appropriate material type
+
+                            # Correct cases in seed script
+                            if 'leatherType' in data:
+                                data['leather_type'] = data.pop('leatherType')
+
+                            if 'animalSource' in data:
+                                data['animal_source'] = data.pop('animalSource')
+
+                            # NEW - Handle uppercase Ids
+                            if 'supplierId' in data:
+                                data['supplier_id'] = data.pop('supplierId')
+
+                            # NEW - Handle cost price casing
+                            if 'cost' in data:
+                                data['cost_price'] = data.pop('cost')
+
                             material_type = data.pop("materialType", "LEATHER")
+
+                            if data.get('reorder_point') is None:
+                                data['reorder_point'] = 0.0  # Providing a default
 
                             if material_type == "LEATHER":
                                 entity = LeatherMaterial(**data)
@@ -267,6 +354,8 @@ def seed_database(seed_file):
                                 entity = SuppliesMaterial(**data)
                             else:
                                 entity = Material(**data)
+
+                            entity.reorder_point = data.get('reorder_point', 0.0)
 
                             session.add(entity)
                             session.flush()
@@ -284,30 +373,77 @@ def seed_database(seed_file):
 
                                 # Handle dates
                                 for key, value in item_data.items():
-                                    if isinstance(value, str) and (key.endswith('Date') or key.endswith('At')):
+                                    if isinstance(value, str) and (
+                                            key.endswith("Date") or key.endswith("At")
+                                    ):
                                         try:
-                                            data[key] = datetime.fromisoformat(value.replace('Z', '+00:00'))
+                                            data[key] = datetime.fromisoformat(
+                                                value.replace("Z", "+00:00")
+                                            )
                                         except ValueError:
                                             pass
 
                                 # Handle foreign keys
                                 for key in list(data.keys()):
-                                    if key.endswith('Id') and isinstance(data[key], int):
-                                        fk_type = key[:-2].lower() + 's'  # e.g., supplierId -> suppliers
-                                        if fk_type in entity_ids and data[key] in entity_ids[fk_type]:
+                                    if key.endswith("Id") and isinstance(
+                                            data[key], int
+                                    ):
+                                        fk_type = (
+                                                key[:-2].lower() + "s"
+                                        )  # e.g., supplierId -> suppliers
+                                        if (
+                                                fk_type in entity_ids
+                                                and data[key] in entity_ids[fk_type]
+                                        ):
                                             data[key] = entity_ids[fk_type][data[key]]
 
                                 # Handle 'project_id' (underscore format)
-                                if 'project_id' in data and isinstance(data['project_id'], int):
-                                    if 'projects' in entity_ids and data['project_id'] in entity_ids['projects']:
-                                        data['project_id'] = entity_ids['projects'][data['project_id']]
+                                if "project_id" in data and isinstance(
+                                        data["project_id"], int
+                                ):
+                                    if (
+                                            "projects" in entity_ids
+                                            and data["project_id"] in entity_ids["projects"]
+                                    ):
+                                        data["project_id"] = entity_ids["projects"][
+                                            data["project_id"]
+                                        ]
+
+                                # Correct cases in seed script
+                                if 'contactName' in data:
+                                    data['contact_name'] = data.pop('contactName')
+
+                                if 'materialCategories' in data:
+                                    data['material_categories'] = data.pop('materialCategories')
+
+                                if 'leadTime' in data:
+                                    data['lead_time'] = data.pop('leadTime')
+
+                                if 'storageId' in data:
+                                    data['storage_id'] = data.pop('storageId')
+
+                                # Correct uppercase Ids in non-material models too
+                                if 'supplierId' in data:
+                                    data['supplier_id'] = data.pop('supplierId')
+                                if 'customerId' in data:
+                                    data['customer_id'] = data.pop('customerId')
+                                if 'storageLocationId' in data:
+                                    data['storage_location_id'] = data.pop('storageLocationId')
+                                if 'patternId' in data:
+                                    data['pattern_id'] = data.pop('patternId')
+                                if 'projectId' in data:
+                                    data['project_id'] = data.pop('projectId')
+
 
                                 entity = model(**data)
+
                                 session.add(entity)
                                 session.flush()
                                 entity_ids[entity_type][idx] = entity.id
                             except Exception as e:
-                                logger.error(f"Error creating {entity_type} entity (index {idx}): {str(e)}")
+                                logger.error(
+                                    f"Error creating {entity_type} entity (index {idx}): {str(e)}"
+                                )
                                 raise
 
             # Commit all changes
@@ -326,6 +462,43 @@ def seed_database(seed_file):
         logger.error(f"Error loading seed data: {str(e)}")
         return False
 
+def main():
+    """Main function."""
+    args = parse_arguments()
+
+    # Import settings
+    from app.core.config import settings
+
+    # Get database path and encryption key
+    db_path = os.path.abspath(settings.DATABASE_PATH)
+    encryption_key = settings.DATABASE_ENCRYPTION_KEY
+
+    # Create database directory if needed
+    create_db_directory(db_path)
+
+    # Display encryption status
+    if settings.USE_SQLCIPHER:
+        logger.info(f"Using SQLCipher encrypted database: {db_path}")
+    else:
+        logger.info(f"Using standard SQLite database: {db_path}")
+
+    # Reset database if requested
+    if args.reset:
+        if not reset_database(db_path, encryption_key):
+            logger.error("Database reset failed, exiting.")
+            sys.exit(1)
+
+    # Initialize database schema
+    if not initialize_database_schema():
+        logger.error("Database schema initialization failed, exiting.")
+        sys.exit(1)
+
+    # Seed database if requested
+    if args.seed and not seed_database(args.seed_file):
+        logger.error("Database seeding failed, exiting.")
+        sys.exit(1)
+
+    logger.info("Database setup completed successfully")
 
 def main():
     """Main function."""

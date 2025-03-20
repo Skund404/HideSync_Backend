@@ -3,7 +3,7 @@
     {
       "name": "Premium Leather Supply",
       "category": "LEATHER",
-      "contactName": "John Smith",
+      "contact_name": "John Smith",
       "email": "john@premiumleather.com",
       "phone": "555-123-4567",
       "address": "123 Tannery Rd, Leathertown, TX 12345",
@@ -16,7 +16,7 @@
     {
       "name": "Quality Hardware Co.",
       "category": "HARDWARE",
-      "contactName": "Jane Doe",
+      "contact_name": "Jane Doe",
       "email": "jane@qualityhardware.com",
       "phone": "555-987-6543",
       "address": "456 Metalworks Ave, Ironville, MI 54321",
@@ -29,7 +29,7 @@
     {
       "name": "Craft Supplies Direct",
       "category": "SUPPLIES",
-      "contactName": "Robert Johnson",
+      "contact_name": "Robert Johnson",
       "email": "robert@craftsupplies.com",
       "phone": "555-456-7890",
       "address": "789 Craft St, Artisan City, CA 98765",
@@ -40,7 +40,6 @@
       "leadTime": "2-3 days"
     }
   ],
-
   "customers": [
     {
       "name": "Alice Johnson",
@@ -74,14 +73,17 @@
       "notes": "Wholesale customer, orders monthly"
     }
   ],
-
   "storage_locations": [
     {
       "name": "Main Workshop Cabinet A",
       "type": "CABINET",
       "section": "MAIN_WORKSHOP",
       "description": "Large cabinet for leather storage",
-      "dimensions": {"width": 120, "height": 200, "depth": 60},
+      "dimensions": {
+        "width": 120,
+        "height": 200,
+        "depth": 60
+      },
       "capacity": 100,
       "utilized": 0,
       "status": "ACTIVE"
@@ -91,7 +93,11 @@
       "type": "DRAWER",
       "section": "MAIN_WORKSHOP",
       "description": "Small drawer for buckles and snaps",
-      "dimensions": {"width": 50, "height": 10, "depth": 60},
+      "dimensions": {
+        "width": 50,
+        "height": 10,
+        "depth": 60
+      },
       "capacity": 50,
       "utilized": 0,
       "status": "ACTIVE"
@@ -101,7 +107,11 @@
       "type": "CABINET",
       "section": "TOOL_ROOM",
       "description": "Cabinet for cutting tools",
-      "dimensions": {"width": 100, "height": 180, "depth": 50},
+      "dimensions": {
+        "width": 100,
+        "height": 180,
+        "depth": 50
+      },
       "capacity": 80,
       "utilized": 0,
       "status": "ACTIVE"
@@ -111,36 +121,54 @@
       "type": "SHELF",
       "section": "STORAGE_ROOM",
       "description": "Ventilated shelf for dyes and finishes",
-      "dimensions": {"width": 120, "height": 40, "depth": 30},
+      "dimensions": {
+        "width": 120,
+        "height": 40,
+        "depth": 30
+      },
       "capacity": 60,
       "utilized": 0,
       "status": "ACTIVE"
     }
   ],
-
   "storage_cells": [
     {
       "storageId": 1,
-      "position": {"x": 1, "y": 1, "z": 1},
+      "position": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
       "occupied": false
     },
     {
       "storageId": 1,
-      "position": {"x": 1, "y": 2, "z": 1},
+      "position": {
+        "x": 1,
+        "y": 2,
+        "z": 1
+      },
       "occupied": false
     },
     {
       "storageId": 2,
-      "position": {"x": 1, "y": 1, "z": 1},
+      "position": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
       "occupied": false
     },
     {
       "storageId": 3,
-      "position": {"x": 1, "y": 1, "z": 1},
+      "position": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
       "occupied": false
     }
   ],
-
   "materials": [
     {
       "name": "Horween Chromexcel - Brown",
@@ -155,8 +183,8 @@
       "quantity": 5,
       "unit": "SQUARE_FOOT",
       "supplierId": 1,
-      "cost": 12.50,
-      "price": 25.00,
+      "cost": 12.5,
+      "price": 25.0,
       "storageLocation": "Main Workshop Cabinet A",
       "description": "Premium full grain vegetable tanned leather, perfect for wallets and small goods",
       "sku": "LTHR-VTAN-BRN-2MM"
@@ -174,8 +202,8 @@
       "quantity": 3,
       "unit": "SQUARE_FOOT",
       "supplierId": 1,
-      "cost": 15.00,
-      "price": 30.00,
+      "cost": 15.0,
+      "price": 30.0,
       "storageLocation": "Main Workshop Cabinet A",
       "description": "Smooth Italian calfskin with excellent burnishing properties",
       "sku": "LTHR-BTRO-BLK-1MM"
@@ -192,8 +220,8 @@
       "quantity": 50,
       "unit": "PIECE",
       "supplierId": 2,
-      "cost": 2.50,
-      "price": 5.00,
+      "cost": 2.5,
+      "price": 5.0,
       "storageLocation": "Hardware Drawer 1",
       "description": "Solid brass rectangular center bar buckle",
       "sku": "HDW-BCKL-BRS-1IN"
@@ -210,8 +238,8 @@
       "quantity": 100,
       "unit": "PIECE",
       "supplierId": 2,
-      "cost": 0.50,
-      "price": 1.00,
+      "cost": 0.5,
+      "price": 1.0,
       "storageLocation": "Hardware Drawer 1",
       "description": "10mm Chicago screws for leather projects",
       "sku": "HDW-SCRW-BRS-10MM"
@@ -228,8 +256,8 @@
       "quantity": 5,
       "unit": "SPOOL",
       "supplierId": 3,
-      "cost": 12.00,
-      "price": 22.00,
+      "cost": 12.0,
+      "price": 22.0,
       "storageLocation": "Main Workshop Cabinet A",
       "description": "Premium waxed polyester thread for leather stitching",
       "sku": "SPL-THRD-BRN-08MM"
@@ -239,20 +267,19 @@
       "materialType": "SUPPLIES",
       "suppliesMaterialType": "DYE",
       "color": "Dark Brown",
-      "volume": 4,
+      "volume": 4.0,
       "applicationMethod": "DAUBER",
       "status": "IN_STOCK",
       "quantity": 2,
       "unit": "PIECE",
       "supplierId": 3,
-      "cost": 8.00,
-      "price": 15.00,
+      "cost": 8.0,
+      "price": 15.0,
       "storageLocation": "Dye Storage",
       "description": "Alcohol-based leather dye",
       "sku": "SPL-DYE-DBRN-4OZ"
     }
   ],
-
   "tools": [
     {
       "name": "Japanese Skiving Knife",
@@ -261,7 +288,7 @@
       "brand": "Kyoshin Elle",
       "model": "Professional",
       "serialNumber": "KE2023001",
-      "purchasePrice": 80.00,
+      "purchasePrice": 80.0,
       "purchaseDate": "2023-01-15",
       "status": "IN_STOCK",
       "location": "Tool Cabinet 1",
@@ -276,7 +303,7 @@
       "brand": "Sinabroks",
       "model": "Premium",
       "serialNumber": "SN2023002",
-      "purchasePrice": 120.00,
+      "purchasePrice": 120.0,
       "purchaseDate": "2023-02-20",
       "status": "IN_STOCK",
       "location": "Tool Cabinet 1",
@@ -291,7 +318,7 @@
       "brand": "Craftool",
       "model": "Pro",
       "serialNumber": "CT2023003",
-      "purchasePrice": 35.00,
+      "purchasePrice": 35.0,
       "purchaseDate": "2023-03-10",
       "status": "IN_STOCK",
       "location": "Tool Cabinet 1",
@@ -300,7 +327,6 @@
       "maintenanceInterval": 180
     }
   ],
-
   "tool_maintenance": [
     {
       "toolId": 1,
@@ -315,17 +341,20 @@
       "nextDate": "2023-10-15"
     }
   ],
-
   "patterns": [
     {
       "name": "Minimalist Bifold Wallet",
       "description": "Simple bifold wallet with 4 card slots",
-      "skillLevel": "BEGINNER",
+      "skill_level": "BEGINNER",
       "projectType": "WALLET",
       "fileType": "PDF",
       "filePath": "/patterns/minimalist_bifold.pdf",
       "thumbnail": "/images/thumbnails/minimalist_bifold.jpg",
-      "tags": ["wallet", "beginner", "bifold"],
+      "tags": [
+        "wallet",
+        "beginner",
+        "bifold"
+      ],
       "isFavorite": true,
       "estimatedTime": 4,
       "estimatedDifficulty": 2,
@@ -336,12 +365,16 @@
     {
       "name": "Classic Messenger Bag",
       "description": "Timeless messenger bag design with adjustable strap",
-      "skillLevel": "INTERMEDIATE",
+      "skill_level": "INTERMEDIATE",
       "projectType": "MESSENGER_BAG",
       "fileType": "PDF",
       "filePath": "/patterns/classic_messenger.pdf",
       "thumbnail": "/images/thumbnails/classic_messenger.jpg",
-      "tags": ["bag", "intermediate", "messenger"],
+      "tags": [
+        "bag",
+        "intermediate",
+        "messenger"
+      ],
       "isFavorite": false,
       "estimatedTime": 14,
       "estimatedDifficulty": 4,
@@ -352,12 +385,16 @@
     {
       "name": "Card Holder with Money Clip",
       "description": "Slim card holder with integrated money clip",
-      "skillLevel": "BEGINNER",
+      "skill_level": "BEGINNER",
       "projectType": "CARD_HOLDER",
       "fileType": "PDF",
       "filePath": "/patterns/card_holder_money_clip.pdf",
       "thumbnail": "/images/thumbnails/card_holder.jpg",
-      "tags": ["card holder", "money clip", "minimal"],
+      "tags": [
+        "card holder",
+        "money clip",
+        "minimal"
+      ],
       "isFavorite": true,
       "estimatedTime": 3,
       "estimatedDifficulty": 2,
@@ -366,17 +403,20 @@
       "version": "1.0"
     }
   ],
-
   "project_templates": [
     {
       "name": "Standard Bifold Template",
       "description": "Template for standard bifold wallet production",
       "projectType": "WALLET",
-      "skillLevel": "BEGINNER",
+      "skill_level": "BEGINNER",
       "estimatedDuration": 4,
-      "estimatedCost": 35.00,
+      "estimatedCost": 35.0,
       "isPublic": true,
-      "tags": ["wallet", "bifold", "production"],
+      "tags": [
+        "wallet",
+        "bifold",
+        "production"
+      ],
       "version": "1.0",
       "notes": "Uses 2-3 sq ft of leather per wallet"
     },
@@ -384,16 +424,19 @@
       "name": "Premium Messenger Bag Template",
       "description": "Template for high-end messenger bag",
       "projectType": "MESSENGER_BAG",
-      "skillLevel": "INTERMEDIATE",
+      "skill_level": "INTERMEDIATE",
       "estimatedDuration": 16,
-      "estimatedCost": 150.00,
+      "estimatedCost": 150.0,
       "isPublic": true,
-      "tags": ["bag", "messenger", "premium"],
+      "tags": [
+        "bag",
+        "messenger",
+        "premium"
+      ],
       "version": "1.0",
       "notes": "Includes options for different hardware configurations"
     }
   ],
-
   "projects": [
     {
       "name": "Custom Bifold for Alice",
@@ -420,7 +463,6 @@
       "notes": "Using Italian Buttero leather"
     }
   ],
-
   "project_components": [
     {
       "project_id": 1,
@@ -451,7 +493,6 @@
       "componentType": "HARDWARE"
     }
   ],
-
   "timeline_tasks": [
     {
       "project_id": 1,
@@ -470,7 +511,9 @@
       "progress": 0,
       "status": "PENDING",
       "isCriticalPath": true,
-      "dependencies": ["Cut leather pieces"]
+      "dependencies": [
+        "Cut leather pieces"
+      ]
     },
     {
       "project_id": 1,
@@ -480,7 +523,9 @@
       "progress": 0,
       "status": "PENDING",
       "isCriticalPath": true,
-      "dependencies": ["Skive edges"]
+      "dependencies": [
+        "Skive edges"
+      ]
     },
     {
       "project_id": 2,
@@ -492,7 +537,6 @@
       "isCriticalPath": true
     }
   ],
-
   "sales": [
     {
       "customerId": 1,
@@ -502,9 +546,9 @@
       "paymentStatus": "DEPOSIT_PAID",
       "fulfillmentStatus": "IN_PRODUCTION",
       "channel": "DIRECT",
-      "total_amount": 150.00,
-      "depositAmount": 75.00,
-      "balanceDue": 75.00,
+      "total_amount": 150.0,
+      "depositAmount": 75.0,
+      "balanceDue": 75.0,
       "notes": "Custom bifold wallet order"
     },
     {
@@ -515,9 +559,9 @@
       "paymentStatus": "DEPOSIT_PAID",
       "fulfillmentStatus": "PENDING",
       "channel": "DIRECT",
-      "total_amount": 85.00,
-      "depositAmount": 42.50,
-      "balanceDue": 42.50,
+      "total_amount": 85.0,
+      "depositAmount": 42.5,
+      "balanceDue": 42.5,
       "notes": "Card holder order"
     },
     {
@@ -528,19 +572,18 @@
       "paymentStatus": "PENDING",
       "fulfillmentStatus": "PENDING",
       "channel": "WHOLESALE",
-      "total_amount": 1200.00,
-      "depositAmount": 0.00,
-      "balanceDue": 1200.00,
+      "total_amount": 1200.0,
+      "depositAmount": 0.0,
+      "balanceDue": 1200.0,
       "notes": "Wholesale order for 20 wallets"
     }
   ],
-
   "sale_items": [
     {
       "sale_id": 1,
       "quantity": 1,
-      "price": 150.00,
-      "tax": 0.00,
+      "price": 150.0,
+      "tax": 0.0,
       "name": "Custom Bifold Wallet",
       "type": "CUSTOM",
       "notes": "Brown Chromexcel with cream stitching"
@@ -548,8 +591,8 @@
     {
       "sale_id": 2,
       "quantity": 1,
-      "price": 85.00,
-      "tax": 0.00,
+      "price": 85.0,
+      "tax": 0.0,
       "name": "Card Holder with Money Clip",
       "type": "CUSTOM",
       "notes": "Black Buttero leather"
@@ -557,21 +600,20 @@
     {
       "sale_id": 3,
       "quantity": 20,
-      "price": 60.00,
-      "tax": 0.00,
+      "price": 60.0,
+      "tax": 0.0,
       "name": "Standard Bifold Wallet",
       "type": "PRODUCTION",
       "notes": "Wholesale discount applied"
     }
   ],
-
   "purchases": [
     {
       "supplierId": 1,
       "date": "2023-03-01T09:00:00",
       "deliveryDate": "2023-03-10T09:00:00",
       "status": "RECEIVED",
-      "total": 500.00,
+      "total": 500.0,
       "paymentStatus": "PAID",
       "notes": "Monthly leather stock replenishment"
     },
@@ -580,7 +622,7 @@
       "date": "2023-03-15T14:00:00",
       "deliveryDate": "2023-03-20T14:00:00",
       "status": "RECEIVED",
-      "total": 350.00,
+      "total": 350.0,
       "paymentStatus": "PAID",
       "notes": "Hardware restock"
     },
@@ -589,19 +631,18 @@
       "date": "2023-04-01T10:00:00",
       "deliveryDate": "2023-04-05T10:00:00",
       "status": "ORDERED",
-      "total": 200.00,
+      "total": 200.0,
       "paymentStatus": "PENDING",
       "notes": "Supplies restock"
     }
   ],
-
   "purchase_items": [
     {
       "purchase_id": 1,
       "name": "Horween Chromexcel - Brown",
       "quantity": 10,
-      "price": 12.50,
-      "total": 125.00,
+      "price": 12.5,
+      "total": 125.0,
       "itemType": "material",
       "materialType": "LEATHER",
       "unit": "SQUARE_FOOT",
@@ -611,8 +652,8 @@
       "purchase_id": 1,
       "name": "Italian Buttero - Black",
       "quantity": 10,
-      "price": 15.00,
-      "total": 150.00,
+      "price": 15.0,
+      "total": 150.0,
       "itemType": "material",
       "materialType": "LEATHER",
       "unit": "SQUARE_FOOT",
@@ -622,8 +663,8 @@
       "purchase_id": 2,
       "name": "Solid Brass Buckle - 1 inch",
       "quantity": 50,
-      "price": 2.50,
-      "total": 125.00,
+      "price": 2.5,
+      "total": 125.0,
       "itemType": "material",
       "materialType": "HARDWARE",
       "unit": "PIECE",
@@ -633,15 +674,14 @@
       "purchase_id": 3,
       "name": "Ritza Tiger Thread - 0.8mm",
       "quantity": 5,
-      "price": 12.00,
-      "total": 60.00,
+      "price": 12.0,
+      "total": 60.0,
       "itemType": "material",
       "materialType": "SUPPLIES",
       "unit": "SPOOL",
       "notes": "Various colors"
     }
   ],
-
   "picking_lists": [
     {
       "project_id": 1,
@@ -656,7 +696,6 @@
       "notes": "Materials for Bob's card holder"
     }
   ],
-
   "picking_list_items": [
     {
       "picking_list_id": 1,
@@ -683,13 +722,16 @@
       "notes": "Black Buttero for card holder"
     }
   ],
-
   "storage_assignments": [
     {
       "materialId": 1,
       "materialType": "LEATHER",
       "storageId": 1,
-      "position": {"x": 1, "y": 1, "z": 1},
+      "position": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
       "quantity": 5,
       "assignedBy": "Workshop Owner",
       "notes": "Main leather storage"
@@ -698,13 +740,16 @@
       "materialId": 3,
       "materialType": "HARDWARE",
       "storageId": 2,
-      "position": {"x": 1, "y": 1, "z": 1},
+      "position": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
       "quantity": 50,
       "assignedBy": "Workshop Owner",
       "notes": "Hardware storage"
     }
   ],
-
   "tool_checkouts": [
     {
       "toolId": 1,
@@ -718,7 +763,6 @@
       "conditionBefore": "Excellent"
     }
   ],
-
   "documentation_categories": [
     {
       "name": "Getting Started",
@@ -736,7 +780,6 @@
       "icon": "clipboard"
     }
   ],
-
   "documentation_resources": [
     {
       "title": "Welcome to HideSync",
@@ -744,8 +787,12 @@
       "content": "# Welcome to HideSync\n\nHideSync is a comprehensive ERP system designed specifically for leatherworkers, from individual artisans to small-scale manufacturing operations.\n\n## Key Features\n\n- **Inventory Management**: Track your leathers, hardware, and supplies\n- **Project Management**: Manage your custom and production projects\n- **Customer Management**: Keep track of your customers and their preferences\n- **Sales & Orders**: Manage sales from various channels\n\nGet started by exploring the main navigation menu on the left side of the screen.",
       "category": "GETTING_STARTED",
       "type": "GUIDE",
-      "skillLevel": "BEGINNER",
-      "tags": ["intro", "overview", "getting started"],
+      "skill_level": "BEGINNER",
+      "tags": [
+        "intro",
+        "overview",
+        "getting started"
+      ],
       "author": "HideSync Team"
     },
     {
@@ -754,8 +801,12 @@
       "content": "# Understanding Leather Types\n\nThis guide covers the main types of leather used in leatherworking projects and their characteristics.\n\n## Vegetable Tanned Leather\n\nVegetable tanned leather is tanned using natural tannins from plant materials. It's known for:\n\n- Natural color that develops a patina over time\n- Ability to be tooled, molded, and shaped when wet\n- Firmer feel compared to chrome tanned leather\n- Environmental sustainability\n\n## Chrome Tanned Leather\n\nChrome tanned leather uses chromium salts in the tanning process. It's characterized by:\n\n- Soft, supple feel right from the start\n- Wide range of vibrant colors\n- Water resistance\n- Less prone to water staining\n\n## Oil Tanned Leather\n\nOil tanned leather has oils added during the tanning process, resulting in:\n\n- Very soft, supple feel\n- Good water resistance\n- Pull-up effect (color changes when stretched)\n- Low maintenance\n\nWhen adding new materials to your inventory, be sure to select the correct leather type to help with project planning.",
       "category": "MATERIALS",
       "type": "REFERENCE",
-      "skillLevel": "BEGINNER",
-      "tags": ["leather", "materials", "reference"],
+      "skill_level": "BEGINNER",
+      "tags": [
+        "leather",
+        "materials",
+        "reference"
+      ],
       "author": "HideSync Team"
     }
   ]

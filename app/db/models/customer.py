@@ -37,19 +37,6 @@ class Customer(AbstractBase, ValidationMixin, AuditMixin, TimestampMixin):
     This model stores all customer information including contact details,
     categorization (status, tier, source), and relationship data for
     tracking customer interactions and sales.
-
-    Attributes:
-        name: Full name of the customer
-        email: Email address (unique, used for communication)
-        phone: Contact phone number
-        status: Current status of the customer relationship
-        tier: Customer tier for loyalty/discount programs
-        source: How the customer was acquired
-        company_name: Company name for business customers
-        address: Mailing/shipping address
-        notes: Additional notes about the customer
-        sales: List of sales associated with this customer
-        platform_integrations: External platforms where this customer exists
     """
 
     __tablename__ = "customers"
@@ -79,6 +66,9 @@ class Customer(AbstractBase, ValidationMixin, AuditMixin, TimestampMixin):
         "PlatformIntegration",
         secondary=customer_platform_integration,
         back_populates="customers",
+    )
+    communications = relationship(
+        "CustomerCommunication", back_populates="customer", cascade="all, delete-orphan"
     )
 
     @validates("name")
@@ -124,6 +114,7 @@ class Customer(AbstractBase, ValidationMixin, AuditMixin, TimestampMixin):
         # Don't include relationship data to avoid circular references
         result.pop("sales", None)
         result.pop("platform_integrations", None)
+        result.pop("communications", None)
 
         return result
 

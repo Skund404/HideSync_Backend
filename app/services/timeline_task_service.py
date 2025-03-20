@@ -37,7 +37,7 @@ from app.core.exceptions import (
     HideSyncException,
     ValidationException,
     EntityNotFoundException,
-    BusinessRuleException
+    BusinessRuleException,
 )
 from app.core.validation import validate_input, validate_entity
 from app.db.models.timeline_task import TimelineTask
@@ -50,8 +50,13 @@ logger = logging.getLogger(__name__)
 class TaskCreated(DomainEvent):
     """Event emitted when a timeline task is created."""
 
-    def __init__(self, task_id: str, project_id: str,
-                 task_name: str, user_id: Optional[int] = None):
+    def __init__(
+        self,
+        task_id: str,
+        project_id: str,
+        task_name: str,
+        user_id: Optional[int] = None,
+    ):
         """
         Initialize task created event.
 
@@ -71,8 +76,13 @@ class TaskCreated(DomainEvent):
 class TaskUpdated(DomainEvent):
     """Event emitted when a timeline task is updated."""
 
-    def __init__(self, task_id: str, project_id: str,
-                 changes: Dict[str, Any], user_id: Optional[int] = None):
+    def __init__(
+        self,
+        task_id: str,
+        project_id: str,
+        changes: Dict[str, Any],
+        user_id: Optional[int] = None,
+    ):
         """
         Initialize task updated event.
 
@@ -92,8 +102,13 @@ class TaskUpdated(DomainEvent):
 class TaskDeleted(DomainEvent):
     """Event emitted when a timeline task is deleted."""
 
-    def __init__(self, task_id: str, project_id: str,
-                 task_name: str, user_id: Optional[int] = None):
+    def __init__(
+        self,
+        task_id: str,
+        project_id: str,
+        task_name: str,
+        user_id: Optional[int] = None,
+    ):
         """
         Initialize task deleted event.
 
@@ -113,9 +128,15 @@ class TaskDeleted(DomainEvent):
 class TaskStatusChanged(DomainEvent):
     """Event emitted when a task's status changes."""
 
-    def __init__(self, task_id: str, project_id: str,
-                 previous_status: str, new_status: str,
-                 task_name: str, user_id: Optional[int] = None):
+    def __init__(
+        self,
+        task_id: str,
+        project_id: str,
+        previous_status: str,
+        new_status: str,
+        task_name: str,
+        user_id: Optional[int] = None,
+    ):
         """
         Initialize task status changed event.
 
@@ -139,9 +160,15 @@ class TaskStatusChanged(DomainEvent):
 class TaskProgressUpdated(DomainEvent):
     """Event emitted when a task's progress is updated."""
 
-    def __init__(self, task_id: str, project_id: str,
-                 previous_progress: int, new_progress: int,
-                 task_name: str, user_id: Optional[int] = None):
+    def __init__(
+        self,
+        task_id: str,
+        project_id: str,
+        previous_progress: int,
+        new_progress: int,
+        task_name: str,
+        user_id: Optional[int] = None,
+    ):
         """
         Initialize task progress updated event.
 
@@ -165,8 +192,14 @@ class TaskProgressUpdated(DomainEvent):
 class TaskDueSoon(DomainEvent):
     """Event emitted when a task is due soon."""
 
-    def __init__(self, task_id: str, project_id: str,
-                 task_name: str, due_date: datetime, days_remaining: int):
+    def __init__(
+        self,
+        task_id: str,
+        project_id: str,
+        task_name: str,
+        due_date: datetime,
+        days_remaining: int,
+    ):
         """
         Initialize task due soon event.
 
@@ -188,8 +221,14 @@ class TaskDueSoon(DomainEvent):
 class TaskOverdue(DomainEvent):
     """Event emitted when a task becomes overdue."""
 
-    def __init__(self, task_id: str, project_id: str,
-                 task_name: str, due_date: datetime, days_overdue: int):
+    def __init__(
+        self,
+        task_id: str,
+        project_id: str,
+        task_name: str,
+        due_date: datetime,
+        days_overdue: int,
+    ):
         """
         Initialize task overdue event.
 
@@ -225,9 +264,16 @@ class TimelineTaskService(BaseService[TimelineTask]):
     - Critical path management
     """
 
-    def __init__(self, session: Session, repository=None,
-                 security_context=None, event_bus=None, cache_service=None,
-                 project_service=None, notification_service=None):
+    def __init__(
+        self,
+        session: Session,
+        repository=None,
+        security_context=None,
+        event_bus=None,
+        cache_service=None,
+        project_service=None,
+        notification_service=None,
+    ):
         """
         Initialize TimelineTaskService with dependencies.
 
@@ -276,36 +322,37 @@ class TimelineTaskService(BaseService[TimelineTask]):
         """
         with self.transaction():
             # Check if project exists if project service is available
-            project_id = data.get('project_id')
+            project_id = data.get("project_id")
             if project_id and self.project_service:
                 project = self.project_service.get_by_id(project_id)
                 if not project:
                     from app.core.exceptions import EntityNotFoundException
+
                     raise EntityNotFoundException("Project", project_id)
 
             # Generate ID if not provided
-            if 'id' not in data:
-                data['id'] = str(uuid.uuid4())
+            if "id" not in data:
+                data["id"] = str(uuid.uuid4())
 
             # Set default values if not provided
-            if 'status' not in data:
-                data['status'] = "NOT_STARTED"
+            if "status" not in data:
+                data["status"] = "NOT_STARTED"
 
-            if 'progress' not in data:
-                data['progress'] = 0
+            if "progress" not in data:
+                data["progress"] = 0
 
             # Validate start and end dates
-            start_date = data.get('startDate')
-            end_date = data.get('endDate')
+            start_date = data.get("startDate")
+            end_date = data.get("endDate")
 
             if start_date and end_date and start_date > end_date:
                 raise ValidationException(
                     "End date must be after start date",
-                    {"endDate": ["End date must be after start date"]}
+                    {"endDate": ["End date must be after start date"]},
                 )
 
             # Validate dependencies if provided
-            dependencies = data.get('dependencies', [])
+            dependencies = data.get("dependencies", [])
             if dependencies:
                 self._validate_dependencies(dependencies, project_id)
 
@@ -313,18 +360,24 @@ class TimelineTaskService(BaseService[TimelineTask]):
             task = self.repository.create(data)
 
             # Update critical path if needed
-            if data.get('isCriticalPath'):
+            if data.get("isCriticalPath"):
                 self._update_project_critical_path(project_id, task.id)
 
             # Publish event if event bus exists
             if self.event_bus:
-                user_id = self.security_context.current_user.id if self.security_context else None
-                self.event_bus.publish(TaskCreated(
-                    task_id=task.id,
-                    project_id=project_id,
-                    task_name=task.name,
-                    user_id=user_id
-                ))
+                user_id = (
+                    self.security_context.current_user.id
+                    if self.security_context
+                    else None
+                )
+                self.event_bus.publish(
+                    TaskCreated(
+                        task_id=task.id,
+                        project_id=project_id,
+                        task_name=task.name,
+                        user_id=user_id,
+                    )
+                )
 
             # Send notification if notification service exists
             if self.notification_service:
@@ -356,84 +409,94 @@ class TimelineTaskService(BaseService[TimelineTask]):
             task = self.get_by_id(task_id)
             if not task:
                 from app.core.exceptions import EntityNotFoundException
+
                 raise EntityNotFoundException("TimelineTask", task_id)
 
             # Store original values for events
-            original_status = task.status if hasattr(task, 'status') else None
-            original_progress = task.progress if hasattr(task, 'progress') else 0
+            original_status = task.status if hasattr(task, "status") else None
+            original_progress = task.progress if hasattr(task, "progress") else 0
             project_id = task.project_id
-            task_name = task.name if hasattr(task, 'name') else f"Task {task_id}"
+            task_name = task.name if hasattr(task, "name") else f"Task {task_id}"
 
             # Validate start and end dates if both are provided
-            start_date = data.get('startDate')
-            end_date = data.get('endDate')
+            start_date = data.get("startDate")
+            end_date = data.get("endDate")
 
             if start_date and end_date and start_date > end_date:
                 raise ValidationException(
                     "End date must be after start date",
-                    {"endDate": ["End date must be after start date"]}
+                    {"endDate": ["End date must be after start date"]},
                 )
 
             # Validate dependencies if provided
-            dependencies = data.get('dependencies')
+            dependencies = data.get("dependencies")
             if dependencies:
-                self._validate_dependencies(dependencies, project_id, exclude_task_id=task_id)
+                self._validate_dependencies(
+                    dependencies, project_id, exclude_task_id=task_id
+                )
 
             # Track changes for events
             changes = {}
             for key, value in data.items():
                 if hasattr(task, key) and getattr(task, key) != value:
-                    changes[key] = {
-                        'old': getattr(task, key),
-                        'new': value
-                    }
+                    changes[key] = {"old": getattr(task, key), "new": value}
 
             # Update task
             updated_task = self.repository.update(task_id, data)
 
             # Emit events based on changes
             if self.event_bus:
-                user_id = self.security_context.current_user.id if self.security_context else None
+                user_id = (
+                    self.security_context.current_user.id
+                    if self.security_context
+                    else None
+                )
 
                 # General update event
                 if changes:
-                    self.event_bus.publish(TaskUpdated(
-                        task_id=task_id,
-                        project_id=project_id,
-                        changes=changes,
-                        user_id=user_id
-                    ))
+                    self.event_bus.publish(
+                        TaskUpdated(
+                            task_id=task_id,
+                            project_id=project_id,
+                            changes=changes,
+                            user_id=user_id,
+                        )
+                    )
 
                 # Status change event
-                new_status = data.get('status')
+                new_status = data.get("status")
                 if new_status and new_status != original_status:
-                    self.event_bus.publish(TaskStatusChanged(
-                        task_id=task_id,
-                        project_id=project_id,
-                        previous_status=original_status,
-                        new_status=new_status,
-                        task_name=task_name,
-                        user_id=user_id
-                    ))
+                    self.event_bus.publish(
+                        TaskStatusChanged(
+                            task_id=task_id,
+                            project_id=project_id,
+                            previous_status=original_status,
+                            new_status=new_status,
+                            task_name=task_name,
+                            user_id=user_id,
+                        )
+                    )
 
                 # Progress change event
-                new_progress = data.get('progress')
+                new_progress = data.get("progress")
                 if new_progress is not None and new_progress != original_progress:
-                    self.event_bus.publish(TaskProgressUpdated(
-                        task_id=task_id,
-                        project_id=project_id,
-                        previous_progress=original_progress,
-                        new_progress=new_progress,
-                        task_name=task_name,
-                        user_id=user_id
-                    ))
+                    self.event_bus.publish(
+                        TaskProgressUpdated(
+                            task_id=task_id,
+                            project_id=project_id,
+                            previous_progress=original_progress,
+                            new_progress=new_progress,
+                            task_name=task_name,
+                            user_id=user_id,
+                        )
+                    )
 
             # Send notifications if assignment changed
-            if 'assignedTo' in data and self.notification_service:
+            if "assignedTo" in data and self.notification_service:
                 self._send_task_assigned_notification(updated_task)
 
             # If status changed to completed, update dependent tasks
-            if data.get('status') == "COMPLETED" and original_status != "COMPLETED":
+            if data.get("status") == "COMPLETED" and original_status != "COMPLETED":
                 self._update_dependent_tasks(task_id)
 
             # Invalidate cache if cache service exists
@@ -462,42 +525,53 @@ class TimelineTaskService(BaseService[TimelineTask]):
             task = self.get_by_id(task_id)
             if not task:
                 from app.core.exceptions import EntityNotFoundException
+
                 raise EntityNotFoundException("TimelineTask", task_id)
 
             # Check if task is on critical path
-            if hasattr(task, 'isCriticalPath') and task.isCriticalPath:
+            if hasattr(task, "isCriticalPath") and task.isCriticalPath:
                 from app.core.exceptions import BusinessRuleException
+
                 raise BusinessRuleException(
-                    "Cannot delete a task on the critical path",
-                    "TIMELINE_TASK_001"
+                    "Cannot delete a task on the critical path", "TIMELINE_TASK_001"
                 )
 
             # Check if other tasks depend on this one
             dependent_tasks = self._get_dependent_tasks(task_id)
             if dependent_tasks:
-                task_names = [t.name if hasattr(t, 'name') else f"Task {t.id}" for t in dependent_tasks]
+                task_names = [
+                    t.name if hasattr(t, "name") else f"Task {t.id}"
+                    for t in dependent_tasks
+                ]
                 from app.core.exceptions import BusinessRuleException
+
                 raise BusinessRuleException(
                     f"Cannot delete a task that others depend on. Dependent tasks: {', '.join(task_names)}",
-                    "TIMELINE_TASK_002"
+                    "TIMELINE_TASK_002",
                 )
 
             # Store values for event
             project_id = task.project_id
-            task_name = task.name if hasattr(task, 'name') else f"Task {task_id}"
+            task_name = task.name if hasattr(task, "name") else f"Task {task_id}"
 
             # Delete task
             result = self.repository.delete(task_id)
 
             # Publish event if event bus exists
             if result and self.event_bus:
-                user_id = self.security_context.current_user.id if self.security_context else None
-                self.event_bus.publish(TaskDeleted(
-                    task_id=task_id,
-                    project_id=project_id,
-                    task_name=task_name,
-                    user_id=user_id
-                ))
+                user_id = (
+                    self.security_context.current_user.id
+                    if self.security_context
+                    else None
+                )
+                self.event_bus.publish(
+                    TaskDeleted(
+                        task_id=task_id,
+                        project_id=project_id,
+                        task_name=task_name,
+                        user_id=user_id,
+                    )
+                )
 
             # Invalidate cache if cache service exists
             if self.cache_service:
@@ -525,7 +599,7 @@ class TimelineTaskService(BaseService[TimelineTask]):
         if progress < 0 or progress > 100:
             raise ValidationException(
                 "Progress must be between 0 and 100",
-                {"progress": ["Progress must be between 0 and 100"]}
+                {"progress": ["Progress must be between 0 and 100"]},
             )
 
         # Determine status based on progress
@@ -592,22 +666,28 @@ class TimelineTaskService(BaseService[TimelineTask]):
             task = self.get_by_id(task_id)
             if not task:
                 from app.core.exceptions import EntityNotFoundException
+
                 raise EntityNotFoundException("TimelineTask", task_id)
 
             dependency = self.get_by_id(dependency_id)
             if not dependency:
                 from app.core.exceptions import EntityNotFoundException
+
                 raise EntityNotFoundException("TimelineTask", dependency_id)
 
             # Check if they're in the same project
             if task.project_id != dependency.project_id:
                 raise ValidationException(
                     "Cannot add a dependency to a task in a different project",
-                    {"dependency_id": ["Dependency must be in the same project"]}
+                    {"dependency_id": ["Dependency must be in the same project"]},
                 )
 
             # Check if dependency already exists
-            current_dependencies = task.dependencies if hasattr(task, 'dependencies') and task.dependencies else []
+            current_dependencies = (
+                task.dependencies
+                if hasattr(task, "dependencies") and task.dependencies
+                else []
+            )
             if dependency_id in current_dependencies:
                 return task  # Already exists, no need to update
 
@@ -615,7 +695,7 @@ class TimelineTaskService(BaseService[TimelineTask]):
             if self._would_create_cycle(task_id, dependency_id):
                 raise ValidationException(
                     "Adding this dependency would create a circular reference",
-                    {"dependency_id": ["Would create a circular dependency"]}
+                    {"dependency_id": ["Would create a circular dependency"]},
                 )
 
             # Add dependency
@@ -643,10 +723,15 @@ class TimelineTaskService(BaseService[TimelineTask]):
             task = self.get_by_id(task_id)
             if not task:
                 from app.core.exceptions import EntityNotFoundException
+
                 raise EntityNotFoundException("TimelineTask", task_id)
 
             # Check if dependency exists
-            current_dependencies = task.dependencies if hasattr(task, 'dependencies') and task.dependencies else []
+            current_dependencies = (
+                task.dependencies
+                if hasattr(task, "dependencies") and task.dependencies
+                else []
+            )
             if dependency_id not in current_dependencies:
                 return task  # Doesn't exist, no need to update
 
@@ -699,6 +784,7 @@ class TimelineTaskService(BaseService[TimelineTask]):
         task = self.get_by_id(task_id)
         if not task:
             from app.core.exceptions import EntityNotFoundException
+
             raise EntityNotFoundException("TimelineTask", task_id)
 
         # Convert to dict
@@ -706,29 +792,31 @@ class TimelineTaskService(BaseService[TimelineTask]):
 
         # Get dependencies
         dependencies = []
-        if hasattr(task, 'dependencies') and task.dependencies:
+        if hasattr(task, "dependencies") and task.dependencies:
             for dep_id in task.dependencies:
                 dep = self.get_by_id(dep_id)
                 if dep:
-                    dependencies.append({
-                        "id": dep.id,
-                        "name": dep.name if hasattr(dep, 'name') else None,
-                        "status": dep.status if hasattr(dep, 'status') else None,
-                        "progress": dep.progress if hasattr(dep, 'progress') else 0,
-                        "endDate": dep.endDate if hasattr(dep, 'endDate') else None
-                    })
+                    dependencies.append(
+                        {
+                            "id": dep.id,
+                            "name": dep.name if hasattr(dep, "name") else None,
+                            "status": dep.status if hasattr(dep, "status") else None,
+                            "progress": dep.progress if hasattr(dep, "progress") else 0,
+                            "endDate": dep.endDate if hasattr(dep, "endDate") else None,
+                        }
+                    )
 
-        result['dependencies_details'] = dependencies
+        result["dependencies_details"] = dependencies
 
         # Get dependent tasks
         dependent_tasks = self._get_dependent_tasks(task_id)
-        result['dependent_tasks'] = [
+        result["dependent_tasks"] = [
             {
                 "id": t.id,
-                "name": t.name if hasattr(t, 'name') else None,
-                "status": t.status if hasattr(t, 'status') else None,
-                "progress": t.progress if hasattr(t, 'progress') else 0,
-                "startDate": t.startDate if hasattr(t, 'startDate') else None
+                "name": t.name if hasattr(t, "name") else None,
+                "status": t.status if hasattr(t, "status") else None,
+                "progress": t.progress if hasattr(t, "progress") else 0,
+                "startDate": t.startDate if hasattr(t, "startDate") else None,
             }
             for t in dependent_tasks
         ]
@@ -759,6 +847,7 @@ class TimelineTaskService(BaseService[TimelineTask]):
                 project = self.project_service.get_by_id(project_id)
                 if not project:
                     from app.core.exceptions import EntityNotFoundException
+
                     raise EntityNotFoundException("Project", project_id)
 
             # Get all tasks for the project
@@ -770,7 +859,7 @@ class TimelineTaskService(BaseService[TimelineTask]):
                     "critical_path_tasks": 0,
                     "earliest_start": None,
                     "latest_end": None,
-                    "timeline_updated": False
+                    "timeline_updated": False,
                 }
 
             # Calculate critical path
@@ -779,20 +868,28 @@ class TimelineTaskService(BaseService[TimelineTask]):
             # Update critical path tasks
             for task in tasks:
                 is_critical = task.id in critical_path
-                if (not hasattr(task, 'isCriticalPath') or task.isCriticalPath != is_critical):
+                if (
+                    not hasattr(task, "isCriticalPath")
+                    or task.isCriticalPath != is_critical
+                ):
                     self.repository.update(task.id, {"isCriticalPath": is_critical})
 
             # Calculate project dates
-            earliest_start = min((t.startDate for t in tasks if hasattr(t, 'startDate') and t.startDate), default=None)
-            latest_end = max((t.endDate for t in tasks if hasattr(t, 'endDate') and t.endDate), default=None)
+            earliest_start = min(
+                (t.startDate for t in tasks if hasattr(t, "startDate") and t.startDate),
+                default=None,
+            )
+            latest_end = max(
+                (t.endDate for t in tasks if hasattr(t, "endDate") and t.endDate),
+                default=None,
+            )
 
             # Update project dates if project service is available
             if self.project_service and earliest_start and latest_end:
                 try:
-                    self.project_service.update_project(project_id, {
-                        "startDate": earliest_start,
-                        "dueDate": latest_end
-                    })
+                    self.project_service.update_project(
+                        project_id, {"startDate": earliest_start, "dueDate": latest_end}
+                    )
                 except Exception as e:
                     logger.warning(f"Failed to update project dates: {str(e)}")
 
@@ -806,7 +903,7 @@ class TimelineTaskService(BaseService[TimelineTask]):
                 "critical_path_tasks": len(critical_path),
                 "earliest_start": earliest_start,
                 "latest_end": latest_end,
-                "timeline_updated": True
+                "timeline_updated": True,
             }
 
     def get_tasks_by_status(self, project_id: str, status: str) -> List[TimelineTask]:
@@ -822,7 +919,9 @@ class TimelineTaskService(BaseService[TimelineTask]):
         """
         return self.repository.list(project_id=project_id, status=status)
 
-    def get_overdue_tasks(self, project_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    def get_overdue_tasks(
+        self, project_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
         """
         Get all overdue tasks.
 
@@ -835,10 +934,7 @@ class TimelineTaskService(BaseService[TimelineTask]):
         today = datetime.now().date()
 
         # Get tasks that aren't completed and have an end date in the past
-        filters = {
-            "status_not": "COMPLETED",
-            "endDate_lt": today
-        }
+        filters = {"status_not": "COMPLETED", "endDate_lt": today}
 
         if project_id:
             filters["project_id"] = project_id
@@ -848,18 +944,20 @@ class TimelineTaskService(BaseService[TimelineTask]):
         # Add days overdue information
         result = []
         for task in tasks:
-            end_date = task.endDate if hasattr(task, 'endDate') else None
+            end_date = task.endDate if hasattr(task, "endDate") else None
             if end_date:
                 days_overdue = (today - end_date).days
 
                 task_dict = task.to_dict()
-                task_dict['days_overdue'] = days_overdue
+                task_dict["days_overdue"] = days_overdue
 
                 result.append(task_dict)
 
         return result
 
-    def get_upcoming_tasks(self, days: int = 7, project_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    def get_upcoming_tasks(
+        self, days: int = 7, project_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
         """
         Get tasks due in the next specified number of days.
 
@@ -877,7 +975,7 @@ class TimelineTaskService(BaseService[TimelineTask]):
         filters = {
             "status_not": "COMPLETED",
             "endDate_gte": today,
-            "endDate_lte": due_date
+            "endDate_lte": due_date,
         }
 
         if project_id:
@@ -888,12 +986,12 @@ class TimelineTaskService(BaseService[TimelineTask]):
         # Add days remaining information
         result = []
         for task in tasks:
-            end_date = task.endDate if hasattr(task, 'endDate') else None
+            end_date = task.endDate if hasattr(task, "endDate") else None
             if end_date:
                 days_remaining = (end_date - today).days
 
                 task_dict = task.to_dict()
-                task_dict['days_remaining'] = days_remaining
+                task_dict["days_remaining"] = days_remaining
 
                 result.append(task_dict)
 
@@ -917,6 +1015,7 @@ class TimelineTaskService(BaseService[TimelineTask]):
             project = self.project_service.get_by_id(project_id)
             if not project:
                 from app.core.exceptions import EntityNotFoundException
+
                 raise EntityNotFoundException("Project", project_id)
 
         # Get all tasks for the project
@@ -926,34 +1025,52 @@ class TimelineTaskService(BaseService[TimelineTask]):
         visualization_data = []
 
         for task in tasks:
-            if hasattr(task, 'startDate') and hasattr(task, 'endDate'):
+            if hasattr(task, "startDate") and hasattr(task, "endDate"):
                 task_data = {
                     "id": task.id,
-                    "name": task.name if hasattr(task, 'name') else f"Task {task.id}",
+                    "name": task.name if hasattr(task, "name") else f"Task {task.id}",
                     "start": task.startDate.isoformat() if task.startDate else None,
                     "end": task.endDate.isoformat() if task.endDate else None,
-                    "progress": task.progress if hasattr(task, 'progress') else 0,
-                    "status": task.status if hasattr(task, 'status') else None,
-                    "isCriticalPath": task.isCriticalPath if hasattr(task, 'isCriticalPath') else False,
-                    "dependencies": task.dependencies if hasattr(task, 'dependencies') and task.dependencies else [],
-                    "assignedTo": task.assignedTo if hasattr(task, 'assignedTo') else None
+                    "progress": task.progress if hasattr(task, "progress") else 0,
+                    "status": task.status if hasattr(task, "status") else None,
+                    "isCriticalPath": (
+                        task.isCriticalPath
+                        if hasattr(task, "isCriticalPath")
+                        else False
+                    ),
+                    "dependencies": (
+                        task.dependencies
+                        if hasattr(task, "dependencies") and task.dependencies
+                        else []
+                    ),
+                    "assignedTo": (
+                        task.assignedTo if hasattr(task, "assignedTo") else None
+                    ),
                 }
 
                 visualization_data.append(task_data)
 
         # Calculate project dates
-        earliest_start = min((t.startDate for t in tasks if hasattr(t, 'startDate') and t.startDate), default=None)
-        latest_end = max((t.endDate for t in tasks if hasattr(t, 'endDate') and t.endDate), default=None)
+        earliest_start = min(
+            (t.startDate for t in tasks if hasattr(t, "startDate") and t.startDate),
+            default=None,
+        )
+        latest_end = max(
+            (t.endDate for t in tasks if hasattr(t, "endDate") and t.endDate),
+            default=None,
+        )
 
         return {
             "project_id": project_id,
-            "project_name": project.name if hasattr(project, 'name') else None,
+            "project_name": project.name if hasattr(project, "name") else None,
             "start_date": earliest_start.isoformat() if earliest_start else None,
             "end_date": latest_end.isoformat() if latest_end else None,
-            "tasks": visualization_data
+            "tasks": visualization_data,
         }
 
-    def check_due_tasks(self, days_threshold: int = 3) -> Dict[str, List[Dict[str, Any]]]:
+    def check_due_tasks(
+        self, days_threshold: int = 3
+    ) -> Dict[str, List[Dict[str, Any]]]:
         """
         Check for tasks that are due soon or overdue and generate notifications.
 
@@ -977,60 +1094,69 @@ class TimelineTaskService(BaseService[TimelineTask]):
         if self.notification_service:
             # Notifications for overdue tasks
             for task in overdue_tasks:
-                days_overdue = task.get('days_overdue', 0)
-                end_date = task.get('endDate')
+                days_overdue = task.get("days_overdue", 0)
+                end_date = task.get("endDate")
 
                 # Only publish event if not already notified recently
-                self.event_bus.publish(TaskOverdue(
-                    task_id=task.get('id'),
-                    project_id=task.get('project_id'),
-                    task_name=task.get('name', f"Task {task.get('id')}"),
-                    due_date=end_date,
-                    days_overdue=days_overdue
-                ))
+                self.event_bus.publish(
+                    TaskOverdue(
+                        task_id=task.get("id"),
+                        project_id=task.get("project_id"),
+                        task_name=task.get("name", f"Task {task.get('id')}"),
+                        due_date=end_date,
+                        days_overdue=days_overdue,
+                    )
+                )
 
                 # Create notification
                 fallback_name = f"Task {task.get('id')}"
-                self.notification_service.create_notification({
-                    "user_id": task.get('assignedTo'),
-                    "type": "TASK_OVERDUE",
-                    "title": f"Task Overdue: {task.get('name', fallback_name)}",
-                    "message": f"Task is overdue by {days_overdue} day(s). Due date was {end_date.strftime('%Y-%m-%d')}.",
-                    "link": f"/projects/{task.get('project_id')}/tasks/{task.get('id')}",
-                    "priority": "HIGH"
-                })
+                self.notification_service.create_notification(
+                    {
+                        "user_id": task.get("assignedTo"),
+                        "type": "TASK_OVERDUE",
+                        "title": f"Task Overdue: {task.get('name', fallback_name)}",
+                        "message": f"Task is overdue by {days_overdue} day(s). Due date was {end_date.strftime('%Y-%m-%d')}.",
+                        "link": f"/projects/{task.get('project_id')}/tasks/{task.get('id')}",
+                        "priority": "HIGH",
+                    }
+                )
 
             # Notifications for tasks due soon
             for task in due_soon_tasks:
-                days_remaining = task.get('days_remaining', 0)
-                end_date = task.get('endDate')
+                days_remaining = task.get("days_remaining", 0)
+                end_date = task.get("endDate")
 
                 # Only publish event if not already notified
-                self.event_bus.publish(TaskDueSoon(
-                    task_id=task.get('id'),
-                    project_id=task.get('project_id'),
-                    task_name=task.get('name', f"Task {task.get('id')}"),
-                    due_date=end_date,
-                    days_remaining=days_remaining
-                ))
+                self.event_bus.publish(
+                    TaskDueSoon(
+                        task_id=task.get("id"),
+                        project_id=task.get("project_id"),
+                        task_name=task.get("name", f"Task {task.get('id')}"),
+                        due_date=end_date,
+                        days_remaining=days_remaining,
+                    )
+                )
 
                 # Create notification
                 fallback_name = f"Task {task.get('id')}"
-                self.notification_service.create_notification({
-                    "user_id": task.get('assignedTo'),
-                    "type": "TASK_DUE_SOON",
-                    "title": f"Task Due Soon: {task.get('name', fallback_name)}",
-                    "message": f"Task is due in {days_remaining} day(s). Due date is {end_date.strftime('%Y-%m-%d')}.",
-                    "link": f"/projects/{task.get('project_id')}/tasks/{task.get('id')}",
-                    "priority": "MEDIUM"
-                })
-        return {
-            "overdue_tasks": overdue_tasks,
-            "due_soon_tasks": due_soon_tasks
-        }
+                self.notification_service.create_notification(
+                    {
+                        "user_id": task.get("assignedTo"),
+                        "type": "TASK_DUE_SOON",
+                        "title": f"Task Due Soon: {task.get('name', fallback_name)}",
+                        "message": f"Task is due in {days_remaining} day(s). Due date is {end_date.strftime('%Y-%m-%d')}.",
+                        "link": f"/projects/{task.get('project_id')}/tasks/{task.get('id')}",
+                        "priority": "MEDIUM",
+                    }
+                )
+        return {"overdue_tasks": overdue_tasks, "due_soon_tasks": due_soon_tasks}
 
-    def _validate_dependencies(self, dependencies: List[str], project_id: str,
-                               exclude_task_id: Optional[str] = None) -> None:
+    def _validate_dependencies(
+        self,
+        dependencies: List[str],
+        project_id: str,
+        exclude_task_id: Optional[str] = None,
+    ) -> None:
         """
         Validate that dependencies exist and are in the same project.
 
@@ -1063,7 +1189,11 @@ class TimelineTaskService(BaseService[TimelineTask]):
         if invalid_dependencies:
             raise ValidationException(
                 "Invalid dependencies",
-                {"dependencies": [f"Invalid dependency IDs: {', '.join(invalid_dependencies)}"]}
+                {
+                    "dependencies": [
+                        f"Invalid dependency IDs: {', '.join(invalid_dependencies)}"
+                    ]
+                },
             )
 
     def _would_create_cycle(self, task_id: str, dependency_id: str) -> bool:
@@ -1104,7 +1234,11 @@ class TimelineTaskService(BaseService[TimelineTask]):
             return False
 
         # Check dependencies
-        dependencies = task.dependencies if hasattr(task, 'dependencies') and task.dependencies else []
+        dependencies = (
+            task.dependencies
+            if hasattr(task, "dependencies") and task.dependencies
+            else []
+        )
 
         # Direct dependency
         if target_id in dependencies:
@@ -1138,7 +1272,9 @@ class TimelineTaskService(BaseService[TimelineTask]):
         # Filter for tasks that depend on the specified task
         dependent_tasks = []
         for t in project_tasks:
-            dependencies = t.dependencies if hasattr(t, 'dependencies') and t.dependencies else []
+            dependencies = (
+                t.dependencies if hasattr(t, "dependencies") and t.dependencies else []
+            )
             if task_id in dependencies:
                 dependent_tasks.append(t)
 
@@ -1158,31 +1294,43 @@ class TimelineTaskService(BaseService[TimelineTask]):
             # Check if all dependencies are completed
             all_dependencies_completed = True
 
-            dependencies = task.dependencies if hasattr(task, 'dependencies') and task.dependencies else []
+            dependencies = (
+                task.dependencies
+                if hasattr(task, "dependencies") and task.dependencies
+                else []
+            )
             for dep_id in dependencies:
                 if dep_id == completed_task_id:
                     continue  # We know this one is completed
 
                 dep = self.get_by_id(dep_id)
-                if not dep or not hasattr(dep, 'status') or dep.status != "COMPLETED":
+                if not dep or not hasattr(dep, "status") or dep.status != "COMPLETED":
                     all_dependencies_completed = False
                     break
 
             # If all dependencies are completed and task hasn't started, update its status
-            if all_dependencies_completed and hasattr(task, 'status') and task.status == "NOT_STARTED":
+            if (
+                all_dependencies_completed
+                and hasattr(task, "status")
+                and task.status == "NOT_STARTED"
+            ):
                 # Update to ready status
                 self.repository.update(task.id, {"status": "READY"})
 
                 # Send notification if notification service exists
                 if self.notification_service:
-                    self.notification_service.create_notification({
-                        "user_id": task.assignedTo if hasattr(task, 'assignedTo') else None,
-                        "type": "TASK_READY",
-                        "title": f"Task Ready: {task.name if hasattr(task, 'name') else f'Task {task.id}'}",
-                        "message": "All dependencies are completed. This task is now ready to start.",
-                        "link": f"/projects/{task.project_id}/tasks/{task.id}",
-                        "priority": "LOW"
-                    })
+                    self.notification_service.create_notification(
+                        {
+                            "user_id": (
+                                task.assignedTo if hasattr(task, "assignedTo") else None
+                            ),
+                            "type": "TASK_READY",
+                            "title": f"Task Ready: {task.name if hasattr(task, 'name') else f'Task {task.id}'}",
+                            "message": "All dependencies are completed. This task is now ready to start.",
+                            "link": f"/projects/{task.project_id}/tasks/{task.id}",
+                            "priority": "LOW",
+                        }
+                    )
 
     def _calculate_critical_path(self, tasks: List[TimelineTask]) -> List[str]:
         """
@@ -1205,11 +1353,18 @@ class TimelineTaskService(BaseService[TimelineTask]):
             task_id = task.id
 
             # Skip tasks without start or end dates
-            if not hasattr(task, 'startDate') or not hasattr(task, 'endDate') or not task.startDate or not task.endDate:
+            if (
+                not hasattr(task, "startDate")
+                or not hasattr(task, "endDate")
+                or not task.startDate
+                or not task.endDate
+            ):
                 continue
 
             # Calculate duration in days
-            duration = (task.endDate - task.startDate).days + 1  # +1 to include both start and end date
+            duration = (
+                task.endDate - task.startDate
+            ).days + 1  # +1 to include both start and end date
             task_durations[task_id] = max(1, duration)  # Minimum duration of 1 day
 
             # Initialize graph entry
@@ -1217,7 +1372,11 @@ class TimelineTaskService(BaseService[TimelineTask]):
                 graph[task_id] = []
 
             # Add dependencies
-            dependencies = task.dependencies if hasattr(task, 'dependencies') and task.dependencies else []
+            dependencies = (
+                task.dependencies
+                if hasattr(task, "dependencies") and task.dependencies
+                else []
+            )
             for dep_id in dependencies:
                 # Add task as dependent of its dependency
                 if dep_id not in graph:
@@ -1278,8 +1437,13 @@ class TimelineTaskService(BaseService[TimelineTask]):
                 earliest_start[task_id] = 0
 
             for dep_id in graph.get(task_id, []):
-                earliest_finish = earliest_start[task_id] + task_durations.get(task_id, 0)
-                if dep_id not in earliest_start or earliest_start[dep_id] < earliest_finish:
+                earliest_finish = earliest_start[task_id] + task_durations.get(
+                    task_id, 0
+                )
+                if (
+                    dep_id not in earliest_start
+                    or earliest_start[dep_id] < earliest_finish
+                ):
                     earliest_start[dep_id] = earliest_finish
 
         # Calculate project duration
@@ -1301,23 +1465,32 @@ class TimelineTaskService(BaseService[TimelineTask]):
 
             for prev_id in graph:
                 if task_id in graph.get(prev_id, []):
-                    if prev_id not in latest_finish or latest_finish[prev_id] > latest_start:
+                    if (
+                        prev_id not in latest_finish
+                        or latest_finish[prev_id] > latest_start
+                    ):
                         latest_finish[prev_id] = latest_start
 
         # Find critical path (tasks with no slack)
         critical_path = []
 
         for task_id in graph:
-            earliest_end = earliest_start.get(task_id, 0) + task_durations.get(task_id, 0)
+            earliest_end = earliest_start.get(task_id, 0) + task_durations.get(
+                task_id, 0
+            )
             latest_end = latest_finish.get(task_id, 0)
 
             # If slack is zero, task is on critical path
-            if abs(earliest_end - latest_end) < 0.01:  # Use small epsilon for floating point comparison
+            if (
+                abs(earliest_end - latest_end) < 0.01
+            ):  # Use small epsilon for floating point comparison
                 critical_path.append(task_id)
 
         return critical_path
 
-    def _update_project_critical_path(self, project_id: str, new_critical_task_id: str) -> None:
+    def _update_project_critical_path(
+        self, project_id: str, new_critical_task_id: str
+    ) -> None:
         """
         Update the critical path for a project when a task is explicitly marked as critical.
 
@@ -1340,10 +1513,14 @@ class TimelineTaskService(BaseService[TimelineTask]):
         Args:
             task: Task that was assigned
         """
-        if not self.notification_service or not hasattr(task, 'assignedTo') or not task.assignedTo:
+        if (
+            not self.notification_service
+            or not hasattr(task, "assignedTo")
+            or not task.assignedTo
+        ):
             return
 
-        task_name = task.name if hasattr(task, 'name') else f"Task {task.id}"
+        task_name = task.name if hasattr(task, "name") else f"Task {task.id}"
         project_id = task.project_id
 
         # Get project name if project service is available
@@ -1352,16 +1529,18 @@ class TimelineTaskService(BaseService[TimelineTask]):
             try:
                 project = self.project_service.get_by_id(project_id)
                 if project:
-                    project_name = project.name if hasattr(project, 'name') else None
+                    project_name = project.name if hasattr(project, "name") else None
             except Exception as e:
                 logger.warning(f"Failed to get project for notification: {str(e)}")
 
         # Create notification
-        self.notification_service.create_notification({
-            "user_id": task.assignedTo,
-            "type": "TASK_ASSIGNED",
-            "title": f"Task Assigned: {task_name}",
-            "message": f"You have been assigned to a task{' in ' + project_name if project_name else ''}.",
-            "link": f"/projects/{project_id}/tasks/{task.id}",
-            "priority": "MEDIUM"
-        })
+        self.notification_service.create_notification(
+            {
+                "user_id": task.assignedTo,
+                "type": "TASK_ASSIGNED",
+                "title": f"Task Assigned: {task_name}",
+                "message": f"You have been assigned to a task{' in ' + project_name if project_name else ''}.",
+                "link": f"/projects/{project_id}/tasks/{task.id}",
+                "priority": "MEDIUM",
+            }
+        )

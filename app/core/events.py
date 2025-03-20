@@ -1,6 +1,17 @@
 # File: app/core/events.py
 
-from typing import Dict, Any, Callable, List, Optional, Set, Union, TypeVar, Generic, Type
+from typing import (
+    Dict,
+    Any,
+    Callable,
+    List,
+    Optional,
+    Set,
+    Union,
+    TypeVar,
+    Generic,
+    Type,
+)
 from collections import defaultdict
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
@@ -13,7 +24,7 @@ from fastapi import FastAPI
 logger = logging.getLogger(__name__)
 
 # Type definitions for better type hinting
-T = TypeVar('T', bound='DomainEvent')
+T = TypeVar("T", bound="DomainEvent")
 EventHandler = Callable[[T], None]
 AsyncEventHandler = Callable[[T], asyncio.coroutine]
 
@@ -34,9 +45,9 @@ class DomainEvent:
         """
         result = asdict(self)
         # Convert timestamp to ISO format string
-        result['timestamp'] = self.timestamp.isoformat()
+        result["timestamp"] = self.timestamp.isoformat()
         # Add event_type field
-        result['event_type'] = self.__class__.__name__
+        result["event_type"] = self.__class__.__name__
         return result
 
 
@@ -68,7 +79,7 @@ class EventBus:
             except Exception as e:
                 logger.error(
                     f"Error handling event {event_type} (ID: {event.event_id}): {str(e)}",
-                    exc_info=True
+                    exc_info=True,
                 )
 
     async def publish_async(self, event: DomainEvent) -> None:
@@ -100,10 +111,12 @@ class EventBus:
                 if isinstance(result, Exception):
                     logger.error(
                         f"Error in async handler for {event_type} (ID: {event.event_id}): {str(result)}",
-                        exc_info=result
+                        exc_info=result,
                     )
 
-    def subscribe(self, event_type: Union[str, Type[DomainEvent]], handler: Callable) -> None:
+    def subscribe(
+        self, event_type: Union[str, Type[DomainEvent]], handler: Callable
+    ) -> None:
         """
         Subscribe a handler to an event type.
 
@@ -118,9 +131,13 @@ class EventBus:
             event_type_name = str(event_type)
 
         self.subscribers[event_type_name].append(handler)
-        logger.debug(f"Subscribed handler {handler.__name__} to event type {event_type_name}")
+        logger.debug(
+            f"Subscribed handler {handler.__name__} to event type {event_type_name}"
+        )
 
-    def unsubscribe(self, event_type: Union[str, Type[DomainEvent]], handler: Callable) -> bool:
+    def unsubscribe(
+        self, event_type: Union[str, Type[DomainEvent]], handler: Callable
+    ) -> bool:
         """
         Unsubscribe a handler from an event type.
 
@@ -137,9 +154,14 @@ class EventBus:
         else:
             event_type_name = str(event_type)
 
-        if event_type_name in self.subscribers and handler in self.subscribers[event_type_name]:
+        if (
+            event_type_name in self.subscribers
+            and handler in self.subscribers[event_type_name]
+        ):
             self.subscribers[event_type_name].remove(handler)
-            logger.debug(f"Unsubscribed handler {handler.__name__} from event type {event_type_name}")
+            logger.debug(
+                f"Unsubscribed handler {handler.__name__} from event type {event_type_name}"
+            )
             return True
         return False
 
@@ -176,11 +198,11 @@ class EntityUpdatedEvent(DomainEvent):
     """Base event for entity updates."""
 
     def __init__(
-            self,
-            entity_id: Any,
-            entity_type: str,
-            changes: Dict[str, Any],
-            user_id: Optional[int] = None,
+        self,
+        entity_id: Any,
+        entity_type: str,
+        changes: Dict[str, Any],
+        user_id: Optional[int] = None,
     ):
         """
         Initialize entity updated event.
@@ -248,8 +270,11 @@ def setup_event_handlers(app: FastAPI) -> None:
         # Clean up resources here (close connections, flush caches, etc.)
 
         # Cancel any pending async tasks
-        tasks = [t for t in asyncio.all_tasks()
-                 if t is not asyncio.current_task() and not t.done()]
+        tasks = [
+            t
+            for t in asyncio.all_tasks()
+            if t is not asyncio.current_task() and not t.done()
+        ]
 
         if tasks:
             logger.info(f"Cancelling {len(tasks)} pending tasks")

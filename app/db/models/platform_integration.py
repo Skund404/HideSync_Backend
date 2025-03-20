@@ -72,7 +72,11 @@ class PlatformIntegration(AbstractBase, ValidationMixin, TimestampMixin):
     sync_events = relationship(
         "SyncEvent", back_populates="platform_integration", cascade="all, delete-orphan"
     )
-    sales = relationship("Sale", back_populates="platform_integration")
+    sales = relationship(
+        "Sale",
+        back_populates="platform_integration",
+        foreign_keys="[Sale.platform_integration_id]",
+    )
     customers = relationship(
         "Customer",
         secondary="customer_platform_integration",

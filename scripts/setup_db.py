@@ -28,10 +28,11 @@ def create_db_directory():
     """Create the database directory if it doesn't exist."""
     try:
         from app.core.config import settings
+
         db_path = Path(settings.DATABASE_PATH)
         db_dir = db_path.parent
 
-        if db_dir != Path('.') and not db_dir.exists():
+        if db_dir != Path(".") and not db_dir.exists():
             logger.info(f"Creating database directory: {db_dir}")
             os.makedirs(db_dir, exist_ok=True)
     except Exception as e:
@@ -52,7 +53,9 @@ def drop_all_tables(engine):
 
     try:
         # Get all table names (excluding SQLite system tables)
-        result = connection.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+        result = connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+        )
         tables = [row[0] for row in result]
 
         if tables:
@@ -92,20 +95,18 @@ def main() -> None:
     # Create argument parser
     parser = argparse.ArgumentParser(description="Set up the HideSync database.")
     parser.add_argument(
-        "--seed",
-        action="store_true",
-        help="Seed the database with initial data"
+        "--seed", action="store_true", help="Seed the database with initial data"
     )
     parser.add_argument(
         "--seed-file",
         type=str,
         default="./app/db/seed_data.json",
-        help="Path to the seed data JSON file"
+        help="Path to the seed data JSON file",
     )
     parser.add_argument(
         "--reset",
         action="store_true",
-        help="Reset the database before initialization (will drop all tables)"
+        help="Reset the database before initialization (will drop all tables)",
     )
 
     args = parser.parse_args()
@@ -148,7 +149,9 @@ def main() -> None:
         seed_file = args.seed_file
         if not os.path.exists(seed_file):
             # If seed file doesn't exist in the specified path, look in app/db directory
-            alt_path = os.path.join(os.path.dirname(__file__), "..", "app", "db", "seed_data.json")
+            alt_path = os.path.join(
+                os.path.dirname(__file__), "..", "app", "db", "seed_data.json"
+            )
             if os.path.exists(alt_path):
                 seed_file = alt_path
                 logger.info(f"Using seed file from alternative path: {seed_file}")
@@ -157,11 +160,13 @@ def main() -> None:
                 sys.exit(1)
 
         try:
-            with open(seed_file, 'r') as f:
+            with open(seed_file, "r") as f:
                 seed_data = json.load(f)
 
             # Create seed_db.py module if it doesn't exist
-            seed_db_path = os.path.join(os.path.dirname(__file__), "..", "app", "db", "seed_db.py")
+            seed_db_path = os.path.join(
+                os.path.dirname(__file__), "..", "app", "db", "seed_db.py"
+            )
             if not os.path.exists(seed_db_path):
                 # First, create seed_db.py
                 create_seed_db_module()
@@ -441,7 +446,7 @@ def resolve_foreign_keys(data: Dict[str, Any], entity_ids: Dict[str, Dict[int, i
 """
 
     # Write the seed_db.py file
-    with open(seed_db_path, 'w') as f:
+    with open(seed_db_path, "w") as f:
         f.write(seed_db_content)
 
     logger.info(f"Created seed_db.py module at {seed_db_path}")

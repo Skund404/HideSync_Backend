@@ -24,24 +24,6 @@ class FileMetadata(AbstractBase, ValidationMixin, TimestampMixin):
 
     Tracks information about files stored in the file system, including
     original filename, storage path, size, and associations with entities.
-
-    Attributes:
-        id: Unique identifier for the file metadata
-        file_id: UUID for the file in the storage system
-        filename: Current filename in the storage system
-        original_filename: Original name when uploaded by user
-        content_type: MIME type of the file
-        size: Size of the file in bytes
-        checksum: Hash of file contents for integrity verification
-        storage_path: Path to the file in the storage system
-        public_url: Optional publicly accessible URL
-        entity_type: Type of entity this file relates to (e.g., 'pattern', 'project')
-        entity_id: ID of the related entity
-        user_id: ID of the user who uploaded the file
-        description: User-provided description of the file
-        is_public: Whether the file is publicly accessible
-        thumbnail_path: Path to a thumbnail version of the file
-        meta_data: Additional structured meta_data for the file
     """
 
     __tablename__ = "file_meta_data"
@@ -62,7 +44,7 @@ class FileMetadata(AbstractBase, ValidationMixin, TimestampMixin):
     # Ownership and association
     entity_type = Column(String(50))  # Type of entity this file relates to
     entity_id = Column(String(50))  # ID of related entity
-    user_id = Column(Integer, ForeignKey("user.id"), nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     description = Column(Text)
 
     # Accessibility
@@ -74,7 +56,7 @@ class FileMetadata(AbstractBase, ValidationMixin, TimestampMixin):
     meta_data = Column(JSON, nullable=True)
 
     # Relationships
-    # user = relationship("User", back_populates="files")
+    user = relationship("User", back_populates="files")
 
     @validates("content_type")
     def validate_content_type(self, key, value):

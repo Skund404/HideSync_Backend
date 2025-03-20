@@ -1,4 +1,3 @@
-# File: app/db/models/pattern.py
 """
 Pattern model for the Leathercraft ERP system.
 
@@ -9,7 +8,17 @@ and metadata for project creation.
 
 from typing import List, Optional, Dict, Any, ClassVar, Set
 
-from sqlalchemy import Column, String, Text, Enum, Integer, Boolean, JSON, ForeignKey, Float
+from sqlalchemy import (
+    Column,
+    String,
+    Text,
+    Enum,
+    Integer,
+    Boolean,
+    JSON,
+    ForeignKey,
+    Float,
+)
 from sqlalchemy.orm import relationship, validates
 
 from app.db.models.base import AbstractBase, ValidationMixin, TimestampMixin
@@ -70,8 +79,18 @@ class Pattern(AbstractBase, ValidationMixin, TimestampMixin):
         "Component", back_populates="pattern", cascade="all, delete-orphan"
     )
     products = relationship("Product", back_populates="pattern")
-    projects = relationship("Project", secondary="project_templates")
     sale_items = relationship("SaleItem", back_populates="pattern")
+
+    # Updated relationships to resolve mapping issues
+    project_templates = relationship(
+        "ProjectTemplate",
+        back_populates="pattern",
+        cascade="all, delete-orphan",
+        overlaps="projects",
+    )
+
+    # ViewOnly relationship to avoid conflicts
+    projects = relationship("Project", secondary="project_templates", viewonly=True)
 
     @validates("name")
     def validate_name(self, key: str, name: str) -> str:
@@ -205,7 +224,11 @@ class ProjectTemplate(AbstractBase, ValidationMixin, TimestampMixin):
 
     # Relationships
     pattern_id = Column(Integer, ForeignKey("patterns.id"), nullable=True)
-    pattern = relationship("Pattern", back_populates="templates")
+
+    pattern = relationship(
+        "Pattern", back_populates="project_templates", foreign_keys=[pattern_id]
+    )
+
     projects = relationship("Project", back_populates="project_template")
     recurring_projects = relationship("RecurringProject", back_populates="template")
     components = relationship("ProjectTemplateComponent", back_populates="template")
