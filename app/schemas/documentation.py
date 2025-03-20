@@ -49,16 +49,7 @@ class DocumentationCategoryInDB(DocumentationCategoryBase):
     id: str = Field(..., description="Unique identifier for the category")
 
     class Config:
-        from_attributes = True
-
-
-# Added this class to match what the endpoint is importing
-class DocumentationCategory(DocumentationCategoryInDB):
-    """
-    Schema for documentation category responses in the API.
-    This class directly maps to the DB model and is used by the endpoint file.
-    """
-    pass
+        orm_mode = True
 
 
 class DocumentationResourceBase(BaseModel):
@@ -112,40 +103,18 @@ class DocumentationResourceInDB(DocumentationResourceBase):
     last_updated: str = Field(..., description="Timestamp when the resource was last updated")
 
     class Config:
-        from_attributes = True
-
-
-# Added this class to match what the endpoint is importing
-class DocumentationResource(DocumentationResourceInDB):
-    """
-    Schema for documentation resource responses in the API.
-    This class directly maps to the DB model and is used by the endpoint file.
-    """
-    category_name: Optional[str] = Field(None, description="Name of the primary category")
-    related_titles: Optional[List[str]] = Field(None, description="Titles of related resources")
-
-
-# Added this class since it's imported in the endpoint file
-class DocumentationSearchParams(BaseModel):
-    """
-    Schema for documentation search parameters.
-    """
-    category: Optional[str] = None
-    type: Optional[str] = None
-    skill_level: Optional[str] = None
-    search: Optional[str] = None
-    tags: Optional[List[str]] = None
+        orm_mode = True
 
 
 class DocumentationResourceResponse(DocumentationResourceInDB):
     """
-    Schema for documentation resource responses in the API with additional fields.
+    Schema for documentation resource responses in the API.
     """
     category_name: Optional[str] = Field(None, description="Name of the primary category")
     related_titles: Optional[List[str]] = Field(None, description="Titles of related resources")
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 
 class DocumentationResourceList(BaseModel):
@@ -166,7 +135,7 @@ class DocumentationCategoryWithResources(DocumentationCategoryInDB):
     resources_list: List[DocumentationResourceResponse] = Field([], description="Resources in this category")
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 
 class DocumentationCategoryList(BaseModel):
@@ -177,7 +146,7 @@ class DocumentationCategoryList(BaseModel):
     total: int = Field(..., description="Total number of categories")
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 
 class RefundBase(BaseModel):
@@ -228,7 +197,7 @@ class RefundInDB(RefundBase):
     id: int = Field(..., description="Unique identifier for the refund")
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 
 class RefundResponse(RefundInDB):
@@ -239,7 +208,7 @@ class RefundResponse(RefundInDB):
     customer_name: Optional[str] = Field(None, description="Name of the customer")
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 
 class RefundList(BaseModel):

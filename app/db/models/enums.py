@@ -1615,3 +1615,11 @@ class FulfillmentStatus(Enum):
     DELIVERED = ("delivered",)
     RETURNED = ("returned",)
     CANCELLED = ("cancelled",)
+
+
+class UserRole(Enum):
+    ADMIN = "admin"
+    MANAGER = "manager"
+    EMPLOYEE = "employee"
+    CUSTOMER = "customer"
+    GUEST = "guest"
