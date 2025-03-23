@@ -1,253 +1,219 @@
-# File: app/schemas/documentation.py
+# File: app/api/endpoints/documentation.py
 """
-Documentation schemas for the HideSync API.
+Documentation API endpoints for HideSync.
 
-This module contains Pydantic models for documentation resources and categories,
-supporting the knowledge base functionality in the application.
+This module handles all documentation-related operations, including
+documentation resources and categories management.
 """
 
-from datetime import datetime
-from typing import Dict, List, Optional, Union, Any
-from pydantic import BaseModel, Field, validator
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, Query, Path
+from sqlalchemy.orm import Session
 
 from app.db.models.enums import SkillLevel
+from app.schemas.documentation import (
+    DocumentationCategory,
+    DocumentationCategoryCreate,
+    DocumentationCategoryList,
+    DocumentationCategoryUpdate,
+    DocumentationCategoryWithResources,
+    DocumentationResource,
+    DocumentationResourceCreate,
+    DocumentationResourceList,
+    DocumentationResourceResponse,
+    DocumentationResourceUpdate,
+    DocumentationSearchParams
+)
+from app.api.deps import get_db, get_current_active_user
+from app.db.models.user import User
+from app.services.documentation_service import DocumentationService
+
+# Create router for documentation endpoints
+router = APIRouter()
 
 
-class DocumentationCategoryBase(BaseModel):
+# Dependency to get the documentation service
+def get_documentation_service(db: Session = Depends(get_db)):
+    return DocumentationService(db)
+
+
+@router.get("/", response_model=dict)
+def get_documentation_root():
     """
-    Base schema for documentation category data.
+    Root endpoint for documentation API.
     """
-    name: str = Field(..., description="Name of the category", min_length=1, max_length=100)
-    description: Optional[str] = Field(None, description="Description of the category")
-    icon: Optional[str] = Field(None, description="Icon identifier for the category")
-    resources: Optional[List[str]] = Field(None, description="IDs of resources in this category")
+    return {
+        "message": "HideSync Documentation API",
+        "endpoints": {
+            "resources": "/resources - Manage documentation resources",
+            "categories": "/categories - Manage documentation categories"
+        }
+    }
 
 
-class DocumentationCategoryCreate(DocumentationCategoryBase):
+@router.get("/resources/", response_model=DocumentationResourceList)
+def list_documentation_resources(
+        skip: int = 0,
+        limit: int = 100,
+        category: Optional[str] = None,
+        type: Optional[str] = None,
+        skill_level: Optional[SkillLevel] = None,
+        search: Optional[str] = None,
+        tags: Optional[List[str]] = Query(None),
+        service: DocumentationService = Depends(get_documentation_service)
+):
     """
-    Schema for creating a new documentation category.
+    List documentation resources with optional filtering.
     """
-    pass
+    search_params = DocumentationSearchParams(
+        category=category,
+        type=type,
+        skill_level=skill_level,
+        search=search,
+        tags=tags
+    )
+    return service.list_resources(skip=skip, limit=limit, search_params=search_params)
 
 
-class DocumentationCategoryUpdate(BaseModel):
+@router.post("/resources/", response_model=DocumentationResource, status_code=201)
+def create_documentation_resource(
+        resource: DocumentationResourceCreate,
+        current_user: User = Depends(get_current_active_user),
+        service: DocumentationService = Depends(get_documentation_service)
+):
     """
-    Schema for updating documentation category information.
-
-    All fields are optional to allow partial updates.
+    Create a new documentation resource.
     """
-    name: Optional[str] = Field(None, description="Name of the category", min_length=1, max_length=100)
-    description: Optional[str] = Field(None, description="Description of the category")
-    icon: Optional[str] = Field(None, description="Icon identifier for the category")
-    resources: Optional[List[str]] = Field(None, description="IDs of resources in this category")
+    if not resource.author:
+        resource.author = str(current_user.id)
+    return service.create_resource(resource)
 
 
-class DocumentationCategoryInDB(DocumentationCategoryBase):
+@router.get("/resources/{resource_id}", response_model=DocumentationResource)
+def get_documentation_resource(
+        resource_id: str = Path(..., description="The ID of the resource to retrieve"),
+        service: DocumentationService = Depends(get_documentation_service)
+):
     """
-    Schema for documentation category information as stored in the database.
+    Get a specific documentation resource by ID.
     """
-    id: str = Field(..., description="Unique identifier for the category")
+    resource = service.get_resource(resource_id)
+    if not resource:
+        raise HTTPException(status_code=404, detail="Documentation resource not found")
+    return resource
 
-    class Config:
-        from_attributes = True
 
-
-# Added this class to match what the endpoint is importing
-class DocumentationCategory(DocumentationCategoryInDB):
+@router.put("/resources/{resource_id}", response_model=DocumentationResource)
+def update_documentation_resource(
+        resource_id: str = Path(..., description="The ID of the resource to update"),
+        resource_update: DocumentationResourceUpdate = None,
+        current_user: User = Depends(get_current_active_user),
+        service: DocumentationService = Depends(get_documentation_service)
+):
     """
-    Schema for documentation category responses in the API.
-    This class directly maps to the DB model and is used by the endpoint file.
+    Update a documentation resource.
     """
-    pass
+    existing_resource = service.get_resource(resource_id)
+    if not existing_resource:
+        raise HTTPException(status_code=404, detail="Documentation resource not found")
+
+    # If author not specified, use current user
+    if not resource_update.author:
+        resource_update.author = str(current_user.id)
+
+    updated_resource = service.update_resource(resource_id, resource_update)
+    return updated_resource
 
 
-class DocumentationResourceBase(BaseModel):
+@router.delete("/resources/{resource_id}", response_model=dict)
+def delete_documentation_resource(
+        resource_id: str = Path(..., description="The ID of the resource to delete"),
+        current_user: User = Depends(get_current_active_user),
+        service: DocumentationService = Depends(get_documentation_service)
+):
     """
-    Base schema for documentation resource data.
+    Delete a documentation resource.
     """
-    title: str = Field(..., description="Title of the resource", min_length=1, max_length=200)
-    description: Optional[str] = Field(None, description="Brief description of the resource")
-    content: str = Field(..., description="Full content of the resource")
-    category: Optional[str] = Field(None, description="Primary category")
-    type: Optional[str] = Field(None, description="Type of resource (GUIDE, TUTORIAL, REFERENCE)")
-    skill_level: Optional[SkillLevel] = Field(None, description="Required skill level for this content")
-    tags: Optional[List[str]] = Field(None, description="Tags for categorizing the resource")
-    related_resources: Optional[List[str]] = Field(None, description="IDs of related resources")
-    contextual_help_keys: Optional[List[str]] = Field(None, description="Context keys for help system integration")
-    videos: Optional[Dict[str, Any]] = Field(None, description="Associated video content")
+    existing_resource = service.get_resource(resource_id)
+    if not existing_resource:
+        raise HTTPException(status_code=404, detail="Documentation resource not found")
+
+    result = service.delete_resource(resource_id)
+    if result:
+        return {"message": "Resource deleted successfully"}
+    else:
+        raise HTTPException(status_code=500, detail="Failed to delete resource")
 
 
-class DocumentationResourceCreate(DocumentationResourceBase):
+@router.get("/categories/", response_model=DocumentationCategoryList)
+def list_documentation_categories(
+        service: DocumentationService = Depends(get_documentation_service)
+):
     """
-    Schema for creating a new documentation resource.
+    List all documentation categories.
     """
-    author: Optional[str] = Field(None, description="Author of the resource")
+    return service.list_categories()
 
 
-class DocumentationResourceUpdate(BaseModel):
+@router.post("/categories/", response_model=DocumentationCategory, status_code=201)
+def create_documentation_category(
+        category: DocumentationCategoryCreate,
+        current_user: User = Depends(get_current_active_user),
+        service: DocumentationService = Depends(get_documentation_service)
+):
     """
-    Schema for updating documentation resource information.
-
-    All fields are optional to allow partial updates.
+    Create a new documentation category.
     """
-    title: Optional[str] = Field(None, description="Title of the resource", min_length=1, max_length=200)
-    description: Optional[str] = Field(None, description="Brief description of the resource")
-    content: Optional[str] = Field(None, description="Full content of the resource")
-    category: Optional[str] = Field(None, description="Primary category")
-    type: Optional[str] = Field(None, description="Type of resource (GUIDE, TUTORIAL, REFERENCE)")
-    skill_level: Optional[SkillLevel] = Field(None, description="Required skill level for this content")
-    tags: Optional[List[str]] = Field(None, description="Tags for categorizing the resource")
-    related_resources: Optional[List[str]] = Field(None, description="IDs of related resources")
-    author: Optional[str] = Field(None, description="Author of the resource")
-    contextual_help_keys: Optional[List[str]] = Field(None, description="Context keys for help system integration")
-    videos: Optional[Dict[str, Any]] = Field(None, description="Associated video content")
+    return service.create_category(category)
 
 
-class DocumentationResourceInDB(DocumentationResourceBase):
+@router.get("/categories/{category_id}", response_model=DocumentationCategoryWithResources)
+def get_documentation_category(
+        category_id: str = Path(..., description="The ID of the category to retrieve"),
+        service: DocumentationService = Depends(get_documentation_service)
+):
     """
-    Schema for documentation resource information as stored in the database.
+    Get a specific documentation category with its resources.
     """
-    id: str = Field(..., description="Unique identifier for the resource")
-    author: Optional[str] = Field(None, description="Author of the resource")
-    last_updated: str = Field(..., description="Timestamp when the resource was last updated")
-
-    class Config:
-        from_attributes = True
+    category = service.get_category_with_resources(category_id)
+    if not category:
+        raise HTTPException(status_code=404, detail="Documentation category not found")
+    return category
 
 
-# Added this class to match what the endpoint is importing
-class DocumentationResource(DocumentationResourceInDB):
+@router.put("/categories/{category_id}", response_model=DocumentationCategory)
+def update_documentation_category(
+        category_id: str = Path(..., description="The ID of the category to update"),
+        category_update: DocumentationCategoryUpdate = None,
+        current_user: User = Depends(get_current_active_user),
+        service: DocumentationService = Depends(get_documentation_service)
+):
     """
-    Schema for documentation resource responses in the API.
-    This class directly maps to the DB model and is used by the endpoint file.
+    Update a documentation category.
     """
-    category_name: Optional[str] = Field(None, description="Name of the primary category")
-    related_titles: Optional[List[str]] = Field(None, description="Titles of related resources")
+    existing_category = service.get_category(category_id)
+    if not existing_category:
+        raise HTTPException(status_code=404, detail="Documentation category not found")
+
+    updated_category = service.update_category(category_id, category_update)
+    return updated_category
 
 
-# Added this class since it's imported in the endpoint file
-class DocumentationSearchParams(BaseModel):
+@router.delete("/categories/{category_id}", response_model=dict)
+def delete_documentation_category(
+        category_id: str = Path(..., description="The ID of the category to delete"),
+        current_user: User = Depends(get_current_active_user),
+        service: DocumentationService = Depends(get_documentation_service)
+):
     """
-    Schema for documentation search parameters.
+    Delete a documentation category.
     """
-    category: Optional[str] = None
-    type: Optional[str] = None
-    skill_level: Optional[str] = None
-    search: Optional[str] = None
-    tags: Optional[List[str]] = None
+    existing_category = service.get_category(category_id)
+    if not existing_category:
+        raise HTTPException(status_code=404, detail="Documentation category not found")
 
-
-class DocumentationResourceResponse(DocumentationResourceInDB):
-    """
-    Schema for documentation resource responses in the API with additional fields.
-    """
-    category_name: Optional[str] = Field(None, description="Name of the primary category")
-    related_titles: Optional[List[str]] = Field(None, description="Titles of related resources")
-
-    class Config:
-        from_attributes = True
-
-
-class DocumentationResourceList(BaseModel):
-    """
-    Schema for paginated documentation resource list responses.
-    """
-    items: List[DocumentationResourceResponse]
-    total: int = Field(..., description="Total number of resources matching the query")
-    page: int = Field(..., description="Current page number")
-    size: int = Field(..., description="Number of items per page")
-    pages: int = Field(..., description="Total number of pages")
-
-
-class DocumentationCategoryWithResources(DocumentationCategoryInDB):
-    """
-    Schema for documentation category responses that include their resources.
-    """
-    resources_list: List[DocumentationResourceResponse] = Field([], description="Resources in this category")
-
-    class Config:
-        from_attributes = True
-
-
-class DocumentationCategoryList(BaseModel):
-    """
-    Schema for paginated documentation category list responses.
-    """
-    items: List[DocumentationCategoryInDB]
-    total: int = Field(..., description="Total number of categories")
-
-    class Config:
-        from_attributes = True
-
-
-class RefundBase(BaseModel):
-    """
-    Base schema for refund data.
-    """
-    sale_id: int = Field(..., description="ID of the sale being refunded")
-    refund_date: datetime = Field(..., description="Date of the refund")
-    refund_amount: float = Field(..., description="Amount refunded", gt=0)
-    reason: str = Field(..., description="Reason for the refund")
-    status: str = Field(..., description="Status of the refund")
-
-
-class RefundCreate(RefundBase):
-    """
-    Schema for creating a new refund.
-    """
-
-    @validator('refund_amount')
-    def validate_refund_amount(cls, v):
-        if v <= 0:
-            raise ValueError('Refund amount must be positive')
-        return v
-
-
-class RefundUpdate(BaseModel):
-    """
-    Schema for updating refund information.
-
-    All fields are optional to allow partial updates.
-    """
-    refund_date: Optional[datetime] = Field(None, description="Date of the refund")
-    refund_amount: Optional[float] = Field(None, description="Amount refunded", gt=0)
-    reason: Optional[str] = Field(None, description="Reason for the refund")
-    status: Optional[str] = Field(None, description="Status of the refund")
-
-    @validator('refund_amount')
-    def validate_refund_amount(cls, v):
-        if v is not None and v <= 0:
-            raise ValueError('Refund amount must be positive')
-        return v
-
-
-class RefundInDB(RefundBase):
-    """
-    Schema for refund information as stored in the database.
-    """
-    id: int = Field(..., description="Unique identifier for the refund")
-
-    class Config:
-        from_attributes = True
-
-
-class RefundResponse(RefundInDB):
-    """
-    Schema for refund responses in the API.
-    """
-    sale_order_number: Optional[str] = Field(None, description="Order number of the associated sale")
-    customer_name: Optional[str] = Field(None, description="Name of the customer")
-
-    class Config:
-        from_attributes = True
-
-
-class RefundList(BaseModel):
-    """
-    Schema for paginated refund list responses.
-    """
-    items: List[RefundResponse]
-    total: int = Field(..., description="Total number of refunds matching the query")
-    page: int = Field(..., description="Current page number")
-    size: int = Field(..., description="Number of items per page")
-    pages: int = Field(..., description="Total number of pages")
+    result = service.delete_category(category_id)
+    if result:
+        return {"message": "Category deleted successfully"}
+    else:
+        raise HTTPException(status_code=500, detail="Failed to delete category")

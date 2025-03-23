@@ -52,6 +52,20 @@ class DocumentationCategoryInDB(DocumentationCategoryBase):
         from_attributes = True
 
 
+# Add the missing DocumentationCategory class
+class DocumentationCategory(DocumentationCategoryInDB):
+    """
+    Schema for documentation category responses in the API.
+
+    Extends the DB model with additional calculated fields.
+    """
+    resource_count: Optional[int] = Field(0, description="Number of resources in this category")
+    has_subcategories: Optional[bool] = Field(False, description="Whether this category has subcategories")
+
+    class Config:
+        from_attributes = True
+
+
 class DocumentationResourceBase(BaseModel):
     """
     Base schema for documentation resource data.
@@ -106,12 +120,44 @@ class DocumentationResourceInDB(DocumentationResourceBase):
         from_attributes = True
 
 
-class DocumentationResourceResponse(DocumentationResourceInDB):
+# Add the missing DocumentationResource class
+class DocumentationResource(DocumentationResourceInDB):
     """
     Schema for documentation resource responses in the API.
+
+    Extends the DB model with additional fields like category name and related titles.
     """
     category_name: Optional[str] = Field(None, description="Name of the primary category")
     related_titles: Optional[List[str]] = Field(None, description="Titles of related resources")
+    word_count: Optional[int] = Field(None, description="Number of words in the content")
+    reading_time: Optional[int] = Field(None, description="Estimated reading time in minutes")
+
+    class Config:
+        from_attributes = True
+
+
+# Add the missing DocumentationSearchParams class
+class DocumentationSearchParams(BaseModel):
+    """
+    Schema for documentation search parameters.
+
+    Used for filtering documentation resources in list endpoints.
+    """
+    category: Optional[str] = Field(None, description="Filter by category ID")
+    type: Optional[str] = Field(None, description="Filter by resource type")
+    skill_level: Optional[SkillLevel] = Field(None, description="Filter by skill level")
+    search: Optional[str] = Field(None, description="Search term for title, description, and content")
+    tags: Optional[List[str]] = Field(None, description="Filter by tags")
+
+
+class DocumentationResourceResponse(DocumentationResourceInDB):
+    """
+    Schema for documentation resource responses in the API with additional fields.
+    """
+    category_name: Optional[str] = Field(None, description="Name of the primary category")
+    related_titles: Optional[List[str]] = Field(None, description="Titles of related resources")
+    word_count: Optional[int] = Field(None, description="Number of words in the content")
+    reading_time: Optional[int] = Field(None, description="Estimated reading time in minutes")
 
     class Config:
         from_attributes = True
@@ -133,6 +179,8 @@ class DocumentationCategoryWithResources(DocumentationCategoryInDB):
     Schema for documentation category responses that include their resources.
     """
     resources_list: List[DocumentationResourceResponse] = Field([], description="Resources in this category")
+    resource_count: Optional[int] = Field(0, description="Number of resources in this category")
+    has_subcategories: Optional[bool] = Field(False, description="Whether this category has subcategories")
 
     class Config:
         from_attributes = True
