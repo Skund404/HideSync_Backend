@@ -31,6 +31,7 @@ class Project(AbstractBase, ValidationMixin, TimestampMixin):
     """
 
     __tablename__ = "projects"
+    __table_args__ = {'extend_existing': True}
     __validated_fields__: ClassVar[Set[str]] = {"name", "due_date", "start_date"}
 
     # Basic information
@@ -56,7 +57,7 @@ class Project(AbstractBase, ValidationMixin, TimestampMixin):
 
     # More relationships
     sale = relationship("Sale", back_populates="projects")
-    project_template = relationship("ProjectTemplate", back_populates="projects")
+    project_template = relationship("ProjectTemplate")
     components = relationship(
         "ProjectComponent", back_populates="project", cascade="all, delete-orphan"
     )
@@ -187,6 +188,7 @@ class ProjectComponent(AbstractBase, ValidationMixin):
     """
 
     __tablename__ = "project_components"
+    __table_args__ = {'extend_existing': True}
 
     # Relationships
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
@@ -213,13 +215,14 @@ class ProjectTemplate(AbstractBase, ValidationMixin, TimestampMixin):
     """
 
     __tablename__ = "project_templates"
+    __table_args__ = {'extend_existing': True}
 
     # Basic information
     name = Column(String(255), nullable=False)
     description = Column(Text)
     project_type = Column(Enum(ProjectType), nullable=False)
     skill_level = Column(String(50))
-    estimated_duration = Column(Integer)
+    estimated_duration = Column(Float)
     estimated_cost = Column(Float)
     version = Column(String(50), default="1.0")
     is_public = Column(Boolean, default=False)
@@ -251,6 +254,7 @@ class ProjectTemplateComponent(AbstractBase, ValidationMixin):
     """
 
     __tablename__ = "project_template_components"
+    __table_args__ = {'extend_existing': True}
 
     # Relationships
     template_id = Column(Integer, ForeignKey("project_templates.id"), nullable=False)

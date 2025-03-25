@@ -1,240 +1,272 @@
-# app/db/models/recurring_project.py
+# File: app/db/models/project.py
 """
-Database models for recurring projects in HideSync.
-
-This module defines the SQLAlchemy models for recurring projects,
-recurrence patterns, and generated projects.
+Project model for the HideSync ERP system.
 """
 
-from datetime import datetime, date, timedelta
-import json
+from typing import List, Optional, Dict, Any, ClassVar, Set
+from datetime import datetime, date
+
 from sqlalchemy import (
     Column,
     String,
-    DateTime,
-    Boolean,
+    Text,
+    Float,
+    Enum,
     Integer,
     ForeignKey,
-    Date,
-    Text,
+    DateTime,
+    Boolean,
     JSON,
-    Float,
 )
 from sqlalchemy.orm import relationship, validates
 from sqlalchemy.ext.hybrid import hybrid_property
 
-from app.db.models.base import Base, AbstractBase, ValidationMixin, TimestampMixin
-from app.db.models.enums import ProjectType, ProjectStatus, SkillLevel
+from app.db.models.base import AbstractBase, ValidationMixin, TimestampMixin
+from app.db.models.enums import ProjectStatus, ProjectType
 
 
-class RecurrencePattern(AbstractBase, ValidationMixin, TimestampMixin):
+class Project(AbstractBase, ValidationMixin, TimestampMixin):
     """
-    Model for recurrence patterns.
-
-    Defines when a recurring project should generate new instances.
+    Project model representing leatherworking projects.
     """
 
-    __tablename__ = "recurrence_patterns"
+    __tablename__ = "projects"
+    __validated_fields__: ClassVar[Set[str]] = {"name", "due_date", "start_date"}
 
-    id = Column(String, primary_key=True)
-    name = Column(String(100), nullable=False)
-    frequency = Column(String(20), nullable=False)  # daily, weekly, monthly, etc.
-    interval = Column(Integer, default=1, nullable=False)
-    start_date = Column(Date, nullable=False)
-    end_date = Column(Date, nullable=True)
-    end_after_occurrences = Column(Integer, nullable=True)
-    days_of_week = Column(JSON, nullable=True)  # [0, 1, 5] for Sun, Mon, Fri
-    day_of_month = Column(Integer, nullable=True)
-    week_of_month = Column(Integer, nullable=True)
-    month = Column(Integer, nullable=True)
-    custom_dates = Column(JSON, nullable=True)  # List of specific dates as strings
-    skip_weekends = Column(Boolean, default=False)
-    skip_holidays = Column(Boolean, default=False)
+    # Basic information
+    name = Column(String(255), nullable=False)
+    description = Column(Text)
+    type = Column(Enum(ProjectType))
+    status = Column(Enum(ProjectStatus), default=ProjectStatus.CONCEPT)
+
+    # Timeline
+    start_date = Column(DateTime, nullable=True)
+    due_date = Column(DateTime, nullable=True)
+    completed_date = Column(DateTime, nullable=True)
+    progress = Column(Float, default=0)  # 0-100 progress indicator
 
     # Relationships
-    recurring_projects = relationship(
-        "RecurringProject", back_populates="recurrence_pattern"
+    sales_id = Column(Integer, ForeignKey("sales.id"), nullable=True)
+    template_id = Column(Integer, ForeignKey("project_templates.id"), nullable=True)
+    products = relationship("Product", back_populates="project")
+
+    # Additional information
+    customer = Column(String(255), nullable=True)
+    notes = Column(Text)
+
+    # More relationships
+    sale = relationship("Sale", back_populates="projects")
+    project_template = relationship("ProjectTemplate")
+    components = relationship(
+        "ProjectComponent", back_populates="project", cascade="all, delete-orphan"
     )
+    picking_lists = relationship("PickingList", back_populates="project")
+    timeline_tasks = relationship(
+        "TimelineTask", back_populates="project", cascade="all, delete-orphan"
+    )
+    tool_checkouts = relationship("ToolCheckout", back_populates="project")
+    generated_from = relationship("GeneratedProject", back_populates="project")
+    sale_items = relationship("SaleItem", back_populates="project")
 
-    @validates("frequency")
-    def validate_frequency(self, key, value):
-        """Validate frequency value."""
-        valid_frequencies = [
-            "daily",
-            "weekly",
-            "monthly",
-            "quarterly",
-            "yearly",
-            "custom",
-        ]
-        if value.lower() not in valid_frequencies:
-            raise ValueError(
-                f"Invalid frequency: {value}. Must be one of {valid_frequencies}"
+    @validates("name")
+    def validate_name(self, key: str, name: str) -> str:
+        if not name or len(name.strip()) < 3:
+            raise ValueError("Project name must be at least 3 characters")
+        return name.strip()
+
+    @validates("due_date")
+    def validate_due_date(
+        self, key: str, due_date: Optional[datetime]
+    ) -> Optional[datetime]:
+        if due_date and due_date.date() < date.today():
+            raise ValueError("Due date cannot be in the past")
+        return due_date
+
+    @validates("start_date")
+    def validate_start_date(
+        self, key: str, start_date: Optional[datetime]
+    ) -> Optional[datetime]:
+        """Validate project start date. Must be before due_date, if set"""
+        if start_date and self.due_date and start_date > self.due_date:
+            raise ValueError("Start date must be before due date")
+        return start_date
+
+    @validates("progress")
+    def validate_progress(self, key: str, progress: float) -> float:
+        if progress < 0 or progress > 100:
+            raise ValueError("Progress must be between 0 and 100")
+
+        # Update status based on progress
+        if progress == 100 and self.status != ProjectStatus.COMPLETED:
+            self.status = ProjectStatus.COMPLETED
+            self.completed_date = datetime.now()
+
+        return progress
+
+    @hybrid_property
+    def is_overdue(self) -> bool:
+        if not self.due_date:
+            return False
+
+        if self.status == ProjectStatus.COMPLETED and self.completed_date:
+            return self.completed_date > self.due_date
+
+        return datetime.now() > self.due_date and self.status != ProjectStatus.COMPLETED
+
+    @hybrid_property
+    def days_to_deadline(self) -> Optional[int]:
+        if not self.due_date:
+            return None
+
+        delta = self.due_date.date() - date.today()
+        return delta.days
+
+    def calculate_progress(self) -> float:
+        if not self.timeline_tasks:
+            return self.progress
+
+        total_tasks = len(self.timeline_tasks)
+        if total_tasks == 0:
+            return 0
+
+        completed_tasks = sum(1 for task in self.timeline_tasks if task.progress == 100)
+
+        progress_sum = sum(task.progress for task in self.timeline_tasks)
+        calculated_progress = progress_sum / total_tasks
+
+        # Update the stored progress
+        self.progress = calculated_progress
+        return calculated_progress
+
+    def update_status(
+        self, new_status: ProjectStatus, user: str, notes: Optional[str] = None
+    ) -> None:
+        old_status = self.status
+        self.status = new_status
+
+        # Record the change in history
+        if hasattr(self, "record_change"):
+            self.record_change(
+                user,
+                {
+                    "field": "status",
+                    "old_value": old_status.name if old_status else None,
+                    "new_value": new_status.name,
+                    "notes": notes,
+                },
             )
-        return value.lower()
 
-    @validates("interval")
-    def validate_interval(self, key, value):
-        """Validate interval value."""
-        if value < 1:
-            raise ValueError("Interval must be at least 1")
-        return value
+        # Update dates based on status
+        if new_status == ProjectStatus.IN_PROGRESS and not self.start_date:
+            self.start_date = datetime.now()
+        elif new_status == ProjectStatus.COMPLETED and not self.completed_date:
+            self.completed_date = datetime.now()
 
-    @validates("days_of_week")
-    def validate_days_of_week(self, key, value):
-        """Validate and convert days_of_week."""
-        if value is None:
-            return None
+    def to_dict(self) -> Dict[str, Any]:
+        result = super().to_dict()
 
-        if isinstance(value, str):
-            try:
-                value = json.loads(value)
-            except json.JSONDecodeError:
-                raise ValueError("Invalid days_of_week format")
+        # Convert enum values to strings
+        if self.type:
+            result["type"] = self.type.name
+        if self.status:
+            result["status"] = self.status.name
 
-        if not isinstance(value, list):
-            raise ValueError("days_of_week must be a list of integers")
-
-        # Validate each day is 0-6
-        for day in value:
-            if not isinstance(day, int) or day < 0 or day > 6:
-                raise ValueError("Each day in days_of_week must be an integer from 0-6")
-
-        return value
-
-    @validates("custom_dates")
-    def validate_custom_dates(self, key, value):
-        """Validate and convert custom_dates."""
-        if value is None:
-            return None
-
-        if isinstance(value, str):
-            try:
-                value = json.loads(value)
-            except json.JSONDecodeError:
-                raise ValueError("Invalid custom_dates format")
-
-        if not isinstance(value, list):
-            raise ValueError("custom_dates must be a list of date strings")
-
-        # Convert strings to date objects
-        result = []
-        for date_str in value:
-            try:
-                if isinstance(date_str, str):
-                    date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
-                    result.append(date_obj)
-                elif (
-                    isinstance(date_str, dict)
-                    and "year" in date_str
-                    and "month" in date_str
-                    and "day" in date_str
-                ):
-                    date_obj = date(
-                        date_str["year"], date_str["month"], date_str["day"]
-                    )
-                    result.append(date_obj)
-                else:
-                    raise ValueError("Invalid date format")
-            except ValueError:
-                raise ValueError(f"Invalid date format: {date_str}")
+        # Add calculated properties
+        result["is_overdue"] = self.is_overdue
+        result["days_to_deadline"] = self.days_to_deadline
 
         return result
 
+    def __repr__(self) -> str:
+        return f"<Project(id={self.id}, name='{self.name}', status={self.status}, progress={self.progress})>"
 
-class RecurringProject(AbstractBase, ValidationMixin, TimestampMixin):
+
+class ProjectComponent(AbstractBase, ValidationMixin):
     """
-    Model for recurring projects.
-
-    Defines a project template that generates new project instances
-    according to a recurrence pattern.
+    ProjectComponent model representing components used in a project.
     """
 
-    __tablename__ = "recurring_projects"
-
-    id = Column(String, primary_key=True)
-    name = Column(String(100), nullable=False)
-    description = Column(Text, nullable=True)
-    project_type = Column(String(50), nullable=False)
-    skill_level = Column(String(50), nullable=True)
-    duration = Column(Integer, nullable=True)  # In hours
-    is_active = Column(Boolean, default=True)
-    auto_generate = Column(Boolean, default=True)
-    advance_notice_days = Column(Integer, nullable=True)
-    project_suffix = Column(String(50), nullable=True)
-
-    recurrence_pattern_id = Column(
-        String, ForeignKey("recurrence_patterns.id"), nullable=False
-    )
-    template_id = Column(String, ForeignKey("project_templates.id"), nullable=True)
-    client_id = Column(String, ForeignKey("customers.id"), nullable=True)
-
-    next_occurrence = Column(Date, nullable=True)
-    last_occurrence = Column(Date, nullable=True)
-    total_occurrences = Column(Integer, default=0)
-
-    created_by = Column(String, nullable=True)
+    __tablename__ = "project_components"
 
     # Relationships
-    recurrence_pattern = relationship(
-        "RecurrencePattern", back_populates="recurring_projects"
-    )
-    generated_projects = relationship(
-        "GeneratedProject", back_populates="recurring_project"
-    )
-
-    @validates("project_type")
-    def validate_project_type(self, key, value):
-        """Validate project type."""
-        try:
-            ProjectType(value)
-        except ValueError:
-            raise ValueError(f"Invalid project_type: {value}")
-        return value
-
-    @validates("skill_level")
-    def validate_skill_level(self, key, value):
-        """Validate skill level if provided."""
-        if value is not None:
-            try:
-                SkillLevel(value)
-            except ValueError:
-                raise ValueError(f"Invalid skill_level: {value}")
-        return value
-
-
-class GeneratedProject(AbstractBase, ValidationMixin, TimestampMixin):
-    """
-    Model for tracking projects generated from recurring projects.
-
-    Links recurring projects to their generated instances.
-    """
-
-    __tablename__ = "generated_projects"
-
-    id = Column(String, primary_key=True)
-    recurring_project_id = Column(
-        String, ForeignKey("recurring_projects.id"), nullable=False
-    )
-    project_id = Column(String, ForeignKey("projects.id"), nullable=False)
-    occurrence_number = Column(Integer, nullable=False)
-    scheduled_date = Column(Date, nullable=False)
-    actual_generation_date = Column(DateTime, nullable=False, default=datetime.utcnow)
-    status = Column(String(20), nullable=False, default="generated")
-    notes = Column(Text, nullable=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    component_id = Column(Integer, ForeignKey("components.id"), nullable=False)
+    quantity = Column(Integer, default=1)
 
     # Relationships
-    recurring_project = relationship(
-        "RecurringProject", back_populates="generated_projects"
-    )
-    project = relationship("Project")
+    project = relationship("Project", back_populates="components")
+    component = relationship("Component", back_populates="project_components")
 
-    @validates("status")
-    def validate_status(self, key, value):
-        """Validate status value."""
-        valid_statuses = ["scheduled", "generated", "skipped", "failed", "orphaned"]
-        if value.lower() not in valid_statuses:
-            raise ValueError(
-                f"Invalid status: {value}. Must be one of {valid_statuses}"
-            )
-        return value.lower()
+    @validates("quantity")
+    def validate_quantity(self, key: str, quantity: int) -> int:
+        if quantity < 1:
+            raise ValueError("Component quantity must be at least 1")
+        return quantity
+
+    def __repr__(self) -> str:
+        return f"<ProjectComponent(project_id={self.project_id}, component_id={self.component_id}, quantity={self.quantity})>"
+
+
+class ProjectTemplate(AbstractBase, ValidationMixin, TimestampMixin):
+    """
+    ProjectTemplate model representing reusable project configurations.
+    """
+
+    __tablename__ = "project_templates"
+
+    # Basic information
+    name = Column(String(255), nullable=False)
+    description = Column(Text)
+    project_type = Column(Enum(ProjectType), nullable=False)
+    skill_level = Column(String(50))
+    estimated_duration = Column(Integer)
+    estimated_cost = Column(Float)
+    version = Column(String(50), default="1.0")
+    is_public = Column(Boolean, default=False)
+    tags = Column(JSON)
+    notes = Column(Text)
+
+    # Relationships
+    components = relationship(
+        "ProjectTemplateComponent",
+        back_populates="template",
+        cascade="all, delete-orphan"
+    )
+    projects = relationship("Project", back_populates="project_template")
+
+    @validates("name")
+    def validate_name(self, key: str, name: str) -> str:
+        """Validate project template name."""
+        if not name or len(name.strip()) < 3:
+            raise ValueError("Template name must be at least 3 characters long")
+        return name.strip()
+
+    def __repr__(self) -> str:
+        return f"<ProjectTemplate(id={self.id}, name='{self.name}', type={self.project_type})>"
+
+
+class ProjectTemplateComponent(AbstractBase, ValidationMixin):
+    """
+    ProjectTemplateComponent model representing components used in project templates.
+    """
+
+    __tablename__ = "project_template_components"
+
+    # Relationships
+    template_id = Column(Integer, ForeignKey("project_templates.id"), nullable=False)
+    component_id = Column(Integer, ForeignKey("components.id"), nullable=False)
+    quantity = Column(Integer, default=1)
+
+    # Relationships
+    template = relationship("ProjectTemplate", back_populates="components")
+    component = relationship("Component", back_populates="template_components")
+
+    @validates("quantity")
+    def validate_quantity(self, key: str, quantity: int) -> int:
+        """Validate component quantity."""
+        if quantity < 1:
+            raise ValueError("Component quantity must be at least 1")
+        return quantity
+
+    def __repr__(self) -> str:
+        return f"<ProjectTemplateComponent(template_id={self.template_id}, component_id={self.component_id}, quantity={self.quantity})>"
