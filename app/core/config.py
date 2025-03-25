@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     # Security
     SECRET_KEY: str = secrets.token_urlsafe(32)
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 8  # 8 days
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 30  # 30 days for refresh tokens
+    FRONTEND_URL: str = "http://localhost:3000"  # For password reset links
 
     # JWT Settings
     JWT_ALGORITHM: str = "HS256"
@@ -161,6 +163,7 @@ class Settings(BaseSettings):
 
     class Config:
         """Pydantic settings configuration."""
+
         from_attributes = True
         case_sensitive = True
         env_file = ".env"

@@ -46,7 +46,9 @@ def decamelize_keys(data: Any) -> Any:
     Recursively convert all keys in dictionaries (and lists) from camelCase to snake_case.
     """
     if isinstance(data, dict):
-        return {camel_to_snake(key): decamelize_keys(value) for key, value in data.items()}
+        return {
+            camel_to_snake(key): decamelize_keys(value) for key, value in data.items()
+        }
     elif isinstance(data, list):
         return [decamelize_keys(item) for item in data]
     else:
@@ -68,7 +70,9 @@ def apply_overrides(data: dict, overrides: dict) -> dict:
 def parse_arguments():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Set up the HideSync database.")
-    parser.add_argument("--seed", action="store_true", help="Seed the database with initial data")
+    parser.add_argument(
+        "--seed", action="store_true", help="Seed the database with initial data"
+    )
     parser.add_argument(
         "--seed-file",
         type=str,
@@ -218,7 +222,12 @@ def seed_database(seed_file: str) -> bool:
         # Add other entity-specific overrides as needed.
     }
 
-    def create_entity(entity_type: str, item_data: Dict[str, Any], session, entity_ids: Dict[str, Dict[int, str]]):
+    def create_entity(
+        entity_type: str,
+        item_data: Dict[str, Any],
+        session,
+        entity_ids: Dict[str, Dict[int, str]],
+    ):
         from app.db.models import (
             Customer,
             Supplier,
@@ -373,6 +382,7 @@ def seed_database(seed_file: str) -> bool:
     ]
 
     from app.db.session import SessionLocal
+
     try:
         session = SessionLocal()
         entity_ids = {}  # Track new IDs for foreign key resolution.
@@ -386,16 +396,22 @@ def seed_database(seed_file: str) -> bool:
 
                 for idx, item_data in enumerate(entities_data, 1):
                     try:
-                        entity = create_entity(entity_type, item_data, session, entity_ids)
+                        entity = create_entity(
+                            entity_type, item_data, session, entity_ids
+                        )
                         if entity is not None:
                             session.add(entity)
                             session.flush()  # Get assigned ID.
                             entity_ids[entity_type][idx] = entity.id
                         else:
-                            logger.warning(f"Skipping entity creation for {entity_type} (index {idx})")
+                            logger.warning(
+                                f"Skipping entity creation for {entity_type} (index {idx})"
+                            )
                     except Exception as e:
                         session.rollback()
-                        logger.error(f"Error creating {entity_type} entity (index {idx}): {str(e)}")
+                        logger.error(
+                            f"Error creating {entity_type} entity (index {idx}): {str(e)}"
+                        )
                         raise
         session.commit()
         logger.info("Database seeding completed successfully")
@@ -404,6 +420,7 @@ def seed_database(seed_file: str) -> bool:
         session.rollback()
         logger.error(f"Error seeding database: {str(e)}")
         import traceback
+
         logger.error(traceback.format_exc())
         return False
     finally:
@@ -415,6 +432,7 @@ def main():
     args = parse_arguments()
 
     from app.core.config import settings
+
     db_path = os.path.abspath(settings.DATABASE_PATH)
     encryption_key = settings.DATABASE_ENCRYPTION_KEY
 

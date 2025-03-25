@@ -35,7 +35,8 @@ from app.repositories.component_repository import (
 from app.repositories.documentation_repository import (
     DocumentationResourceRepository,
     DocumentationCategoryRepository,
-    RefundRepository,
+    ApplicationContextRepository,
+    ContextualHelpMappingRepository,
 )
 from app.repositories.picking_list_repository import (
     PickingListRepository,
@@ -52,6 +53,17 @@ from app.repositories.recurring_project_repository import (
 )
 from app.repositories.shipment_repository import ShipmentRepository
 from app.repositories.timeline_task_repository import TimelineTaskRepository
+from app.repositories.refund_repository import RefundRepository
+# New imports
+from app.repositories.communication_repository import CommunicationRepository
+from app.repositories.customer_communication_repository import CustomerCommunicationRepository
+from app.repositories.file_metadata_repository import FileMetadataRepository
+from app.repositories.inventory_transaction_repository import InventoryTransactionRepository
+from app.repositories.password_reset_repository import PasswordResetRepository
+from app.repositories.role_repository import RoleRepository, PermissionRepository
+from app.repositories.supplier_history_repository import SupplierHistoryRepository
+from app.repositories.supplier_rating_repository import SupplierRatingRepository
+from app.repositories.user_repository import UserRepository
 
 
 class RepositoryFactory:
@@ -181,6 +193,18 @@ class RepositoryFactory:
         """Create a DocumentationCategoryRepository instance."""
         return DocumentationCategoryRepository(self.session, self.encryption_service)
 
+    def create_application_context_repository(
+        self,
+    ) -> ApplicationContextRepository:
+        """Create an ApplicationContextRepository instance."""
+        return ApplicationContextRepository(self.session, self.encryption_service)
+
+    def create_contextual_help_mapping_repository(
+        self,
+    ) -> ContextualHelpMappingRepository:
+        """Create a ContextualHelpMappingRepository instance."""
+        return ContextualHelpMappingRepository(self.session, self.encryption_service)
+
     def create_refund_repository(self) -> RefundRepository:
         """Create a RefundRepository instance."""
         return RefundRepository(self.session, self.encryption_service)
@@ -225,3 +249,51 @@ class RepositoryFactory:
     def create_timeline_task_repository(self) -> TimelineTaskRepository:
         """Create a TimelineTaskRepository instance."""
         return TimelineTaskRepository(self.session, self.encryption_service)
+
+    # Communications repositories
+    def create_communication_repository(self) -> CommunicationRepository:
+        """Create a CommunicationRepository instance."""
+        return CommunicationRepository(self.session, self.encryption_service)
+
+    def create_customer_communication_repository(self) -> CustomerCommunicationRepository:
+        """Create a CustomerCommunicationRepository instance."""
+        return CustomerCommunicationRepository(self.session, self.encryption_service)
+
+    # File metadata repositories
+    def create_file_metadata_repository(self) -> FileMetadataRepository:
+        """Create a FileMetadataRepository instance."""
+        return FileMetadataRepository(self.session, self.encryption_service)
+
+    # Inventory transaction repositories
+    def create_inventory_transaction_repository(self) -> InventoryTransactionRepository:
+        """Create an InventoryTransactionRepository instance."""
+        return InventoryTransactionRepository(self.session, self.encryption_service)
+
+    # Password reset repositories
+    def create_password_reset_repository(self) -> PasswordResetRepository:
+        """Create a PasswordResetRepository instance."""
+        return PasswordResetRepository(self.session, self.encryption_service)
+
+    # Role and permission repositories
+    def create_role_repository(self) -> RoleRepository:
+        """Create a RoleRepository instance."""
+        return RoleRepository(self.session, self.encryption_service)
+
+    def create_permission_repository(self) -> PermissionRepository:
+        """Create a PermissionRepository instance."""
+        return PermissionRepository(self.session, self.encryption_service)
+
+    # Supplier history repositories
+    def create_supplier_history_repository(self) -> SupplierHistoryRepository:
+        """Create a SupplierHistoryRepository instance."""
+        return SupplierHistoryRepository(self.session, self.encryption_service)
+
+    # Supplier rating repositories
+    def create_supplier_rating_repository(self) -> SupplierRatingRepository:
+        """Create a SupplierRatingRepository instance."""
+        return SupplierRatingRepository(self.session, self.encryption_service)
+
+    # User repositories
+    def create_user_repository(self) -> UserRepository:
+        """Create a UserRepository instance."""
+        return UserRepository(self.session, self.encryption_service)

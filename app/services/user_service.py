@@ -1,180 +1,250 @@
-# File: app/services/user_service.py
+# app/services/user_service.py (updates)
+"""
+User service for HideSync.
 
-from typing import Optional, List, Any, Dict, Union
-from datetime import datetime
+This module provides functionality for user management,
+authentication, and authorization.
+"""
+
+# app/services/user_service.py
+"""
+User service for HideSync.
+
+This module provides functionality for user management,
+authentication, and authorization.
+"""
+
+from typing import Optional, List, Dict, Any
+from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
-from fastapi.encoders import jsonable_encoder
+import secrets
+from jose import jwt, JWTError
+from pydantic import ValidationError
 
-from app.db.models.user import User
-from app.schemas.user import UserCreate, UserUpdate
-from app.core.security import get_password_hash, verify_password
+from app import schemas
 from app.services.base_service import BaseService
-from app.core.exceptions import EntityNotFoundException, BusinessRuleException
+from app.db.models.user import User
+from app.db.models.password_reset import PasswordResetToken
+from app.repositories.user_repository import UserRepository
+from app.repositories.password_reset_repository import PasswordResetRepository
+from app.core.exceptions import (
+    EntityNotFoundException,
+    AuthenticationException,
+    BusinessRuleException,
+)
+from app.core.security import (
+    get_password_hash,
+    verify_password,
+    create_access_token,
+    create_refresh_token,
+)
+from app.core.config import settings
+
+# Add these methods to the existing UserService class
 
 
 class UserService(BaseService[User]):
-    """
-    Service for managing user-related operations.
+    # Assume existing implementation...
 
-    Handles authentication, user creation, updates, and permissions.
-    """
-
-    def __init__(self, db: Session):
-        """Initialize user service with database session."""
-        super().__init__(db)
-        self.model = User
-
-    def get_by_email(self, email: str) -> Optional[User]:
-        """Retrieve a user by email address."""
-        return self.db.query(User).filter(User.email == email).first()
-
-    def get_by_username(self, username: str) -> Optional[User]:
-        """Retrieve a user by username."""
-        return self.db.query(User).filter(User.username == username).first()
-
-    def get_users(self, skip: int = 0, limit: int = 100) -> List[User]:
-        """Retrieve a list of users with pagination."""
-        return self.db.query(User).offset(skip).limit(limit).all()
-
-    def create_user(self, obj_in: UserCreate) -> User:
-        """
-        Create a new user.
-
-        Args:
-            obj_in: User data for creation
-
-        Raises:
-            BusinessRuleException: If email or username already exists
-
-        Returns:
-            User: Created user instance
-        """
-        # Check if email already exists
-        existing_email = self.get_by_email(obj_in.email)
-        if existing_email:
-            raise BusinessRuleException("The user with this email already exists")
-
-        # Check if username already exists
-        existing_username = self.get_by_username(obj_in.username)
-        if existing_username:
-            raise BusinessRuleException("The user with this username already exists")
-
-        # Create user with hashed password
-        db_obj = User(
-            email=obj_in.email,
-            username=obj_in.username,
-            hashed_password=get_password_hash(obj_in.password),
-            full_name=obj_in.full_name,
-            is_superuser=obj_in.is_superuser,
-            is_active=True,
+    def __init__(
+        self,
+        session: Session,
+        repository=None,
+        password_reset_repository=None,
+        security_context=None,
+        event_bus=None,
+        cache_service=None,
+        email_service=None,
+    ):
+        """Initialize with updated dependencies"""
+        # Existing initialization...
+        self.password_reset_repository = (
+            password_reset_repository or PasswordResetRepository(session)
         )
+        self.email_service = email_service
 
-        self.db.add(db_obj)
-        self.db.commit()
-        self.db.refresh(db_obj)
-        return db_obj
-
-    def update_user(
-        self, user_id: int, obj_in: Union[UserUpdate, Dict[str, Any]]
-    ) -> User:
+    def request_password_reset(self, email: str) -> bool:
         """
-        Update a user's information.
+        Request a password reset for a user.
 
         Args:
-            user_id: ID of the user to update
-            obj_in: Update data, either as UserUpdate schema or dict
-
-        Raises:
-            EntityNotFoundException: If user doesn't exist
+            email: User email address
 
         Returns:
-            User: Updated user instance
+            True if request was processed (whether user exists or not)
         """
-        db_obj = self.get(user_id)
-        if not db_obj:
-            raise EntityNotFoundException("User not found")
+        # Find the user by email
+        user = self.repository.get_by_email(email)
 
-        # Convert to dict if it's a Pydantic model
-        update_data = (
-            obj_in if isinstance(obj_in, dict) else obj_in.dict(exclude_unset=True)
-        )
-
-        # Handle password update - hash the new password
-        if "password" in update_data and update_data["password"]:
-            hashed_password = get_password_hash(update_data["password"])
-            del update_data["password"]
-            update_data["hashed_password"] = hashed_password
-
-        # Update user data
-        for field in update_data:
-            if hasattr(db_obj, field):
-                setattr(db_obj, field, update_data[field])
-
-        self.db.add(db_obj)
-        self.db.commit()
-        self.db.refresh(db_obj)
-        return db_obj
-
-    def delete_user(self, user_id: int) -> User:
-        """
-        Delete a user.
-
-        Args:
-            user_id: ID of the user to delete
-
-        Raises:
-            EntityNotFoundException: If user doesn't exist
-
-        Returns:
-            User: The deleted user
-        """
-        user = self.get(user_id)
+        # Don't reveal if user exists or not for security
         if not user:
-            raise EntityNotFoundException("User not found")
+            return True
 
-        self.db.delete(user)
-        self.db.commit()
-        return user
+        with self.transaction():
+            # Invalidate any existing tokens
+            self.password_reset_repository.invalidate_all_for_user(user.id)
 
-    def authenticate(self, email: str, password: str) -> Optional[User]:
+            # Create a new reset token
+            token = self.password_reset_repository.create_for_user(user.id)
+
+            # Send email with reset link
+            if self.email_service:
+                reset_url = (
+                    f"{settings.FRONTEND_URL}/reset-password?token={token.token}"
+                )
+                self.email_service.send_password_reset_email(
+                    user.email, user.full_name, reset_url
+                )
+
+            return True
+
+    def validate_reset_token(self, token_str: str) -> Optional[User]:
         """
-        Authenticate a user with email and password.
+        Validate a password reset token.
 
         Args:
-            email: User's email
-            password: User's password
+            token_str: Password reset token string
 
         Returns:
-            User if authentication is successful, None otherwise
+            User if token is valid, None otherwise
         """
-        user = self.get_by_email(email)
-        if not user:
-            return None
-        if not verify_password(password, user.hashed_password):
+        # Find the token
+        token = self.password_reset_repository.get_by_token(token_str)
+
+        # Check if token exists and is valid
+        if not token or not token.is_valid:
             return None
 
-        # Update last login timestamp
-        user.last_login = datetime.now()
-        self.db.add(user)
-        self.db.commit()
-        self.db.refresh(user)
-
+        # Get user
+        user = self.repository.get_by_id(token.user_id)
         return user
 
-    def is_active(self, user: User) -> bool:
-        """Check if user is active."""
-        return user.is_active
+    def reset_password(self, token_str: str, new_password: str) -> bool:
+        """
+        Reset a user's password using a token.
 
-    def is_superuser(self, user: User) -> bool:
-        """Check if user has superuser privileges."""
-        return user.is_superuser
+        Args:
+            token_str: Password reset token string
+            new_password: New password
 
-    def to_dict(self, user: User) -> Dict:
-        """Convert user model to dictionary without sensitive data."""
-        user_data = jsonable_encoder(user)
+        Returns:
+            True if password was reset
 
-        # Remove sensitive fields
-        if "hashed_password" in user_data:
-            del user_data["hashed_password"]
+        Raises:
+            AuthenticationException: If token is invalid
+            BusinessRuleException: If password doesn't meet requirements
+        """
+        with self.transaction():
+            # Validate token
+            token = self.password_reset_repository.get_by_token(token_str)
+            if not token or not token.is_valid:
+                raise AuthenticationException("Invalid or expired password reset token")
 
-        return user_data
+            # Validate password strength
+            if len(new_password) < 8:
+                raise BusinessRuleException(
+                    "Password must be at least 8 characters long"
+                )
+
+            # Get user
+            user = self.repository.get_by_id(token.user_id)
+            if not user:
+                raise EntityNotFoundException("User", token.user_id)
+
+            # Update password
+            hashed_password = get_password_hash(new_password)
+            self.repository.update(user.id, {"hashed_password": hashed_password})
+
+            # Mark token as used
+            self.password_reset_repository.mark_used(token.id)
+
+            return True
+
+    def change_password(
+        self, user_id: int, current_password: str, new_password: str
+    ) -> bool:
+        """
+        Change a user's password.
+
+        Args:
+            user_id: User ID
+            current_password: Current password
+            new_password: New password
+
+        Returns:
+            True if password was changed
+
+        Raises:
+            EntityNotFoundException: If user not found
+            AuthenticationException: If current password is incorrect
+            BusinessRuleException: If new password doesn't meet requirements
+        """
+        with self.transaction():
+            # Get user
+            user = self.repository.get_by_id(user_id)
+            if not user:
+                raise EntityNotFoundException("User", user_id)
+
+            # Verify current password
+            if not verify_password(current_password, user.hashed_password):
+                raise AuthenticationException("Current password is incorrect")
+
+            # Validate new password
+            if len(new_password) < 8:
+                raise BusinessRuleException(
+                    "Password must be at least 8 characters long"
+                )
+
+            if current_password == new_password:
+                raise BusinessRuleException(
+                    "New password must be different from current password"
+                )
+
+            # Update password
+            hashed_password = get_password_hash(new_password)
+            self.repository.update(user_id, {"hashed_password": hashed_password})
+
+            return True
+
+    def refresh_token(self, refresh_token: str) -> Dict[str, Any]:
+        """
+        Refresh an access token using a refresh token.
+
+        Args:
+            refresh_token: Refresh token
+
+        Returns:
+            Dict with new access token and refresh token
+
+        Raises:
+            AuthenticationException: If refresh token is invalid
+        """
+        # Verify refresh token
+        try:
+            payload = jwt.decode(
+                refresh_token, settings.SECRET_KEY, algorithms=[security.ALGORITHM]
+            )
+            token_data = schemas.TokenPayload(**payload)
+        except (jwt.JWTError, ValidationError):
+            raise AuthenticationException("Invalid refresh token")
+
+        # Get user
+        user = self.repository.get_by_id(token_data.sub)
+        if not user or not user.is_active:
+            raise AuthenticationException("Invalid refresh token")
+
+        # Create new tokens
+        access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        refresh_token_expires = timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+
+        access_token = create_access_token(user.id, expires_delta=access_token_expires)
+        new_refresh_token = create_refresh_token(
+            user.id, expires_delta=refresh_token_expires
+        )
+
+        return {
+            "access_token": access_token,
+            "refresh_token": new_refresh_token,
+            "token_type": "bearer",
+            "expires_in": settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        }

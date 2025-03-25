@@ -390,3 +390,76 @@ def connect_platform(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Connection failed: {str(e)}",
         )
+
+
+@router.get("/{integration_id}/sync-events", response_model=List[SyncEvent])
+def get_sync_events_alias(
+        *,
+        db: Session = Depends(get_db),
+        integration_id: str = Path(..., description="The ID of the integration"),
+        skip: int = Query(0, ge=0, description="Number of records to skip"),
+        limit: int = Query(
+            100, ge=1, le=1000, description="Maximum number of records to return"
+        ),
+        current_user: Any = Depends(get_current_active_user),
+) -> List[SyncEvent]:
+    """
+    Get synchronization events for a platform integration.
+
+    This is an alias for the 'get_sync_events' endpoint to maintain
+    naming consistency with the enhancement plan.
+
+    Args:
+        db: Database session
+        integration_id: ID of the integration
+        skip: Number of records to skip for pagination
+        limit: Maximum number of records to return
+        current_user: Currently authenticated user
+
+    Returns:
+        List of synchronization events
+
+    Raises:
+        HTTPException: If the integration doesn't exist
+    """
+    integration_service = PlatformIntegrationService(db)
+    try:
+        return integration_service.get_sync_events(integration_id, skip, limit)
+    except EntityNotFoundException:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Platform integration with ID {integration_id} not found",
+        )
+
+
+@router.get("/{integration_id}/with-details", response_model=Dict[str, Any])
+def get_integration_with_details(
+        *,
+        db: Session = Depends(get_db),
+        integration_id: str = Path(
+            ..., description="The ID of the integration to retrieve with details"
+        ),
+        current_user: Any = Depends(get_current_active_user),
+) -> Dict[str, Any]:
+    """
+    Get detailed information about a platform integration, including sync statistics.
+
+    Args:
+        db: Database session
+        integration_id: ID of the integration to retrieve
+        current_user: Currently authenticated user
+
+    Returns:
+        Platform integration information with detailed statistics and sync history
+
+    Raises:
+        HTTPException: If the integration doesn't exist
+    """
+    integration_service = PlatformIntegrationService(db)
+    try:
+        return integration_service.get_integration_with_details(integration_id)
+    except EntityNotFoundException:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Platform integration with ID {integration_id} not found",
+        )

@@ -40,3 +40,5 @@ starlette==0.46.1
 tomli==2.2.1
 typing_extensions==4.12.2
 uvicorn==0.34.0
+qrcode==7.4.2
+pillow==10.0.0  # Required for image generation with qrcode

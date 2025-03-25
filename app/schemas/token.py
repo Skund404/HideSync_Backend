@@ -16,6 +16,7 @@ class Token(BaseModel):
 
     Contains the token value and type for OAuth2-compatible responses.
     """
+
     access_token: str = ...
     token_type: str = ...
 
@@ -26,5 +27,6 @@ class TokenPayload(BaseModel):
 
     Contains user identifiers and other token-specific data.
     """
+
     sub: Optional[int] = None
     exp: Optional[int] = None

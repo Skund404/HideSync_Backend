@@ -25,10 +25,11 @@ from app.services.inventory_service import InventoryService
 from app.core.exceptions import (
     EntityNotFoundException,
     BusinessRuleException,
-
     StorageLocationNotFoundException,
 )
-from app.core.exceptions import InsufficientInventoryException as InsufficientQuantityException
+from app.core.exceptions import (
+    InsufficientInventoryException as InsufficientQuantityException,
+)
 
 router = APIRouter()
 

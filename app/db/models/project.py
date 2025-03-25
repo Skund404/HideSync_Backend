@@ -1,6 +1,6 @@
 # File: app/db/models/project.py
 """
-Project model for the Leathercraft ERP system.
+Project model for the HideSync ERP system.
 """
 
 from typing import List, Optional, Dict, Any, ClassVar, Set
@@ -16,6 +16,7 @@ from sqlalchemy import (
     ForeignKey,
     DateTime,
     Boolean,
+    JSON,
 )
 from sqlalchemy.orm import relationship, validates
 from sqlalchemy.ext.hybrid import hybrid_property
@@ -53,7 +54,7 @@ class Project(AbstractBase, ValidationMixin, TimestampMixin):
     customer = Column(String(255), nullable=True)
     notes = Column(Text)
 
-    # Relationships
+    # More relationships
     sale = relationship("Sale", back_populates="projects")
     project_template = relationship("ProjectTemplate", back_populates="projects")
     components = relationship(
@@ -85,7 +86,7 @@ class Project(AbstractBase, ValidationMixin, TimestampMixin):
     def validate_start_date(
         self, key: str, start_date: Optional[datetime]
     ) -> Optional[datetime]:
-        """Validate project start date.  Must be before due_date, if set"""
+        """Validate project start date. Must be before due_date, if set"""
         if start_date and self.due_date and start_date > self.due_date:
             raise ValueError("Start date must be before due date")
         return start_date
@@ -204,3 +205,68 @@ class ProjectComponent(AbstractBase, ValidationMixin):
 
     def __repr__(self) -> str:
         return f"<ProjectComponent(project_id={self.project_id}, component_id={self.component_id}, quantity={self.quantity})>"
+
+
+class ProjectTemplate(AbstractBase, ValidationMixin, TimestampMixin):
+    """
+    ProjectTemplate model representing reusable project configurations.
+    """
+
+    __tablename__ = "project_templates"
+
+    # Basic information
+    name = Column(String(255), nullable=False)
+    description = Column(Text)
+    project_type = Column(Enum(ProjectType), nullable=False)
+    skill_level = Column(String(50))
+    estimated_duration = Column(Integer)
+    estimated_cost = Column(Float)
+    version = Column(String(50), default="1.0")
+    is_public = Column(Boolean, default=False)
+    tags = Column(JSON)
+    notes = Column(Text)
+
+    # Relationships
+    components = relationship(
+        "ProjectTemplateComponent",
+        back_populates="template",
+        cascade="all, delete-orphan"
+    )
+    projects = relationship("Project", back_populates="project_template")
+
+    @validates("name")
+    def validate_name(self, key: str, name: str) -> str:
+        """Validate project template name."""
+        if not name or len(name.strip()) < 3:
+            raise ValueError("Template name must be at least 3 characters long")
+        return name.strip()
+
+    def __repr__(self) -> str:
+        return f"<ProjectTemplate(id={self.id}, name='{self.name}', type={self.project_type})>"
+
+
+class ProjectTemplateComponent(AbstractBase, ValidationMixin):
+    """
+    ProjectTemplateComponent model representing components used in project templates.
+    """
+
+    __tablename__ = "project_template_components"
+
+    # Relationships
+    template_id = Column(Integer, ForeignKey("project_templates.id"), nullable=False)
+    component_id = Column(Integer, ForeignKey("components.id"), nullable=False)
+    quantity = Column(Integer, default=1)
+
+    # Relationships
+    template = relationship("ProjectTemplate", back_populates="components")
+    component = relationship("Component", back_populates="template_components")
+
+    @validates("quantity")
+    def validate_quantity(self, key: str, quantity: int) -> int:
+        """Validate component quantity."""
+        if quantity < 1:
+            raise ValueError("Component quantity must be at least 1")
+        return quantity
+
+    def __repr__(self) -> str:
+        return f"<ProjectTemplateComponent(template_id={self.template_id}, component_id={self.component_id}, quantity={self.quantity})>"
