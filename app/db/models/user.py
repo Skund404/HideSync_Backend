@@ -32,6 +32,9 @@ class User(Base, AuditMixin, TimestampMixin):
     files = relationship(
         "FileMetadata", back_populates="user", cascade="all, delete-orphan"
     )
+    annotations = relationship(
+        "Annotation", back_populates="user", cascade="all, delete-orphan"
+    )
 
     # Add sensitive fields marker for encryption
     SENSITIVE_FIELDS = ["hashed_password"]

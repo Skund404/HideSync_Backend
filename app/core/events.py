@@ -1,5 +1,3 @@
-# File: app/core/events.py
-
 from typing import (
     Dict,
     Any,
@@ -11,6 +9,7 @@ from typing import (
     TypeVar,
     Generic,
     Type,
+    Coroutine,
 )
 from collections import defaultdict
 from dataclasses import dataclass, field, asdict
@@ -26,7 +25,7 @@ logger = logging.getLogger(__name__)
 # Type definitions for better type hinting
 T = TypeVar("T", bound="DomainEvent")
 EventHandler = Callable[[T], None]
-AsyncEventHandler = Callable[[T], asyncio.coroutine]
+AsyncEventHandler = Callable[[T], Coroutine[Any, Any, None]]
 
 
 @dataclass
@@ -69,7 +68,7 @@ class EventBus:
         event_type = type(event).__name__
         logger.debug(f"Publishing event {event_type} with ID {event.event_id}")
 
-        # Make a local copy of subscribers to avoid issues if the list is modified during iteration
+        # Make a local copy of subscribers to avoid issues if the list is modified
         subscribers = list(self.subscribers[event_type])
 
         for subscriber in subscribers:
@@ -93,7 +92,7 @@ class EventBus:
         logger.debug(f"Publishing async event {event_type} with ID {event.event_id}")
 
         async with self._lock:
-            # Make a local copy of subscribers to avoid issues if the list is modified during iteration
+            # Make a local copy of subscribers to avoid issues if the list is modified
             subscribers = list(self.subscribers[event_type])
 
         tasks = []

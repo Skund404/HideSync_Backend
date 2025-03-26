@@ -14,6 +14,7 @@ from app.db.models.enums import CommunicationChannel, CommunicationType
 from app.core.events import DomainEvent
 from app.core.exceptions import EntityNotFoundException, ValidationException
 from app.core.validation import validate_entity, validate_input
+from app.services.customer_service import validate_customer  # Updated import
 
 logger = logging.getLogger(__name__)
 
@@ -459,7 +460,6 @@ class CustomerCommunicationService(BaseService[CustomerCommunication]):
         channel_stats = self.repository.get_communication_stats_by_channel(days)
 
         # Calculate response rates
-        # This would need to be implemented in the repository
         response_stats = {"total": 0, "responded": 0, "avg_response_time": 0}
 
         return {

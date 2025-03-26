@@ -1,4 +1,4 @@
-# File: app/schemas/token.py
+# app/schemas/token.py
 """
 Authentication token schemas for the HideSync API.
 
@@ -7,7 +7,7 @@ including access tokens and token payloads.
 """
 
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class Token(BaseModel):
@@ -16,8 +16,11 @@ class Token(BaseModel):
 
     Contains the token value and type for OAuth2-compatible responses.
     """
-    access_token: str = ...
-    token_type: str = ...
+
+    access_token: str
+    token_type: str
+    refresh_token: Optional[str] = None
+    expires_in: Optional[int] = None
 
 
 class TokenPayload(BaseModel):
@@ -26,5 +29,12 @@ class TokenPayload(BaseModel):
 
     Contains user identifiers and other token-specific data.
     """
+
     sub: Optional[int] = None
     exp: Optional[int] = None
+
+
+class TokenRefresh(BaseModel):
+    """Schema for refresh token request."""
+
+    refresh_token: str = Field(..., description="Refresh token")

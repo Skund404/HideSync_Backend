@@ -12,24 +12,53 @@ from datetime import datetime, date
 from pydantic import BaseModel, Field, EmailStr, validator, RootModel
 
 from app.db.models.enums import (
-    SaleStatus, PaymentStatus, FulfillmentStatus, CustomerStatus, CustomerTier,
-    CustomerSource, InventoryStatus, MaterialType, MaterialQualityGrade,
-    ProjectStatus, ProjectType, ToolCategory, StorageLocationType,
-    SupplierStatus, PickingListStatus, ComponentType, SkillLevel, UserRole
+    SaleStatus,
+    PaymentStatus,
+    FulfillmentStatus,
+    CustomerStatus,
+    CustomerTier,
+    CustomerSource,
+    InventoryStatus,
+    MaterialType,
+    MaterialQualityGrade,
+    ProjectStatus,
+    ProjectType,
+    ToolCategory,
+    StorageLocationType,
+    SupplierStatus,
+    PickingListStatus,
+    ComponentType,
+    SkillLevel,
+    UserRole,
+)
+
+# Import the authentication and user schemas from their modules
+from .token import Token, TokenPayload, TokenRefresh
+from .user import (
+    User,
+    UserPasswordReset,
+    UserPasswordResetConfirm,
+    UserPasswordChange,
+    UserListParams
 )
 
 # ===============================
 # AUTH SCHEMAS
 # ===============================
 
+
 class Token(BaseModel):
     """Token schema for authentication."""
+
     access_token: str
     token_type: str
+    refresh_token: Optional[str] = None
+    expires_in: Optional[int] = None
 
 
 class TokenPayload(BaseModel):
     """Token payload schema."""
+
     sub: Optional[int] = None
     exp: Optional[int] = None
 
@@ -38,8 +67,10 @@ class TokenPayload(BaseModel):
 # USER SCHEMAS
 # ===============================
 
+
 class UserBase(BaseModel):
     """Base user model with common fields."""
+
     email: EmailStr
     username: str
     is_active: Optional[bool] = True
@@ -51,6 +82,7 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     """Schema for creating a user."""
+
     password: str
 
     class Config:
@@ -59,6 +91,7 @@ class UserCreate(UserBase):
 
 class UserUpdate(BaseModel):
     """Schema for updating a user."""
+
     email: Optional[EmailStr] = None
     username: Optional[str] = None
     password: Optional[str] = None
@@ -71,6 +104,7 @@ class UserUpdate(BaseModel):
 
 class User(UserBase):
     """User model as expected by endpoint files."""
+
     id: int
     created_at: datetime
     updated_at: datetime
@@ -81,33 +115,18 @@ class User(UserBase):
 
 class UserWithPermissions(User):
     """User model with additional permissions information."""
+
     permissions: Set[str] = set()
     role_name: Optional[str] = None
-
-
-class PasswordReset(BaseModel):
-    """Schema for password reset requests."""
-    email: EmailStr
-
-
-class PasswordChange(BaseModel):
-    """Schema for password change requests."""
-    old_password: str
-    new_password: str
-
-    @validator('new_password')
-    def password_strength(cls, v):
-        if len(v) < 8:
-            raise ValueError('Password must be at least 8 characters long')
-        return v
-
 
 # ===============================
 # CUSTOMER SCHEMAS
 # ===============================
 
+
 class Customer(BaseModel):
     """Customer model as expected by endpoint files."""
+
     id: int
     name: str
     email: EmailStr
@@ -127,6 +146,7 @@ class Customer(BaseModel):
 
 class CustomerCreate(BaseModel):
     """Schema for creating a customer."""
+
     name: str
     email: EmailStr
     phone: Optional[str] = None
@@ -140,6 +160,7 @@ class CustomerCreate(BaseModel):
 
 class CustomerUpdate(BaseModel):
     """Schema for updating a customer."""
+
     name: Optional[str] = None
     email: Optional[EmailStr] = None
     phone: Optional[str] = None
@@ -153,6 +174,7 @@ class CustomerUpdate(BaseModel):
 
 class CustomerSearchParams(BaseModel):
     """Search parameters for customers."""
+
     status: Optional[str] = None
     tier: Optional[str] = None
     search: Optional[str] = None
@@ -160,6 +182,7 @@ class CustomerSearchParams(BaseModel):
 
 class CustomerWithSales(Customer):
     """Customer model with sales history."""
+
     sales: List[Any] = []
     total_spent: float = 0.0
     average_order_value: float = 0.0
@@ -172,8 +195,10 @@ class CustomerWithSales(Customer):
 # SALE SCHEMAS
 # ===============================
 
+
 class SaleItem(BaseModel):
     """Sale item model."""
+
     id: int
     sale_id: int
     quantity: int
@@ -193,6 +218,7 @@ class SaleItem(BaseModel):
 
 class SaleItemCreate(BaseModel):
     """Schema for creating a sale item."""
+
     quantity: int
     price: float
     tax: Optional[float] = 0.0
@@ -207,6 +233,7 @@ class SaleItemCreate(BaseModel):
 
 class Sale(BaseModel):
     """Sale model."""
+
     id: int
     customer_id: int
     created_at: datetime
@@ -239,6 +266,7 @@ class Sale(BaseModel):
 
 class SaleCreate(BaseModel):
     """Schema for creating a sale."""
+
     customer_id: int
     due_date: Optional[datetime] = None
     subtotal: Optional[float] = None
@@ -266,6 +294,7 @@ class SaleCreate(BaseModel):
 
 class SaleUpdate(BaseModel):
     """Schema for updating a sale."""
+
     customer_id: Optional[int] = None
     due_date: Optional[datetime] = None
     completed_date: Optional[datetime] = None
@@ -293,6 +322,7 @@ class SaleUpdate(BaseModel):
 
 class SaleSearchParams(BaseModel):
     """Search parameters for sales."""
+
     status: Optional[str] = None
     customer_id: Optional[int] = None
     start_date: Optional[str] = None
@@ -303,18 +333,21 @@ class SaleSearchParams(BaseModel):
 
 class SaleWithDetails(Sale):
     """Sale with additional details."""
+
     items: List[SaleItem] = []
     customer: Optional[Customer] = None
 
 
 class SaleStatusUpdate(BaseModel):
     """Schema for updating sale status."""
+
     status: str
     notes: Optional[str] = None
 
 
 class PaymentUpdate(BaseModel):
     """Schema for updating payment status."""
+
     payment_status: str
     amount: Optional[float] = None
     payment_date: Optional[datetime] = None
@@ -327,8 +360,10 @@ class PaymentUpdate(BaseModel):
 # MATERIAL SCHEMAS
 # ===============================
 
+
 class Material(BaseModel):
     """Material model."""
+
     id: int
     name: str
     material_type: MaterialType
@@ -356,11 +391,13 @@ class Material(BaseModel):
 
 class MaterialCreate(RootModel):
     """Union type for creating any material type."""
+
     root: Dict[str, Any]
 
 
 class MaterialUpdate(BaseModel):
     """Schema for updating material information."""
+
     name: Optional[str] = None
     status: Optional[str] = None
     quantity: Optional[float] = None
@@ -381,6 +418,7 @@ class MaterialUpdate(BaseModel):
 
 class MaterialSearchParams(BaseModel):
     """Search parameters for materials."""
+
     material_type: Optional[str] = None
     quality: Optional[str] = None
     in_stock: Optional[bool] = None
@@ -389,6 +427,7 @@ class MaterialSearchParams(BaseModel):
 
 class MaterialWithInventory(Material):
     """Material with inventory details."""
+
     inventory: List[Any] = []
     total_quantity: float = 0.0
     total_value: float = 0.0
@@ -399,8 +438,10 @@ class MaterialWithInventory(Material):
 # PROJECT SCHEMAS
 # ===============================
 
+
 class ProjectComponent(BaseModel):
     """Project component model."""
+
     id: int
     project_id: int
     component_id: int
@@ -414,12 +455,14 @@ class ProjectComponent(BaseModel):
 
 class ProjectComponentCreate(BaseModel):
     """Schema for adding a component to a project."""
+
     component_id: int
     quantity: int
 
 
 class TimelineTask(BaseModel):
     """Timeline task model."""
+
     id: str
     project_id: str
     name: str
@@ -438,6 +481,7 @@ class TimelineTask(BaseModel):
 
 class TimelineTaskCreate(BaseModel):
     """Schema for creating a timeline task."""
+
     name: str
     start_date: datetime
     end_date: datetime
@@ -450,6 +494,7 @@ class TimelineTaskCreate(BaseModel):
 
 class TimelineTaskUpdate(BaseModel):
     """Schema for updating a timeline task."""
+
     name: Optional[str] = None
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
@@ -461,6 +506,7 @@ class TimelineTaskUpdate(BaseModel):
 
 class Project(BaseModel):
     """Project model."""
+
     id: int
     name: str
     description: Optional[str] = None
@@ -484,6 +530,7 @@ class Project(BaseModel):
 
 class ProjectCreate(BaseModel):
     """Schema for creating a project."""
+
     name: str
     description: Optional[str] = None
     type: ProjectType
@@ -502,6 +549,7 @@ class ProjectCreate(BaseModel):
 
 class ProjectUpdate(BaseModel):
     """Schema for updating a project."""
+
     name: Optional[str] = None
     description: Optional[str] = None
     type: Optional[ProjectType] = None
@@ -519,6 +567,7 @@ class ProjectUpdate(BaseModel):
 
 class ProjectSearchParams(BaseModel):
     """Search parameters for projects."""
+
     status: Optional[str] = None
     type: Optional[str] = None
     customer_id: Optional[int] = None
@@ -527,6 +576,7 @@ class ProjectSearchParams(BaseModel):
 
 class ProjectWithDetails(Project):
     """Project with detailed information."""
+
     components: List[ProjectComponent] = []
     timeline_tasks: List[TimelineTask] = []
     materials_summary: Optional[Dict[str, Any]] = None
@@ -537,8 +587,10 @@ class ProjectWithDetails(Project):
 # INVENTORY SCHEMAS
 # ===============================
 
+
 class Inventory(BaseModel):
     """Inventory model."""
+
     id: int
     item_type: str
     item_id: int
@@ -557,6 +609,7 @@ class Inventory(BaseModel):
 
 class InventoryTransaction(BaseModel):
     """Inventory transaction model."""
+
     id: int
     item_type: str
     item_id: int
@@ -578,6 +631,7 @@ class InventoryTransaction(BaseModel):
 
 class InventoryTransactionCreate(BaseModel):
     """Schema for creating an inventory transaction."""
+
     item_type: str
     item_id: int
     quantity: float
@@ -592,6 +646,7 @@ class InventoryTransactionCreate(BaseModel):
 
 class InventorySearchParams(BaseModel):
     """Search parameters for inventory."""
+
     status: Optional[str] = None
     location: Optional[str] = None
     item_type: Optional[str] = None
@@ -600,6 +655,7 @@ class InventorySearchParams(BaseModel):
 
 class InventoryAdjustment(BaseModel):
     """Schema for inventory adjustment."""
+
     item_type: str
     item_id: int
     quantity: float
@@ -610,6 +666,7 @@ class InventoryAdjustment(BaseModel):
 
 class StockLevelReport(BaseModel):
     """Stock level report model."""
+
     total_value: float
     category_breakdown: Dict[str, Any]
     low_stock_items: List[Inventory]
@@ -622,8 +679,10 @@ class StockLevelReport(BaseModel):
 # STORAGE SCHEMAS
 # ===============================
 
+
 class StorageLocation(BaseModel):
     """Storage location model."""
+
     id: str
     name: str
     type: StorageLocationType
@@ -646,6 +705,7 @@ class StorageLocation(BaseModel):
 
 class StorageLocationCreate(BaseModel):
     """Schema for creating a storage location."""
+
     name: str
     type: StorageLocationType
     section: Optional[str] = None
@@ -661,6 +721,7 @@ class StorageLocationCreate(BaseModel):
 
 class StorageLocationUpdate(BaseModel):
     """Schema for updating a storage location."""
+
     name: Optional[str] = None
     type: Optional[StorageLocationType] = None
     section: Optional[str] = None
@@ -675,6 +736,7 @@ class StorageLocationUpdate(BaseModel):
 
 class StorageCell(BaseModel):
     """Storage cell model."""
+
     storage_id: str
     position: Dict[str, Any]
     item_id: Optional[int] = None
@@ -689,6 +751,7 @@ class StorageCell(BaseModel):
 
 class StorageCellCreate(BaseModel):
     """Schema for creating a storage cell."""
+
     position: Dict[str, Any]
     item_id: Optional[int] = None
     item_type: Optional[str] = None
@@ -699,6 +762,7 @@ class StorageCellCreate(BaseModel):
 
 class StorageAssignment(BaseModel):
     """Storage assignment model."""
+
     id: str
     material_id: int
     material_type: str
@@ -717,6 +781,7 @@ class StorageAssignment(BaseModel):
 
 class StorageAssignmentCreate(BaseModel):
     """Schema for creating a storage assignment."""
+
     material_id: int
     material_type: str
     storage_id: str
@@ -728,6 +793,7 @@ class StorageAssignmentCreate(BaseModel):
 
 class StorageMove(BaseModel):
     """Storage move model."""
+
     id: str
     material_id: int
     material_type: str
@@ -748,6 +814,7 @@ class StorageMove(BaseModel):
 
 class StorageMoveCreate(BaseModel):
     """Schema for creating a storage move."""
+
     material_id: int
     material_type: str
     from_storage_id: str
@@ -760,6 +827,7 @@ class StorageMoveCreate(BaseModel):
 
 class StorageSearchParams(BaseModel):
     """Search parameters for storage locations."""
+
     type: Optional[str] = None
     section: Optional[str] = None
     status: Optional[str] = None
@@ -768,6 +836,7 @@ class StorageSearchParams(BaseModel):
 
 class StorageOccupancyReport(BaseModel):
     """Storage occupancy report model."""
+
     total_locations: int
     total_capacity: int
     total_utilized: int
@@ -783,8 +852,10 @@ class StorageOccupancyReport(BaseModel):
 # SUPPLIER SCHEMAS
 # ===============================
 
+
 class Supplier(BaseModel):
     """Supplier model."""
+
     id: int
     name: str
     category: Optional[str] = None
@@ -814,6 +885,7 @@ class Supplier(BaseModel):
 
 class SupplierCreate(BaseModel):
     """Schema for creating a supplier."""
+
     name: str
     category: Optional[str] = None
     contact_name: Optional[str] = None
@@ -833,6 +905,7 @@ class SupplierCreate(BaseModel):
 
 class SupplierUpdate(BaseModel):
     """Schema for updating a supplier."""
+
     name: Optional[str] = None
     category: Optional[str] = None
     contact_name: Optional[str] = None
@@ -852,6 +925,7 @@ class SupplierUpdate(BaseModel):
 
 class SupplierRating(BaseModel):
     """Supplier rating model."""
+
     id: int
     supplier_id: int
     rating: int
@@ -865,6 +939,7 @@ class SupplierRating(BaseModel):
 
 class SupplierRatingCreate(BaseModel):
     """Schema for creating a supplier rating."""
+
     rating: int
     category: Optional[str] = None
     comments: Optional[str] = None
@@ -872,6 +947,7 @@ class SupplierRatingCreate(BaseModel):
 
 class SupplierHistory(BaseModel):
     """Supplier history model."""
+
     id: int
     supplier_id: int
     event_type: str
@@ -885,6 +961,7 @@ class SupplierHistory(BaseModel):
 
 class SupplierHistoryCreate(BaseModel):
     """Schema for creating a supplier history entry."""
+
     event_type: str
     description: str
     reference_id: Optional[str] = None
@@ -892,6 +969,7 @@ class SupplierHistoryCreate(BaseModel):
 
 class SupplierSearchParams(BaseModel):
     """Search parameters for suppliers."""
+
     status: Optional[str] = None
     category: Optional[str] = None
     material_category: Optional[str] = None
@@ -900,6 +978,7 @@ class SupplierSearchParams(BaseModel):
 
 class SupplierWithDetails(Supplier):
     """Supplier with detailed information."""
+
     materials: List[Material] = []
     ratings: List[SupplierRating] = []
     purchase_history: List[Dict[str, Any]] = []
@@ -907,6 +986,7 @@ class SupplierWithDetails(Supplier):
 
 class PurchaseHistorySummary(BaseModel):
     """Purchase history summary model."""
+
     supplier_id: int
     supplier_name: str
     total_purchases: int
@@ -922,8 +1002,10 @@ class PurchaseHistorySummary(BaseModel):
 # TOOL SCHEMAS
 # ===============================
 
+
 class Tool(BaseModel):
     """Tool model."""
+
     id: int
     name: str
     description: Optional[str] = None
@@ -955,6 +1037,7 @@ class Tool(BaseModel):
 
 class ToolCreate(BaseModel):
     """Schema for creating a tool."""
+
     name: str
     description: Optional[str] = None
     category: ToolCategory
@@ -975,6 +1058,7 @@ class ToolCreate(BaseModel):
 
 class ToolUpdate(BaseModel):
     """Schema for updating a tool."""
+
     name: Optional[str] = None
     description: Optional[str] = None
     category: Optional[ToolCategory] = None
@@ -996,6 +1080,7 @@ class ToolUpdate(BaseModel):
 
 class ToolMaintenance(BaseModel):
     """Tool maintenance model."""
+
     id: int
     tool_id: int
     tool_name: Optional[str] = None
@@ -1019,6 +1104,7 @@ class ToolMaintenance(BaseModel):
 
 class ToolMaintenanceCreate(BaseModel):
     """Schema for creating a tool maintenance record."""
+
     tool_id: int
     tool_name: Optional[str] = None
     maintenance_type: str
@@ -1036,6 +1122,7 @@ class ToolMaintenanceCreate(BaseModel):
 
 class ToolMaintenanceUpdate(BaseModel):
     """Schema for updating a tool maintenance record."""
+
     maintenance_type: Optional[str] = None
     date: Optional[str] = None
     performed_by: Optional[str] = None
@@ -1051,6 +1138,7 @@ class ToolMaintenanceUpdate(BaseModel):
 
 class ToolCheckout(BaseModel):
     """Tool checkout model."""
+
     id: int
     tool_id: int
     tool_name: Optional[str] = None
@@ -1076,6 +1164,7 @@ class ToolCheckout(BaseModel):
 
 class ToolCheckoutCreate(BaseModel):
     """Schema for creating a tool checkout."""
+
     tool_id: int
     tool_name: Optional[str] = None
     checked_out_by: str
@@ -1090,6 +1179,7 @@ class ToolCheckoutCreate(BaseModel):
 
 class ToolSearchParams(BaseModel):
     """Search parameters for tools."""
+
     category: Optional[str] = None
     status: Optional[str] = None
     location: Optional[str] = None
@@ -1098,6 +1188,7 @@ class ToolSearchParams(BaseModel):
 
 class MaintenanceScheduleItem(BaseModel):
     """Maintenance schedule item model."""
+
     tool_id: int
     tool_name: str
     maintenance_type: str
@@ -1111,6 +1202,7 @@ class MaintenanceScheduleItem(BaseModel):
 
 class MaintenanceSchedule(BaseModel):
     """Maintenance schedule model."""
+
     schedule: List[MaintenanceScheduleItem]
     total_items: int
     overdue_items: int
@@ -1123,8 +1215,10 @@ class MaintenanceSchedule(BaseModel):
 # DOCUMENTATION SCHEMAS
 # ===============================
 
+
 class DocumentationResource(BaseModel):
     """Documentation resource model."""
+
     id: str
     title: str
     description: Optional[str] = None
@@ -1147,6 +1241,7 @@ class DocumentationResource(BaseModel):
 
 class DocumentationResourceCreate(BaseModel):
     """Schema for creating a documentation resource."""
+
     title: str
     description: Optional[str] = None
     content: str
@@ -1162,6 +1257,7 @@ class DocumentationResourceCreate(BaseModel):
 
 class DocumentationResourceUpdate(BaseModel):
     """Schema for updating a documentation resource."""
+
     title: Optional[str] = None
     description: Optional[str] = None
     content: Optional[str] = None
@@ -1177,6 +1273,7 @@ class DocumentationResourceUpdate(BaseModel):
 
 class DocumentationCategory(BaseModel):
     """Documentation category model."""
+
     id: str
     name: str
     description: Optional[str] = None
@@ -1189,6 +1286,7 @@ class DocumentationCategory(BaseModel):
 
 class DocumentationCategoryCreate(BaseModel):
     """Schema for creating a documentation category."""
+
     name: str
     description: Optional[str] = None
     icon: Optional[str] = None
@@ -1197,6 +1295,7 @@ class DocumentationCategoryCreate(BaseModel):
 
 class DocumentationCategoryUpdate(BaseModel):
     """Schema for updating a documentation category."""
+
     name: Optional[str] = None
     description: Optional[str] = None
     icon: Optional[str] = None
@@ -1205,6 +1304,7 @@ class DocumentationCategoryUpdate(BaseModel):
 
 class DocumentationSearchParams(BaseModel):
     """Search parameters for documentation resources."""
+
     category: Optional[str] = None
     type: Optional[str] = None
     skill_level: Optional[str] = None
@@ -1214,6 +1314,7 @@ class DocumentationSearchParams(BaseModel):
 
 class Refund(BaseModel):
     """Refund model."""
+
     id: int
     sale_id: int
     refund_date: datetime
@@ -1229,6 +1330,7 @@ class Refund(BaseModel):
 
 class RefundCreate(BaseModel):
     """Schema for creating a refund."""
+
     sale_id: int
     refund_date: datetime
     refund_amount: float
@@ -1238,7 +1340,364 @@ class RefundCreate(BaseModel):
 
 class RefundUpdate(BaseModel):
     """Schema for updating a refund."""
+
     refund_date: Optional[datetime] = None
     refund_amount: Optional[float] = None
     reason: Optional[str] = None
     status: Optional[str] = None
+
+
+# ===============================
+# COMPONENT SCHEMAS
+# ===============================
+
+class ComponentBase(BaseModel):
+    """Base component model with common fields."""
+
+    name: str
+    description: Optional[str] = None
+    component_type: ComponentType
+    pattern_id: Optional[int] = None
+    attributes: Optional[Dict[str, Any]] = None
+    path_data: Optional[str] = None
+    position: Optional[Dict[str, Any]] = None
+    rotation: Optional[int] = 0
+    is_optional: Optional[bool] = False
+    author_name: Optional[str] = None
+
+
+class ComponentCreate(ComponentBase):
+    """Schema for creating a component."""
+
+    class Config:
+        from_attributes = True
+
+
+class ComponentUpdate(BaseModel):
+    """Schema for updating a component."""
+
+    name: Optional[str] = None
+    description: Optional[str] = None
+    component_type: Optional[ComponentType] = None
+    pattern_id: Optional[int] = None
+    attributes: Optional[Dict[str, Any]] = None
+    path_data: Optional[str] = None
+    position: Optional[Dict[str, Any]] = None
+    rotation: Optional[int] = None
+    is_optional: Optional[bool] = None
+    author_name: Optional[str] = None
+
+
+class ComponentMaterialBase(BaseModel):
+    """Base component material model with common fields."""
+
+    material_id: int
+    material_type: MaterialType
+    quantity: float
+    unit: str
+    is_required: Optional[bool] = True
+    alternative_material_ids: Optional[List[int]] = None
+    notes: Optional[str] = None
+
+
+class ComponentMaterialCreate(ComponentMaterialBase):
+    """Schema for creating a component material."""
+
+    class Config:
+        from_attributes = True
+
+
+class ComponentMaterialResponse(ComponentMaterialBase):
+    """Schema for component material response."""
+
+    id: int
+    component_id: int
+    material: Optional[Dict[str, Any]] = None
+
+    class Config:
+        from_attributes = True
+
+
+class ComponentResponse(ComponentBase):
+    """Schema for component response."""
+
+    id: int
+    created_at: datetime
+    modified_at: datetime
+    materials: List[ComponentMaterialResponse] = []
+
+    class Config:
+        from_attributes = True
+
+
+class ComponentListResponse(BaseModel):
+    """Schema for list of components response."""
+
+    items: List[ComponentResponse]
+    total: int
+    skip: int
+    limit: int
+
+
+# ===============================
+# PATTERN SCHEMAS
+# ===============================
+
+class PatternBase(BaseModel):
+    """Base pattern model with common fields."""
+
+    name: str
+    description: Optional[str] = None
+    skill_level: Optional[SkillLevel] = None
+    file_type: Optional[str] = None
+    file_path: Optional[str] = None
+    thumbnail: Optional[str] = None
+    tags: Optional[List[str]] = None
+    is_favorite: Optional[bool] = False
+    project_type: ProjectType
+    estimated_time: Optional[int] = None
+    estimated_difficulty: Optional[int] = None
+    author_name: Optional[str] = None
+    is_public: Optional[bool] = False
+    version: Optional[str] = "1.0.0"
+
+
+class PatternCreate(PatternBase):
+    """Schema for creating a pattern."""
+
+    class Config:
+        from_attributes = True
+
+
+class PatternUpdate(BaseModel):
+    """Schema for updating a pattern."""
+
+    name: Optional[str] = None
+    description: Optional[str] = None
+    skill_level: Optional[SkillLevel] = None
+    file_type: Optional[str] = None
+    file_path: Optional[str] = None
+    thumbnail: Optional[str] = None
+    tags: Optional[List[str]] = None
+    is_favorite: Optional[bool] = None
+    project_type: Optional[ProjectType] = None
+    estimated_time: Optional[int] = None
+    estimated_difficulty: Optional[int] = None
+    author_name: Optional[str] = None
+    is_public: Optional[bool] = None
+    version: Optional[str] = None
+
+
+class PatternResponse(PatternBase):
+    """Schema for pattern response."""
+
+    id: int
+    created_at: datetime
+    modified_at: datetime
+    file_url: Optional[str] = None
+    thumbnail_url: Optional[str] = None
+    components: Optional[List[ComponentResponse]] = None
+    templates: Optional[List[Dict[str, Any]]] = None
+    usage_stats: Optional[Dict[str, Any]] = None
+
+    class Config:
+        from_attributes = True
+
+
+class PatternListResponse(BaseModel):
+    """Schema for list of patterns response."""
+
+    items: List[PatternResponse]
+    total: int
+    skip: int
+    limit: int
+
+
+# ===============================
+# PROJECT TEMPLATE SCHEMAS
+# ===============================
+
+class ProjectTemplateComponentBase(BaseModel):
+    """Base project template component model."""
+
+    component_id: int
+    quantity: int = 1
+
+
+class ProjectTemplateComponentCreate(ProjectTemplateComponentBase):
+    """Schema for creating a project template component."""
+
+    class Config:
+        from_attributes = True
+
+
+class ProjectTemplateComponentResponse(ProjectTemplateComponentBase):
+    """Schema for project template component response."""
+
+    id: int
+    template_id: str
+    component_name: Optional[str] = None
+    component_type: Optional[ComponentType] = None
+
+    class Config:
+        from_attributes = True
+
+
+class ProjectTemplateBase(BaseModel):
+    """Base project template model."""
+
+    name: str
+    description: Optional[str] = None
+    project_type: ProjectType
+    skill_level: Optional[SkillLevel] = None
+    estimated_duration: Optional[int] = None
+    estimated_cost: Optional[float] = None
+    version: Optional[str] = "1.0.0"
+    is_public: Optional[bool] = False
+    tags: Optional[List[str]] = None
+    notes: Optional[str] = None
+    pattern_id: Optional[int] = None
+
+
+class ProjectTemplateCreate(ProjectTemplateBase):
+    """Schema for creating a project template."""
+
+    components: Optional[List[ProjectTemplateComponentCreate]] = None
+
+    class Config:
+        from_attributes = True
+
+
+class ProjectTemplateResponse(ProjectTemplateBase):
+    """Schema for project template response."""
+
+    id: str
+    created_at: datetime
+    updated_at: datetime
+    components: List[ProjectTemplateComponentResponse] = []
+    pattern: Optional[Dict[str, Any]] = None
+
+    class Config:
+        from_attributes = True
+
+# ===============================
+# PURCHASE SCHEMAS
+# ===============================
+
+class PurchaseItemBase(BaseModel):
+    """Base schema for purchase item data."""
+
+    name: str
+    quantity: int
+    price: float
+    item_type: Optional[str] = None
+    material_type: Optional[str] = None
+    material_id: Optional[int] = None
+    unit: Optional[str] = None
+    notes: Optional[str] = None
+
+class PurchaseItemCreate(PurchaseItemBase):
+    """Schema for creating a purchase item."""
+
+    class Config:
+        from_attributes = True
+
+class PurchaseItemUpdate(BaseModel):
+    """Schema for updating a purchase item."""
+
+    name: Optional[str] = None
+    quantity: Optional[int] = None
+    price: Optional[float] = None
+    item_type: Optional[str] = None
+    material_type: Optional[str] = None
+    material_id: Optional[int] = None
+    unit: Optional[str] = None
+    notes: Optional[str] = None
+
+class PurchaseItemResponse(PurchaseItemBase):
+    """Schema for purchase item response."""
+
+    id: int
+    purchase_id: str
+    total: Optional[float] = None
+    quantity_received: Optional[int] = None
+
+    class Config:
+        from_attributes = True
+
+class PurchaseItemListResponse(BaseModel):
+    """Schema for list of purchase items response."""
+
+    items: List[PurchaseItemResponse]
+    total: int
+
+class PurchaseReceiveItemData(BaseModel):
+    """Schema for receiving a purchase item."""
+
+    item_id: int
+    quantity_received: int
+    notes: Optional[str] = None
+
+class PurchaseReceiveData(BaseModel):
+    """Schema for receiving purchase items."""
+
+    items: List[PurchaseReceiveItemData]
+    notes: Optional[str] = None
+    receipt_date: Optional[datetime] = Field(default_factory=datetime.now)
+    receipt_number: Optional[str] = None
+
+class PurchaseBase(BaseModel):
+    """Base schema for purchase data."""
+
+    supplier_id: int
+    supplier: Optional[str] = None
+    date: Optional[datetime] = Field(default_factory=datetime.now)
+    delivery_date: Optional[datetime] = None
+    status: Optional[str] = None
+    payment_status: Optional[str] = None
+    notes: Optional[str] = None
+    invoice: Optional[str] = None
+
+class PurchaseCreate(PurchaseBase):
+    """Schema for creating a purchase."""
+
+    items: Optional[List[PurchaseItemCreate]] = []
+
+    class Config:
+        from_attributes = True
+
+class PurchaseUpdate(BaseModel):
+    """Schema for updating a purchase."""
+
+    supplier_id: Optional[int] = None
+    supplier: Optional[str] = None
+    date: Optional[datetime] = None
+    delivery_date: Optional[datetime] = None
+    status: Optional[str] = None
+    payment_status: Optional[str] = None
+    notes: Optional[str] = None
+    invoice: Optional[str] = None
+
+class PurchaseResponse(PurchaseBase):
+    """Schema for purchase response."""
+
+    id: str
+    total: float
+    created_at: datetime
+    updated_at: datetime
+    items: Optional[List[PurchaseItemResponse]] = None
+    is_overdue: Optional[bool] = None
+    days_outstanding: Optional[int] = None
+
+    class Config:
+        from_attributes = True
+
+class PurchaseListResponse(BaseModel):
+    """Schema for list of purchases response."""
+
+    items: List[PurchaseResponse]
+    total: int
+    skip: int
+    limit: int
+
+

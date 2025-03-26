@@ -1,6 +1,12 @@
 # File: app/services/customer_service.py
 
 from typing import List, Optional, Dict, Any, Tuple, Union
+
+from typing import List, Dict, Any, Optional, Tuple
+from datetime import datetime, timedelta
+import json
+import csv
+import io
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 
@@ -753,4 +759,332 @@ class CustomerService(BaseService[Customer]):
         user_id = (
             self.security_context.current_user.id if self.security_context else None
         )
-        return CustomerUpdated(customer_id=updated.id, changes=changes, user_id=user_id)
+
+
+def bulk_import_customers(
+    self, customers_data: List[Dict[str, Any]], update_existing: bool = False
+) -> Dict[str, Any]:
+    """
+    Bulk import customers from a list of customer data.
+
+    Args:
+        customers_data: List of customer data dictionaries
+        update_existing: Whether to update customers that already exist
+
+    Returns:
+        Dictionary with import results
+
+    Raises:
+        ValidationException: If validation fails
+    """
+    results = {
+        "total_processed": len(customers_data),
+        "created": 0,
+        "updated": 0,
+        "failed": 0,
+        "errors": [],
+    }
+
+    with self.transaction():
+        for idx, customer_data in enumerate(customers_data):
+            try:
+                # Validate customer data
+                if not validate_customer(customer_data):
+                    raise ValidationException(
+                        f"Invalid customer data at index {idx}",
+                        {"validation": ["Invalid customer data format"]},
+                    )
+
+                # Check if customer exists by email
+                existing = None
+                if "email" in customer_data and customer_data["email"]:
+                    existing = self.repository.find_by_email(customer_data["email"])
+
+                if existing and update_existing:
+                    # Update existing customer
+                    self.repository.update(existing.id, customer_data)
+                    results["updated"] += 1
+                elif not existing:
+                    # Create new customer
+                    self.repository.create(customer_data)
+                    results["created"] += 1
+                else:
+                    # Customer exists but update_existing is False
+                    results["failed"] += 1
+                    results["errors"].append(
+                        {
+                            "index": idx,
+                            "email": customer_data.get("email", ""),
+                            "reason": "Customer already exists and update_existing is False",
+                        }
+                    )
+            except Exception as e:
+                # Record any errors
+                results["failed"] += 1
+                results["errors"].append(
+                    {
+                        "index": idx,
+                        "email": customer_data.get("email", ""),
+                        "reason": str(e),
+                    }
+                )
+
+    return results
+
+
+def export_customers(
+    self, search_params: Optional[Dict[str, Any]] = None, format: str = "csv"
+) -> Tuple[str, str]:
+    """
+    Export customers to CSV or JSON.
+
+    Args:
+        search_params: Optional search parameters
+        format: Export format (csv or json)
+
+    Returns:
+        Tuple of (content, filename)
+    """
+    # Get customers based on search parameters
+    customers = self.repository.list(**search_params if search_params else {})
+
+    # Format current date for filename
+    date_str = datetime.now().strftime("%Y%m%d")
+    filename = f"customers_export_{date_str}.{format}"
+
+    # Convert to list of dictionaries
+    customer_dicts = []
+    for c in customers:
+        customer_dict = {
+            "id": c.id,
+            "name": c.name,
+            "email": c.email,
+            "phone": c.phone,
+            "status": str(c.status) if hasattr(c.status, "name") else c.status,
+            "tier": str(c.tier) if hasattr(c.tier, "name") else c.tier,
+            "source": str(c.source) if hasattr(c.source, "name") else c.source,
+            "company_name": c.company_name,
+            "address": c.address,
+            "created_at": c.created_at.isoformat() if c.created_at else None,
+            "notes": c.notes,
+        }
+        customer_dicts.append(customer_dict)
+
+    if format.lower() == "json":
+        content = json.dumps(customer_dicts, indent=2)
+    else:  # csv
+        output = io.StringIO()
+        if customer_dicts:
+            fieldnames = customer_dicts[0].keys()
+            writer = csv.DictWriter(output, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(customer_dicts)
+
+        content = output.getvalue()
+        output.close()
+
+    return content, filename
+
+
+def get_customer_analytics(self) -> Dict[str, Any]:
+    """
+    Get aggregated customer analytics data.
+
+    Returns:
+        Dictionary with various customer analytics metrics
+    """
+    # Get today's date for calculations
+    today = datetime.now().date()
+    thirty_days_ago = today - timedelta(days=30)
+
+    # Get total customer count
+    total_customers = self.repository.count()
+
+    # Get active customers (using CustomerStatus.ACTIVE)
+    active_customers = self.repository.count(status=CustomerStatus.ACTIVE)
+
+    # Get new customers in the last 30 days
+    new_customers = self.repository.count_new_since(thirty_days_ago)
+
+    # Get customer distribution by status, tier, and source
+    status_distribution = self.repository.get_distribution_by_field("status")
+    tier_distribution = self.repository.get_distribution_by_field("tier")
+    source_distribution = self.repository.get_distribution_by_field("source")
+
+    # Get average lifetime value
+    avg_ltv = self.repository.get_average_lifetime_value()
+
+    # Get top customers by sales volume
+    top_customers = self.repository.get_top_customers_by_sales(limit=10)
+
+    return {
+        "total_customers": total_customers,
+        "active_customers": active_customers,
+        "new_customers_30d": new_customers,
+        "customer_distribution": {
+            "status": status_distribution,
+            "tier": tier_distribution,
+            "source": source_distribution,
+        },
+        "average_lifetime_value": avg_ltv,
+        "top_customers": top_customers,
+    }
+
+
+def get_customer_analytics(self) -> Dict[str, Any]:
+    """
+    Get aggregated customer analytics data.
+
+    Returns:
+        Dictionary with various customer analytics metrics
+    """
+    # Get today's date for calculations
+    today = datetime.now().date()
+    thirty_days_ago = today - timedelta(days=30)
+
+    # Get total customer count
+    total_customers = self.repository.count()
+
+    # Get active customers (using CustomerStatus.ACTIVE)
+    active_customers = self.repository.count_by_status(CustomerStatus.ACTIVE)
+
+    # Get new customers in the last 30 days
+    new_customers = self.repository.count_created_since(thirty_days_ago)
+
+    # Get customer distribution by status, tier, and source
+    status_distribution = self._get_customer_distribution_by_status()
+    tier_distribution = self._get_customer_distribution_by_tier()
+    source_distribution = self._get_customer_distribution_by_source()
+
+    # Get average lifetime value
+    avg_ltv = self._calculate_average_lifetime_value()
+
+    # Get top customers by sales volume
+    top_customers = self._get_top_customers_by_sales(limit=10)
+
+    return {
+        "total_customers": total_customers,
+        "active_customers": active_customers,
+        "new_customers_30d": new_customers,
+        "customer_distribution": {
+            "status": status_distribution,
+            "tier": tier_distribution,
+            "source": source_distribution
+        },
+        "average_lifetime_value": avg_ltv,
+        "top_customers": top_customers
+    }
+
+
+def _get_customer_distribution_by_status(self) -> Dict[str, int]:
+    """
+    Get distribution of customers by status.
+
+    Returns:
+        Dictionary mapping status values to counts
+    """
+    result = {}
+    for status in CustomerStatus:
+        count = self.repository.count_by_status(status)
+        result[status.name] = count
+    return result
+
+
+def _get_customer_distribution_by_tier(self) -> Dict[str, int]:
+    """
+    Get distribution of customers by tier.
+
+    Returns:
+        Dictionary mapping tier values to counts
+    """
+    result = {}
+    for tier in CustomerTier:
+        count = self.repository.count_by_tier(tier)
+        result[tier.name] = count
+    return result
+
+
+def _get_customer_distribution_by_source(self) -> Dict[str, int]:
+    """
+    Get distribution of customers by source.
+
+    Returns:
+        Dictionary mapping source values to counts
+    """
+    result = {}
+    for source in CustomerSource:
+        count = self.repository.count_by_source(source)
+        result[source.name] = count
+    return result
+
+
+def _calculate_average_lifetime_value(self) -> float:
+    """
+    Calculate average customer lifetime value.
+
+    Returns:
+        Average lifetime value as float
+    """
+    # Implement calculation based on sales data
+    # This is a simplified implementation
+    from sqlalchemy import func
+    from app.db.models.sales import Sale
+
+    query = (
+        self.session.query(
+            Sale.customer_id,
+            func.sum(Sale.total_amount).label('total_spent')
+        )
+        .group_by(Sale.customer_id)
+    )
+
+    results = query.all()
+
+    if not results:
+        return 0.0
+
+    total_ltv = sum(row.total_spent for row in results)
+    return total_ltv / len(results) if results else 0.0
+
+
+def _get_top_customers_by_sales(self, limit: int = 10) -> List[Dict[str, Any]]:
+    """
+    Get top customers by total sales amount.
+
+    Args:
+        limit: Number of customers to return
+
+    Returns:
+        List of top customers with details
+    """
+    from sqlalchemy import func, desc
+    from app.db.models.sales import Sale
+
+    query = (
+        self.session.query(
+            Sale.customer_id,
+            func.sum(Sale.total_amount).label('total_spent'),
+            func.count(Sale.id).label('order_count')
+        )
+        .group_by(Sale.customer_id)
+        .order_by(desc('total_spent'))
+        .limit(limit)
+    )
+
+    results = query.all()
+
+    top_customers = []
+    for row in results:
+        customer = self.repository.get_by_id(row.customer_id)
+        if customer:
+            top_customers.append({
+                "id": customer.id,
+                "name": customer.name,
+                "email": customer.email,
+                "tier": customer.tier.name if hasattr(customer.tier, "name") else customer.tier,
+                "total_spent": row.total_spent,
+                "order_count": row.order_count,
+                "average_order_value": row.total_spent / row.order_count if row.order_count else 0
+            })
+
+    return top_customers

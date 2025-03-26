@@ -1,14 +1,15 @@
 # File: app/db/models/documentation.py
 """
-Documentation models for the Leathercraft ERP system.
+Documentation models for the HideSync system.
 
-This module defines the DocumentationResource and DocumentationCategory models
-for storing and organizing help content, guides, tutorials, and reference materials.
-These models support a knowledge base for users of the leathercraft system.
+This module defines the models for the documentation system, including categories,
+resources, contextual help mappings, and application contexts. These models support
+a knowledge base for users with hierarchical organization and contextual help.
 """
 
 from typing import List, Optional, Dict, Any, ClassVar, Set
 from datetime import datetime
+from enum import Enum as PyEnum
 
 from sqlalchemy import (
     Column,
@@ -19,33 +20,55 @@ from sqlalchemy import (
     ForeignKey,
     JSON,
     DateTime,
-    Float,
+    Boolean,
     Table,
+    Float,
+    UniqueConstraint,
 )
-from sqlalchemy.orm import relationship, validates, foreign, remote
+from sqlalchemy.orm import relationship, validates
 from sqlalchemy.ext.hybrid import hybrid_property
-from sqlalchemy.orm import mapped_column
 from app.db.models.base import AbstractBase, ValidationMixin, TimestampMixin
 from app.db.models.enums import SkillLevel
 
-
 # Association table for many-to-many relationship between resources and categories
-documentation_resource_category = Table(
-    "documentation_resource_category",
+documentation_category_assignment = Table(
+    "documentation_category_assignments",
     AbstractBase.metadata,
-    Column(
-        "resource_id",
-        Integer,
-        ForeignKey("documentation_resources.id"),
-        primary_key=True,
-    ),
+    Column("id", String(36), primary_key=True),
     Column(
         "category_id",
-        Integer,
-        ForeignKey("documentation_categories.id"),
-        primary_key=True,
+        String(36),
+        ForeignKey("documentation_categories.id", ondelete="CASCADE"),
+        nullable=False,
     ),
+    Column(
+        "resource_id",
+        String(36),
+        ForeignKey("documentation_resources.id", ondelete="CASCADE"),
+        nullable=False,
+    ),
+    Column("display_order", Integer, default=0),
+    Column("assigned_at", DateTime, default=datetime.utcnow),
+    UniqueConstraint("category_id", "resource_id", name="uq_category_resource"),
 )
+
+
+class DocumentationType(str, PyEnum):
+    """Enumeration of documentation resource types."""
+
+    GUIDE = "GUIDE"
+    TUTORIAL = "TUTORIAL"
+    REFERENCE = "REFERENCE"
+    FAQ = "FAQ"
+    TROUBLESHOOTING = "TROUBLESHOOTING"
+
+
+class DocumentationStatus(str, PyEnum):
+    """Enumeration of documentation resource statuses."""
+
+    DRAFT = "DRAFT"
+    PUBLISHED = "PUBLISHED"
+    ARCHIVED = "ARCHIVED"
 
 
 class DocumentationCategory(AbstractBase, ValidationMixin, TimestampMixin):
@@ -53,45 +76,46 @@ class DocumentationCategory(AbstractBase, ValidationMixin, TimestampMixin):
     DocumentationCategory model for organizing documentation resources.
 
     This model defines categories for documentation, enabling organization
-    of content into logical sections for easier navigation.
+    of content into logical sections for easier navigation. Categories can
+    be nested to create a hierarchy.
     """
 
     __tablename__ = "documentation_categories"
-    __validated_fields__: ClassVar[Set[str]] = {"name"}
+    __validated_fields__: ClassVar[Set[str]] = {"name", "slug"}
 
     # Basic information
     name = Column(String(100), nullable=False)
     description = Column(Text)
-    icon = Column(String(50))
+    icon = Column(String(100))
+    slug = Column(String(100), unique=True, nullable=False)
+    display_order = Column(Integer, default=0)
+    is_public = Column(Boolean, default=True)
 
     # Organizational structure
-    resources = Column(JSON, nullable=True)  # List of resource IDs
-    parent_id = Column(
-        Integer, ForeignKey("documentation_categories.id"), nullable=True
+    parent_category_id = Column(
+        String(36), ForeignKey("documentation_categories.id"), nullable=True
     )
-    order = Column(Integer, default=0)
+
+    # Timestamps are handled by TimestampMixin
 
     # Relationships
-    from sqlalchemy.orm import remote, foreign
-
-    # Then define the relationship
     parent = relationship(
         "DocumentationCategory",
         back_populates="subcategories",
-        primaryjoin="foreign(DocumentationCategory.parent_id)==DocumentationCategory.id",
         remote_side="DocumentationCategory.id",
+        foreign_keys=[parent_category_id],
     )
 
     subcategories = relationship(
         "DocumentationCategory",
         back_populates="parent",
-        primaryjoin="DocumentationCategory.parent_id==foreign(DocumentationCategory.id)",
+        foreign_keys=[parent_category_id],
     )
 
-    resources_rel = relationship(
+    resources = relationship(
         "DocumentationResource",
+        secondary=documentation_category_assignment,
         back_populates="categories",
-        secondary=documentation_resource_category,
     )
 
     @validates("name")
@@ -113,6 +137,34 @@ class DocumentationCategory(AbstractBase, ValidationMixin, TimestampMixin):
             raise ValueError("Category name must be at least 2 characters")
         return name.strip()
 
+    @validates("slug")
+    def validate_slug(self, key: str, slug: str) -> str:
+        """
+        Validate category slug.
+
+        Args:
+            key: Field name ('slug')
+            slug: Category slug to validate
+
+        Returns:
+            Validated slug
+
+        Raises:
+            ValueError: If slug is empty or contains invalid characters
+        """
+        if not slug or len(slug.strip()) < 2:
+            raise ValueError("Category slug must be at least 2 characters")
+
+        # Check for valid slug format (lowercase, hyphens, no spaces)
+        import re
+
+        if not re.match(r"^[a-z0-9-]+$", slug):
+            raise ValueError(
+                "Slug must contain only lowercase letters, numbers, and hyphens"
+            )
+
+        return slug.strip()
+
     @hybrid_property
     def resource_count(self) -> int:
         """
@@ -121,21 +173,7 @@ class DocumentationCategory(AbstractBase, ValidationMixin, TimestampMixin):
         Returns:
             Number of resources in the category
         """
-        if hasattr(self, "resources_rel"):
-            return len(self.resources_rel)
-
-        if self.resources:
-            if isinstance(self.resources, list):
-                return len(self.resources)
-            elif isinstance(self.resources, str):
-                import json
-
-                try:
-                    resources_list = json.loads(self.resources)
-                    return len(resources_list)
-                except:
-                    return 0
-        return 0
+        return len(self.resources) if hasattr(self, "resources") else 0
 
     @hybrid_property
     def has_subcategories(self) -> bool:
@@ -147,38 +185,6 @@ class DocumentationCategory(AbstractBase, ValidationMixin, TimestampMixin):
         """
         return len(self.subcategories) > 0
 
-    def get_all_resources(self) -> List[int]:
-        """
-        Get all resource IDs, including from subcategories.
-
-        Returns:
-            List of all resource IDs
-        """
-        all_resources = []
-
-        # Add resources from this category
-        if self.resources:
-            if isinstance(self.resources, list):
-                all_resources.extend(self.resources)
-            elif isinstance(self.resources, str):
-                import json
-
-                try:
-                    resources_list = json.loads(self.resources)
-                    all_resources.extend(resources_list)
-                except:
-                    pass
-
-        # Add resources from relationship if available
-        if hasattr(self, "resources_rel"):
-            all_resources.extend([r.id for r in self.resources_rel])
-
-        # Add resources from subcategories
-        for subcategory in self.subcategories:
-            all_resources.extend(subcategory.get_all_resources())
-
-        return list(set(all_resources))  # Remove duplicates
-
     def to_dict(self) -> Dict[str, Any]:
         """
         Convert DocumentationCategory instance to a dictionary.
@@ -188,15 +194,6 @@ class DocumentationCategory(AbstractBase, ValidationMixin, TimestampMixin):
         """
         result = super().to_dict()
 
-        # Handle JSON fields
-        if isinstance(result.get("resources"), str):
-            import json
-
-            try:
-                result["resources"] = json.loads(result["resources"])
-            except:
-                result["resources"] = []
-
         # Add calculated properties
         result["resource_count"] = self.resource_count
         result["has_subcategories"] = self.has_subcategories
@@ -205,7 +202,7 @@ class DocumentationCategory(AbstractBase, ValidationMixin, TimestampMixin):
 
     def __repr__(self) -> str:
         """Return string representation of the DocumentationCategory."""
-        return f"<DocumentationCategory(id={self.id}, name='{self.name}')>"
+        return f"<DocumentationCategory(id='{self.id}', name='{self.name}')>"
 
 
 class DocumentationResource(AbstractBase, ValidationMixin, TimestampMixin):
@@ -220,28 +217,37 @@ class DocumentationResource(AbstractBase, ValidationMixin, TimestampMixin):
     __validated_fields__: ClassVar[Set[str]] = {"title", "content"}
 
     # Basic information
-    title = Column(String(255), nullable=False)
+    title = Column(String(200), nullable=False)
     description = Column(Text)
     content = Column(Text, nullable=False)
 
     # Categorization
-    category = Column(String(50))  # Primary category string
-    type = Column(String(50))  # GUIDE, TUTORIAL, REFERENCE, etc.
+    type = Column(Enum(DocumentationType), nullable=False)
     skill_level = Column(Enum(SkillLevel))
-    tags = Column(JSON, nullable=True)  # List of tags
-    related_resources = Column(JSON, nullable=True)  # List of resource IDs
+    version = Column(String(20))
+    tags = Column(JSON, nullable=True)
+    related_resource_ids = Column(JSON, nullable=True)  # List of resource IDs
 
-    # Metadata
-    last_updated = Column(String(50))  # ISO date string
-    author = Column(String(100))
-    contextual_help_keys = Column(JSON, nullable=True)  # List of UI context keys
-    videos = Column(JSON, nullable=True)  # List of video references
+    # Author and timestamps
+    author_id = Column(String(36))
+
+    # Publication info
+    is_public = Column(Boolean, default=True)
+    thumbnail_url = Column(String(255))
+    media_attachments = Column(
+        JSON, nullable=True
+    )  # JSON object for videos, images, etc.
+    status = Column(Enum(DocumentationStatus), default=DocumentationStatus.PUBLISHED)
 
     # Relationships
     categories = relationship(
         "DocumentationCategory",
-        back_populates="resources_rel",
-        secondary=documentation_resource_category,
+        secondary=documentation_category_assignment,
+        back_populates="resources",
+    )
+
+    contextual_help_mappings = relationship(
+        "ContextualHelpMapping", back_populates="resource", cascade="all, delete-orphan"
     )
 
     @validates("title")
@@ -306,49 +312,6 @@ class DocumentationResource(AbstractBase, ValidationMixin, TimestampMixin):
         """
         return max(1, self.word_count // 200)
 
-    def update_content(self, new_content: str, author: str) -> None:
-        """
-        Update resource content with versioning metadata.
-
-        Args:
-            new_content: New content
-            author: Person making the update
-        """
-        self.content = new_content
-        self.author = author
-        self.last_updated = datetime.now().isoformat()
-
-    def add_to_category(self, category_id: int) -> None:
-        """
-        Add resource to a category.
-
-        Args:
-            category_id: ID of the category
-        """
-        # Handle direct relationship if loaded
-        if hasattr(self, "categories"):
-            from sqlalchemy import select
-            from sqlalchemy.orm import Session
-
-            if self.session:
-                category = self.session.query(DocumentationCategory).get(category_id)
-                if category and category not in self.categories:
-                    self.categories.append(category)
-
-        # Update JSON field for redundancy
-        related_res = self.related_resources or []
-        if isinstance(related_res, str):
-            import json
-
-            try:
-                related_res = json.loads(related_res)
-            except:
-                related_res = []
-
-        if category_id not in related_res:
-            related_res.append(category_id)
-            self.related_resources = related_res
-
     def to_dict(self) -> Dict[str, Any]:
         """
         Convert DocumentationResource instance to a dictionary.
@@ -359,11 +322,17 @@ class DocumentationResource(AbstractBase, ValidationMixin, TimestampMixin):
         result = super().to_dict()
 
         # Convert enum values to strings
+        if self.type:
+            result["type"] = self.type.value
+
+        if self.status:
+            result["status"] = self.status.value
+
         if self.skill_level:
             result["skill_level"] = self.skill_level.name
 
         # Handle JSON fields
-        for field in ["tags", "related_resources", "contextual_help_keys", "videos"]:
+        for field in ["tags", "related_resource_ids", "media_attachments"]:
             if isinstance(result.get(field), str):
                 import json
 
@@ -380,129 +349,148 @@ class DocumentationResource(AbstractBase, ValidationMixin, TimestampMixin):
 
     def __repr__(self) -> str:
         """Return string representation of the DocumentationResource."""
-        return f"<DocumentationResource(id={self.id}, title='{self.title}', type='{self.type}')>"
+        return f"<DocumentationResource(id='{self.id}', title='{self.title}', type='{self.type}')>"
 
 
-class Refund(AbstractBase, ValidationMixin, TimestampMixin):
+class ApplicationContext(AbstractBase, ValidationMixin, TimestampMixin):
     """
-    Refund model for tracking customer refunds.
+    ApplicationContext model for tracking UI contexts that can have associated help.
 
-    This model represents refund transactions for sales, including
-    amount, reason, and status information.
+    This model represents specific parts of the application's UI that might
+    need contextual help, such as specific pages, forms, or features.
     """
 
-    __tablename__ = "refunds"
-    __validated_fields__: ClassVar[Set[str]] = {"sale_id", "refund_amount"}
+    __tablename__ = "application_contexts"
+    __validated_fields__: ClassVar[Set[str]] = {"context_key", "name"}
+
+    # Basic information
+    context_key = Column(String(100), unique=True, nullable=False)
+    name = Column(String(100), nullable=False)
+    description = Column(Text)
+
+    # Navigation/routing information
+    route = Column(String(200))
+    component_path = Column(String(200))
 
     # Relationships
-    sale_id = Column(Integer, ForeignKey("sales.id"), nullable=False)
+    contextual_help_mappings = relationship(
+        "ContextualHelpMapping",
+        back_populates="application_context",
+        cascade="all, delete-orphan",
+    )
 
-    # Refund information
-    refund_date = Column(DateTime, default=datetime.now)
-    refund_amount = Column(Float, nullable=False)
-    reason = Column(String(255))
-    status = Column(String(50), default="PENDING")  # PENDING, PROCESSED, CANCELLED
-
-    # Processing information
-    processed_by = Column(String(100))
-    payment_method = Column(String(50))
-    transaction_id = Column(String(100))
-
-    # Relationships
-    sale = relationship("Sale", back_populates="refund")
-
-    @validates("refund_amount")
-    def validate_refund_amount(self, key: str, amount: float) -> float:
+    @validates("context_key")
+    def validate_context_key(self, key: str, context_key: str) -> str:
         """
-        Validate refund amount.
+        Validate context key.
 
         Args:
-            key: Field name ('refund_amount')
-            amount: Refund amount to validate
+            key: Field name ('context_key')
+            context_key: The context key to validate
 
         Returns:
-            Validated refund amount
+            Validated context key
 
         Raises:
-            ValueError: If amount is not positive
+            ValueError: If context key is invalid
         """
-        if amount <= 0:
-            raise ValueError("Refund amount must be positive")
-        return amount
+        if not context_key or len(context_key.strip()) < 2:
+            raise ValueError("Context key must be at least 2 characters")
 
-    def process_refund(
-        self,
-        processed_by: str,
-        payment_method: str,
-        transaction_id: Optional[str] = None,
-    ) -> None:
+        # Check for valid key format (dots for namespacing)
+        import re
+
+        if not re.match(r"^[a-z0-9_.-]+$", context_key):
+            raise ValueError(
+                "Context key must contain only lowercase letters, numbers, dots, underscores, and hyphens"
+            )
+
+        return context_key.strip()
+
+    @validates("name")
+    def validate_name(self, key: str, name: str) -> str:
         """
-        Mark refund as processed.
+        Validate context name.
 
         Args:
-            processed_by: Person processing the refund
-            payment_method: Method of refund payment
-            transaction_id: External transaction ID
-        """
-        self.status = "PROCESSED"
-        self.processed_by = processed_by
-        self.payment_method = payment_method
-        self.transaction_id = transaction_id
-        self.refund_date = datetime.now()
-
-        # Update sale if available
-        if hasattr(self, "sale") and self.sale:
-            from app.db.models.enums import SaleStatus
-
-            if hasattr(self.sale, "status") and hasattr(self.sale, "update_status"):
-                self.sale.update_status(
-                    SaleStatus.REFUNDED,
-                    processed_by,
-                    f"Refunded {self.refund_amount} via {payment_method}",
-                )
-
-    def cancel_refund(self, cancelled_by: str, reason: str) -> None:
-        """
-        Cancel a pending refund.
-
-        Args:
-            cancelled_by: Person cancelling the refund
-            reason: Reason for cancellation
-
-        Raises:
-            ValueError: If refund is already processed
-        """
-        if self.status == "PROCESSED":
-            raise ValueError("Cannot cancel a processed refund")
-
-        self.status = "CANCELLED"
-
-        # Update notes with cancellation reason
-        full_reason = f"Cancelled by {cancelled_by}: {reason}"
-        if self.reason:
-            self.reason += f" | {full_reason}"
-        else:
-            self.reason = full_reason
-
-    def to_dict(self) -> Dict[str, Any]:
-        """
-        Convert Refund instance to a dictionary.
+            key: Field name ('name')
+            name: The context name to validate
 
         Returns:
-            Dictionary representation of the refund
+            Validated name
+
+        Raises:
+            ValueError: If name is invalid
         """
-        result = super().to_dict()
-
-        # Format dates for display
-        if result.get("refund_date"):
-            try:
-                dt = datetime.fromisoformat(str(result["refund_date"]))
-                result["refund_date_formatted"] = dt.strftime("%b %d, %Y")
-            except (ValueError, TypeError):
-                pass
-
-        return result
+        if not name or len(name.strip()) < 2:
+            raise ValueError("Context name must be at least 2 characters")
+        return name.strip()
 
     def __repr__(self) -> str:
-        """Return string representation of the Refund."""
-        return f"<Refund(id={self.id}, sale_id={self.sale_id}, amount={self.refund_amount}, status='{self.status}')>"
+        """Return string representation of the ApplicationContext."""
+        return f"<ApplicationContext(id='{self.id}', key='{self.context_key}', name='{self.name}')>"
+
+
+class ContextualHelpMapping(AbstractBase, ValidationMixin, TimestampMixin):
+    """
+    ContextualHelpMapping model for connecting resources to application contexts.
+
+    This model creates the relationship between documentation resources and
+    application UI contexts, enabling the display of relevant help content
+    based on where the user is in the application.
+    """
+
+    __tablename__ = "contextual_help_mappings"
+    __validated_fields__: ClassVar[Set[str]] = {"resource_id", "context_key"}
+
+    # Relationship keys
+    resource_id = Column(
+        String(36),
+        ForeignKey("documentation_resources.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    context_key = Column(
+        String(100),
+        ForeignKey("application_contexts.context_key", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    # Metadata
+    relevance_score = Column(Integer, default=50)  # 1-100 score for sorting results
+    is_active = Column(Boolean, default=True)
+
+    # Relationships
+    resource = relationship(
+        "DocumentationResource", back_populates="contextual_help_mappings"
+    )
+    application_context = relationship(
+        "ApplicationContext", back_populates="contextual_help_mappings"
+    )
+
+    # Ensure uniqueness of resource-context pairs
+    __table_args__ = (
+        UniqueConstraint("resource_id", "context_key", name="uq_resource_context"),
+    )
+
+    @validates("relevance_score")
+    def validate_relevance_score(self, key: str, score: int) -> int:
+        """
+        Validate relevance score.
+
+        Args:
+            key: Field name ('relevance_score')
+            score: Score to validate
+
+        Returns:
+            Validated score
+
+        Raises:
+            ValueError: If score is outside valid range
+        """
+        if score < 1 or score > 100:
+            raise ValueError("Relevance score must be between 1 and 100")
+        return score
+
+    def __repr__(self) -> str:
+        """Return string representation of the ContextualHelpMapping."""
+        return f"<ContextualHelpMapping(id='{self.id}', resource_id='{self.resource_id}', context_key='{self.context_key}')>"

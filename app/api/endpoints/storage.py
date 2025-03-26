@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_active_user
 from app.db.session import get_db
-from app.schemas.compatibility import(
+from app.schemas.compatibility import (
     StorageLocation,
     StorageLocationCreate,
     StorageLocationUpdate,
@@ -30,10 +30,11 @@ from app.services.storage_location_service import StorageLocationService
 from app.core.exceptions import (
     EntityNotFoundException,
     BusinessRuleException,
-
     StorageLocationNotFoundException,
 )
-from app.core.exceptions import InsufficientInventoryException as InsufficientQuantityException
+from app.core.exceptions import (
+    InsufficientInventoryException as InsufficientQuantityException,
+)
 
 
 router = APIRouter()

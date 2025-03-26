@@ -1,7 +1,20 @@
 # File: app/core/exceptions.py
 
 from typing import Dict, Any, List, Optional
+
+from typing import Dict, List, Any
+import json
 from datetime import datetime
+from pydantic import BaseModel, EmailStr, Field, validator
+
+from app.db.models.enums import (
+    CustomerStatus,
+    CustomerTier,
+    CustomerSource,
+    CommunicationChannel,
+    CommunicationType,
+)
+from app.schemas.customer import CustomerBase
 
 
 class HideSyncException(Exception):
@@ -338,31 +351,6 @@ class BusinessRuleError(BusinessRuleException):
     pass
 
 
-class DuplicateEntityException(HideSyncException):
-    """Raised when attempting to create an entity that already exists."""
-
-    CODE_PREFIX = "DUPLICATE_"
-
-    def __init__(self, entity_type: str, identifier: Any, identifier_type: str = "ID"):
-        """
-        Initialize duplicate entity exception.
-
-        Args:
-            entity_type: Type of entity that is duplicated
-            identifier: Value that identifies the duplicate (ID, name, etc.)
-            identifier_type: Type of identifier (default: "ID")
-        """
-        super().__init__(
-            f"{entity_type} with {identifier_type} {identifier} already exists",
-            f"{self.CODE_PREFIX}001",
-            {
-                "entity_type": entity_type,
-                "identifier": identifier,
-                "identifier_type": identifier_type,
-            },
-        )
-
-
 # Concurrent operation exceptions
 class ConcurrentOperationException(HideSyncException):
     """Raised when a concurrent operation fails."""
@@ -437,10 +425,13 @@ class SecurityException(HideSyncException):
         self.message = message
         self.status_code = 500  # Internal server error for security issues
 
+
 # Storage-related exceptions
 class StorageException(HideSyncException):
     """Base exception for storage-related errors."""
+
     CODE_PREFIX = "STORAGE_"
+
 
 # If you don't already have this class defined
 class StorageLocationNotFoundException(StorageException):
@@ -463,6 +454,7 @@ class StorageLocationNotFoundException(StorageException):
 # Tool-related exceptions
 class ToolException(HideSyncException):
     """Base exception for tool-related errors."""
+
     CODE_PREFIX = "TOOL_"
 
 
@@ -482,3 +474,169 @@ class ToolNotAvailableException(ToolException):
             f"{self.CODE_PREFIX}001",
             {"tool_id": tool_id, "reason": reason},
         )
+
+
+class AuthenticationException(SecurityException):
+    """Raised when authentication fails."""
+
+    def __init__(self, message: str = "Authentication failed"):
+        """
+        Initialize authentication exception.
+
+        Args:
+            message: Human-readable error message
+        """
+        super().__init__(message, f"{self.CODE_PREFIX}003", {})
+
+
+class CustomerStatusUpdate(BaseModel):
+    """Schema for customer status update requests."""
+
+    status: CustomerStatus = Field(
+        ..., description="New status to assign to the customer"
+    )
+    reason: Optional[str] = Field(None, description="Reason for the status change")
+
+
+class CustomerTierUpdate(BaseModel):
+    """Schema for customer tier update requests."""
+
+    tier: CustomerTier = Field(..., description="New tier to assign to the customer")
+    reason: Optional[str] = Field(None, description="Reason for the tier change")
+
+
+# For communications
+class CustomerCommunicationBase(BaseModel):
+    """Base schema for customer communication data."""
+
+    communication_date: Optional[datetime] = Field(
+        None, description="Date and time of the communication"
+    )
+    channel: CommunicationChannel = Field(..., description="Communication channel used")
+    communication_type: CommunicationType = Field(
+        ..., description="Type of communication"
+    )
+    subject: Optional[str] = Field(None, description="Subject of the communication")
+    content: str = Field(..., description="Content of the communication")
+    direction: str = Field(
+        "OUTBOUND", description="Direction of communication (INBOUND/OUTBOUND)"
+    )
+    needs_response: Optional[bool] = Field(
+        False, description="Whether this communication needs a response"
+    )
+    related_entity_type: Optional[str] = Field(
+        None, description="Type of related entity (sale, project, etc.)"
+    )
+    related_entity_id: Optional[str] = Field(None, description="ID of related entity")
+    meta_data: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
+
+    @validator("meta_data", pre=True)
+    def validate_meta_data(cls, v):
+        """Convert string to dict if needed."""
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return {}
+        return v or {}
+
+
+class CustomerCommunicationCreate(CustomerCommunicationBase):
+    """Schema for creating customer communication records."""
+
+    pass
+
+
+class CustomerCommunicationResponse(CustomerCommunicationBase):
+    """Schema for customer communication responses."""
+
+    id: int = Field(..., description="ID of the communication record")
+    customer_id: int = Field(..., description="ID of the customer")
+    staff_id: Optional[int] = Field(None, description="ID of the staff member")
+    response_content: Optional[str] = Field(
+        None, description="Content of the response if any"
+    )
+    response_date: Optional[datetime] = Field(
+        None, description="Date of the response if any"
+    )
+    created_at: datetime = Field(..., description="Date the record was created")
+    updated_at: datetime = Field(..., description="Date the record was last updated")
+
+    class Config:
+        from_attributes = True
+
+
+# For analytics
+class CustomerAnalytics(BaseModel):
+    """Schema for customer analytics data."""
+
+    total_customers: int = Field(..., description="Total number of customers")
+    active_customers: int = Field(..., description="Number of active customers")
+    new_customers_30d: int = Field(..., description="New customers in the last 30 days")
+    customer_distribution: Dict[str, Dict[str, int]] = Field(
+        ..., description="Distribution of customers by status, tier, source"
+    )
+    average_lifetime_value: float = Field(
+        ..., description="Average customer lifetime value"
+    )
+    top_customers: List[Dict[str, Any]] = Field(
+        ..., description="Top customers by sales volume"
+    )
+
+
+# For bulk import/export
+class CustomerImportRow(CustomerBase):
+    """Schema for a single customer row in import data."""
+
+    pass
+
+
+class CustomerImport(BaseModel):
+    """Schema for bulk customer import requests."""
+
+    customers: List[CustomerImportRow] = Field(
+        ..., description="List of customers to import"
+    )
+    update_existing: bool = Field(
+        False, description="Whether to update existing customers"
+    )
+
+
+class BulkImportResult(BaseModel):
+    """Schema for bulk import operation results."""
+
+    total_processed: int = Field(..., description="Total number of records processed")
+    created: int = Field(..., description="Number of records created")
+    updated: int = Field(..., description="Number of records updated")
+    failed: int = Field(..., description="Number of records that failed to import")
+    errors: List[Dict[str, Any]] = Field(..., description="Details of import errors")
+
+# Add this to app/core/exceptions.py, after the ProjectException classes
+
+class InvalidStatusTransitionException(BusinessRuleException):
+    """Raised when an invalid status transition is attempted."""
+
+    def __init__(
+        self,
+        message: str,
+        allowed_transitions: Optional[List[str]] = None
+    ):
+        """
+        Initialize invalid status transition exception.
+
+        Args:
+            message: Human-readable error message describing the invalid transition
+            allowed_transitions: Optional list of allowed status transitions
+        """
+        details = {}
+        if allowed_transitions is not None:
+            details["allowed_transitions"] = allowed_transitions
+
+        super().__init__(message, "INVALID_STATUS_TRANSITION", details)
+
+
+class DuplicateEntityException(HideSyncException):
+    """Raised when an attempt is made to create an entity that already exists."""
+
+    def __init__(self, message: str = "Duplicate entity detected", details: Optional[Dict[str, Any]] = None):
+        super().__init__(message, "DUPLICATE_ENTITY", details or {})
