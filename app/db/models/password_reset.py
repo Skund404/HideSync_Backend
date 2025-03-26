@@ -5,7 +5,7 @@ Database model for password reset tokens in HideSync.
 This module defines the SQLAlchemy model for password reset tokens.
 """
 
-from sqlalchemy import Column, String, Integer, ForeignKey, DateTime
+from sqlalchemy import Column, String, Integer, ForeignKey, DateTime, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime, timedelta
 import secrets

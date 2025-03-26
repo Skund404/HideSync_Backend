@@ -17,16 +17,20 @@ from app.db.models.documentation import (
 )
 from app.db.models.file_metadata import FileMetadata
 from app.db.models.inventory import Inventory, InventoryTransaction, Product
-from app.db.models.material import (
-    Material,
-    LeatherMaterial,
-    HardwareMaterial,
-    SuppliesMaterial,
+
+# Import Pattern from its module (if Pattern truly belongs there)
+from app.db.models.pattern import Pattern
+
+# Import project models from project.py (including ProjectTemplate models)
+from app.db.models.project import (
+    Project,
+    ProjectComponent,
+    ProjectTemplate,
+    ProjectTemplateComponent
 )
-from app.db.models.pattern import Pattern, ProjectTemplate, ProjectTemplateComponent
+
 from app.db.models.picking_list import PickingList, PickingListItem
 from app.db.models.platform_integration import PlatformIntegration, SyncEvent
-from app.db.models.project import Project, ProjectComponent
 from app.db.models.purchase import Purchase, PurchaseItem
 from app.db.models.recurring_project import (
     RecurrencePattern,

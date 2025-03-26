@@ -1,4 +1,4 @@
-# app/schemas/user.py (updates)
+# app/schemas/user.py
 """
 User schemas for the HideSync API.
 
@@ -9,9 +9,6 @@ including user creation, update, and authentication.
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, EmailStr, Field, validator
-
-
-# Add these new schemas to the existing file
 
 
 class UserPasswordReset(BaseModel):
@@ -47,12 +44,6 @@ class UserPasswordChange(BaseModel):
         return v
 
 
-class TokenRefresh(BaseModel):
-    """Schema for refreshing an access token."""
-
-    refresh_token: str = Field(..., description="Refresh token")
-
-
 class UserListParams(BaseModel):
     """Query parameters for user listing."""
 
@@ -63,17 +54,6 @@ class UserListParams(BaseModel):
     role_id: Optional[int] = Field(None, description="Filter by role")
 
 
-# Update the existing Token schema to include a refresh token
-class Token(BaseModel):
-    """Authentication token schema."""
-
-    access_token: str
-    token_type: str
-    refresh_token: Optional[str] = None
-    expires_in: Optional[int] = None
-
-
-# Enhance existing User schema to include roles
 class User(BaseModel):
     """Schema for user information."""
 

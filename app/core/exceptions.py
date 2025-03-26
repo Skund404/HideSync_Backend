@@ -14,6 +14,7 @@ from app.db.models.enums import (
     CommunicationChannel,
     CommunicationType,
 )
+from app.schemas.customer import CustomerBase
 
 
 class HideSyncException(Exception):
@@ -632,3 +633,10 @@ class InvalidStatusTransitionException(BusinessRuleException):
             details["allowed_transitions"] = allowed_transitions
 
         super().__init__(message, "INVALID_STATUS_TRANSITION", details)
+
+
+class DuplicateEntityException(HideSyncException):
+    """Raised when an attempt is made to create an entity that already exists."""
+
+    def __init__(self, message: str = "Duplicate entity detected", details: Optional[Dict[str, Any]] = None):
+        super().__init__(message, "DUPLICATE_ENTITY", details or {})

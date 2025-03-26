@@ -32,6 +32,16 @@ from app.db.models.enums import (
     UserRole,
 )
 
+# Import the authentication and user schemas from their modules
+from .token import Token, TokenPayload, TokenRefresh
+from .user import (
+    User,
+    UserPasswordReset,
+    UserPasswordResetConfirm,
+    UserPasswordChange,
+    UserListParams
+)
+
 # ===============================
 # AUTH SCHEMAS
 # ===============================
@@ -42,6 +52,8 @@ class Token(BaseModel):
 
     access_token: str
     token_type: str
+    refresh_token: Optional[str] = None
+    expires_in: Optional[int] = None
 
 
 class TokenPayload(BaseModel):
@@ -106,26 +118,6 @@ class UserWithPermissions(User):
 
     permissions: Set[str] = set()
     role_name: Optional[str] = None
-
-
-class PasswordReset(BaseModel):
-    """Schema for password reset requests."""
-
-    email: EmailStr
-
-
-class PasswordChange(BaseModel):
-    """Schema for password change requests."""
-
-    old_password: str
-    new_password: str
-
-    @validator("new_password")
-    def password_strength(cls, v):
-        if len(v) < 8:
-            raise ValueError("Password must be at least 8 characters long")
-        return v
-
 
 # ===============================
 # CUSTOMER SCHEMAS

@@ -1,4 +1,3 @@
-# app/api/endpoints/auth.py (updates)
 """
 Authentication API endpoints for HideSync.
 
@@ -23,9 +22,6 @@ from app.db.models.user import User
 router = APIRouter()
 
 
-# Keep existing endpoints and add these new ones:
-
-
 @router.post("/refresh", response_model=schemas.Token)
 def refresh_token(
     refresh_token_in: schemas.TokenRefresh = Body(...),
@@ -35,7 +31,6 @@ def refresh_token(
     Refresh access token using a refresh token.
     """
     user_service = UserService(db)
-
     try:
         tokens = user_service.refresh_token(refresh_token_in.refresh_token)
         return tokens
@@ -47,11 +42,14 @@ def refresh_token(
         )
 
 
-@router.post("/reset-password", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/reset-password",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
 def reset_password_request(
     reset_request: schemas.UserPasswordReset = Body(...),
     db: Session = Depends(deps.get_db),
-) -> Any:
+) -> None:
     """
     Request a password reset for a user.
 
@@ -60,7 +58,7 @@ def reset_password_request(
     """
     user_service = UserService(db)
     user_service.request_password_reset(reset_request.email)
-    return None
+    # Function ends without returning a value
 
 
 @router.post("/reset-password/{token}", response_model=schemas.User)
@@ -101,12 +99,15 @@ def reset_password(
         )
 
 
-@router.put("/me/password", status_code=status.HTTP_204_NO_CONTENT)
+@router.put(
+    "/me/password",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
 def change_password(
     password_data: schemas.UserPasswordChange = Body(...),
     current_user: User = Depends(deps.get_current_user),
     db: Session = Depends(deps.get_db),
-) -> Any:
+) -> None:
     """
     Change current user's password.
     """
@@ -125,7 +126,7 @@ def change_password(
             password_data.current_password,
             password_data.new_password,
         )
-        return None
+        # Function ends without returning a value
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

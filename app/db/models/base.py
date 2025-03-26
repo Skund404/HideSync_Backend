@@ -17,9 +17,12 @@ import re
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, Float, JSON, event
 from sqlalchemy.ext.declarative import declarative_base, DeclarativeMeta
 from sqlalchemy.orm import validates, Session
+from sqlalchemy import MetaData
 
 # Create the SQLAlchemy base
-Base = declarative_base()
+
+Base = declarative_base(metadata=MetaData())
+
 
 # Type variable for model classes
 T = TypeVar("T", bound="AbstractBase")
@@ -194,9 +197,6 @@ class CostingMixin:
 
         Args:
             price_type: Type of price to use ('retail' or 'wholesale')
-
-        Returns:
-            Profit margin as a percentage, or None if prices are not set
         """
         if not self.cost_price:
             return None
@@ -292,6 +292,7 @@ class AbstractBase(Base):
     """
 
     __abstract__ = True
+    # __table_args__ = {'extend_existing': True} #Added it to Base.
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     uuid = Column(String(36), unique=True, default=lambda: str(uuid.uuid4()))

@@ -31,7 +31,7 @@ from app.schemas.customer import (
 )
 from app.services.customer_service import CustomerService
 from app.services.customer_communication_service import CustomerCommunicationService
-from app.core.exceptions import EntityNotFoundExcept
+from app.core.exceptions import EntityNotFoundException, BusinessRuleException
 
 router = APIRouter()
 

@@ -1,6 +1,12 @@
 # File: app/db/models/project.py
 """
 Project model for the HideSync ERP system.
+
+Note:
+Recurring project functionality is now handled in a separate module
+(e.g., app/db/models/recurring_project.py as RecurringProject with a table
+named "recurring_projects"). This avoids duplicate table definitions and aligns
+with the ER diagram by keeping standard and recurring projects separate.
 """
 
 from typing import List, Optional, Dict, Any, ClassVar, Set
@@ -31,7 +37,6 @@ class Project(AbstractBase, ValidationMixin, TimestampMixin):
     """
 
     __tablename__ = "projects"
-    __table_args__ = {'extend_existing': True}
     __validated_fields__: ClassVar[Set[str]] = {"name", "due_date", "start_date"}
 
     # Basic information
@@ -130,8 +135,6 @@ class Project(AbstractBase, ValidationMixin, TimestampMixin):
         if total_tasks == 0:
             return 0
 
-        completed_tasks = sum(1 for task in self.timeline_tasks if task.progress == 100)
-
         progress_sum = sum(task.progress for task in self.timeline_tasks)
         calculated_progress = progress_sum / total_tasks
 
@@ -145,7 +148,7 @@ class Project(AbstractBase, ValidationMixin, TimestampMixin):
         old_status = self.status
         self.status = new_status
 
-        # Record the change in history
+        # Record the change in history, if applicable
         if hasattr(self, "record_change"):
             self.record_change(
                 user,
@@ -179,7 +182,10 @@ class Project(AbstractBase, ValidationMixin, TimestampMixin):
         return result
 
     def __repr__(self) -> str:
-        return f"<Project(id={self.id}, name='{self.name}', status={self.status}, progress={self.progress})>"
+        return (
+            f"<Project(id={self.id}, name='{self.name}', "
+            f"status={self.status}, progress={self.progress})>"
+        )
 
 
 class ProjectComponent(AbstractBase, ValidationMixin):
@@ -188,7 +194,6 @@ class ProjectComponent(AbstractBase, ValidationMixin):
     """
 
     __tablename__ = "project_components"
-    __table_args__ = {'extend_existing': True}
 
     # Relationships
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
@@ -206,7 +211,10 @@ class ProjectComponent(AbstractBase, ValidationMixin):
         return quantity
 
     def __repr__(self) -> str:
-        return f"<ProjectComponent(project_id={self.project_id}, component_id={self.component_id}, quantity={self.quantity})>"
+        return (
+            f"<ProjectComponent(project_id={self.project_id}, "
+            f"component_id={self.component_id}, quantity={self.quantity})>"
+        )
 
 
 class ProjectTemplate(AbstractBase, ValidationMixin, TimestampMixin):
@@ -215,14 +223,13 @@ class ProjectTemplate(AbstractBase, ValidationMixin, TimestampMixin):
     """
 
     __tablename__ = "project_templates"
-    __table_args__ = {'extend_existing': True}
 
     # Basic information
     name = Column(String(255), nullable=False)
     description = Column(Text)
     project_type = Column(Enum(ProjectType), nullable=False)
     skill_level = Column(String(50))
-    estimated_duration = Column(Float)
+    estimated_duration = Column(Integer)
     estimated_cost = Column(Float)
     version = Column(String(50), default="1.0")
     is_public = Column(Boolean, default=False)
@@ -245,7 +252,10 @@ class ProjectTemplate(AbstractBase, ValidationMixin, TimestampMixin):
         return name.strip()
 
     def __repr__(self) -> str:
-        return f"<ProjectTemplate(id={self.id}, name='{self.name}', type={self.project_type})>"
+        return (
+            f"<ProjectTemplate(id={self.id}, name='{self.name}', "
+            f"type={self.project_type})>"
+        )
 
 
 class ProjectTemplateComponent(AbstractBase, ValidationMixin):
@@ -254,7 +264,6 @@ class ProjectTemplateComponent(AbstractBase, ValidationMixin):
     """
 
     __tablename__ = "project_template_components"
-    __table_args__ = {'extend_existing': True}
 
     # Relationships
     template_id = Column(Integer, ForeignKey("project_templates.id"), nullable=False)
@@ -273,4 +282,7 @@ class ProjectTemplateComponent(AbstractBase, ValidationMixin):
         return quantity
 
     def __repr__(self) -> str:
-        return f"<ProjectTemplateComponent(template_id={self.template_id}, component_id={self.component_id}, quantity={self.quantity})>"
+        return (
+            f"<ProjectTemplateComponent(template_id={self.template_id}, "
+            f"component_id={self.component_id}, quantity={self.quantity})>"
+        )

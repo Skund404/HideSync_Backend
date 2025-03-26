@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_active_user, get_db
 from app.schemas.material import (
-    Material,
+    MaterialResponse as Material,  # Updated alias here
     MaterialCreate,
     MaterialUpdate,
     MaterialSearchParams,
@@ -38,9 +38,9 @@ from app.schemas.supplies_material import (
     SuppliesMaterialList,
 )
 from app.services.material_service import MaterialService
-from app.services.leather_material_service import LeatherMaterialService
-from app.services.hardware_material_service import HardwareMaterialService
-from app.services.supplies_material_service import SuppliesMaterialService
+from app.db.models.leather_material_service import LeatherMaterialService
+from app.db.models.hardware_material_service import HardwareMaterialService
+from app.db.models.supplies_material_service import SuppliesMaterialService
 from app.db.models.enums import (
     MaterialType,
     LeatherType,
