@@ -1,4 +1,4 @@
-# app/db/models/role.py
+# File: app/db/models/role.py
 """
 Database models for role-based access control in HideSync.
 
@@ -6,39 +6,18 @@ This module defines SQLAlchemy models for roles, permissions,
 and user-role assignments.
 """
 
-from sqlalchemy import Column, String, Integer, Boolean, ForeignKey, Table, DateTime
+# Keep necessary imports, remove Table, DateTime, datetime
+from sqlalchemy import Column, String, Integer, Boolean
 from sqlalchemy.orm import relationship
-from datetime import datetime
 
 from app.db.models.base import Base, TimestampMixin
+# --- Import association tables from the new file ---
+from app.db.models.associations import role_permission, user_role
 
-# Association table for role-permission many-to-many relationship
-role_permission = Table(
-    "role_permission",
-    Base.metadata,
-    Column(
-        "role_id", Integer, ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True
-    ),
-    Column(
-        "permission_id",
-        Integer,
-        ForeignKey("permissions.id", ondelete="CASCADE"),
-        primary_key=True,
-    ),
-)
 
-# Association table for user-role many-to-many relationship
-user_role = Table(
-    "user_role",
-    Base.metadata,
-    Column(
-        "user_id", Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
-    ),
-    Column(
-        "role_id", Integer, ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True
-    ),
-    Column("created_at", DateTime, default=datetime.utcnow),
-)
+# --- Remove the table definitions from here ---
+# role_permission = Table(...)
+# user_role = Table(...)
 
 
 class Permission(Base):
@@ -56,7 +35,7 @@ class Permission(Base):
     description = Column(String(200), nullable=True)
     resource = Column(String(50), nullable=False)
 
-    # Relationships
+    # Relationships - Use imported table
     roles = relationship(
         "Role", secondary=role_permission, back_populates="permissions"
     )
@@ -76,22 +55,11 @@ class Role(Base, TimestampMixin):
     description = Column(String(200), nullable=True)
     is_system_role = Column(Boolean, default=False, nullable=False)
 
-    # Relationships
+    # Relationships - Use imported tables
     permissions = relationship(
         "Permission", secondary=role_permission, back_populates="roles"
     )
     users = relationship("User", secondary=user_role, back_populates="roles")
 
 
-# Update the User model in user.py to include the roles relationship
-# This is a reference to what needs to be added to the existing User model
-"""
-# In app/db/models/user.py:
-from app.db.models.role import user_role
-
-class User(Base, AuditMixin, TimestampMixin):
-    # ... existing fields ...
-
-    # Add this relationship
-    roles = relationship("Role", secondary=user_role, back_populates="users")
-"""
+# Remove the comment block at the end if it's still there

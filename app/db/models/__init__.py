@@ -1,52 +1,238 @@
 # File: app/db/models/__init__.py
+"""
+Initializes the models package for SQLAlchemy declarative base.
 
+This file imports all necessary model classes and enums into the
+`app.db.models` namespace. This ensures that SQLAlchemy's metadata
+is populated with all table definitions when `Base.metadata.create_all()`
+is called.
+
+It relies on the structure derived from the project's model files
+as per the provided JSON summary and user corrections.
+"""
+
+# Import the Base for declarative models
 from app.db.models.base import Base
-from app.db.models.enums import SkillLevel, ProjectStatus, ProjectType  # Ensure correct Enums are imported first
-from app.db.models.user import User  # Ensure users are imported early
 
-# Import the Sale models *before* Project models
-from app.db.models.sales import Sale, SaleItem
+# Import all Enums defined in enums.py
+from app.db.models.enums import (
+    SaleStatus,
+    PaymentStatus,
+    PurchaseStatus,
+    CustomerStatus,
+    CustomerTier,
+    CustomerSource,
+    InventoryStatus,
+    MaterialType,
+    MaterialQualityGrade,
+    HardwareType,
+    HardwareMaterial,  # Enum
+    HardwareFinish,
+    LeatherType,
+    LeatherFinish,
+    ProjectType,
+    ProjectStatus,
+    SkillLevel,
+    ComponentType,
+    ToolCategory,
+    EdgeFinishType,
+    TransactionType,
+    InventoryAdjustmentType,
+    SupplierStatus,
+    StorageLocationType,
+    MeasurementUnit,
+    QualityGrade,
+    PickingListStatus,
+    ToolListStatus,
+    CommunicationChannel,
+    CommunicationType,
+    MaterialStatus,
+    PatternFileType,
+    FulfillmentStatus,
+    UserRole,
+)
 
-# Non-relational models
-from app.db.models.communication import CustomerCommunication
-from app.db.models.component import Component, ComponentMaterial
-from app.db.models.customer import Customer
+# Import Enums defined within documentation.py
 from app.db.models.documentation import (
-    DocumentationCategory,
-    DocumentationResource,
-)
-from app.db.models.file_metadata import FileMetadata
-from app.db.models.inventory import Inventory, InventoryTransaction, Product
-
-# Import Pattern from its module (if Pattern truly belongs there)
-from app.db.models.pattern import Pattern
-
-# Import project models from project.py (including ProjectTemplate models)
-from app.db.models.project import (
-    Project,
-    ProjectComponent,
-    ProjectTemplate,
-    ProjectTemplateComponent
+    DocumentationType,
+    DocumentationStatus,
 )
 
-from app.db.models.picking_list import PickingList, PickingListItem
-from app.db.models.platform_integration import PlatformIntegration, SyncEvent
-from app.db.models.purchase import Purchase, PurchaseItem
-from app.db.models.recurring_project import (
-    RecurrencePattern,
-    RecurringProject,
-    GeneratedProject,
+# Import Core Models
+from app.db.models.user import User
+from app.db.models.role import Role, Permission
+from app.db.models.password_reset import PasswordResetToken
+from app.db.models.annotation import Annotation
+
+# Import Business Entity Models
+from app.db.models.customer import Customer
+from app.db.models.supplier import Supplier
+from app.db.models.supplier_history import SupplierHistory
+from app.db.models.supplier_rating import SupplierRating
+
+# Import Inventory & Material Models
+from app.db.models.material import (
+    Material,
+    LeatherMaterial,
+    HardwareMaterial as HardwareMaterialModel,  # Alias class to avoid enum conflict
+    SuppliesMaterial,
 )
-from app.db.models.refund import Refund  # Corrected Import
-from app.db.models.shipment import Shipment
+from app.db.models.inventory import Inventory, InventoryTransaction
+from app.db.models.product import Product
 from app.db.models.storage import (
     StorageLocation,
     StorageCell,
     StorageAssignment,
     StorageMove,
 )
-from app.db.models.supplier import Supplier
-from app.db.models.supplier_history import SupplierHistory
-from app.db.models.supplier_rating import SupplierRating
-from app.db.models.timeline_task import TimelineTask
 from app.db.models.tool import Tool, ToolMaintenance, ToolCheckout
+
+# Import Design & Project Models
+from app.db.models.pattern import Pattern # Only Pattern is in pattern.py
+from app.db.models.component import Component, ComponentMaterial
+from app.db.models.project import (
+    Project,
+    ProjectComponent,
+    ProjectTemplate,          # Correctly imported from project.py
+    ProjectTemplateComponent, # Correctly imported from project.py
+)
+from app.db.models.timeline_task import TimelineTask
+from app.db.models.recurring_project import (
+    RecurrencePattern,
+    RecurringProject,
+    GeneratedProject,
+)
+
+# Import Sales & Purchase Models
+from app.db.models.sales import Sale, SaleItem
+from app.db.models.purchase import Purchase, PurchaseItem
+from app.db.models.shipment import Shipment
+from app.db.models.refund import Refund
+
+# Import Operational Models
+from app.db.models.picking_list import PickingList, PickingListItem
+from app.db.models.platform_integration import PlatformIntegration, SyncEvent
+from app.db.models.communication import CustomerCommunication
+
+# Import Documentation & Utility Models
+from app.db.models.documentation import (
+    DocumentationCategory,
+    DocumentationResource,
+    ApplicationContext,
+    ContextualHelpMapping,
+    # Enums already imported above
+)
+from app.db.models.file_metadata import FileMetadata
+
+
+# Define __all__ for explicit namespace export
+__all__ = [
+    # Base
+    "Base",
+
+    # Core Models
+    "User",
+    "Role",
+    "Permission",
+    "PasswordResetToken",
+    "Annotation",
+
+    # Business Entity Models
+    "Customer",
+    "Supplier",
+    "SupplierHistory",
+    "SupplierRating",
+
+    # Inventory & Material Models
+    "Material",
+    "LeatherMaterial",
+    "HardwareMaterialModel",  # Use aliased class name
+    "SuppliesMaterial",
+    "Inventory",
+    "InventoryTransaction",
+    "Product",
+    "StorageLocation",
+    "StorageCell",
+    "StorageAssignment",
+    "StorageMove",
+    "Tool",
+    "ToolMaintenance",
+    "ToolCheckout",
+
+    # Design & Project Models
+    "Pattern",
+    "Component",
+    "ComponentMaterial",
+    "Project",
+    "ProjectComponent",
+    "ProjectTemplate",          # Correctly exported
+    "ProjectTemplateComponent", # Correctly exported
+    "TimelineTask",
+    "RecurrencePattern",
+    "RecurringProject",
+    "GeneratedProject",
+
+    # Sales & Purchase Models
+    "Sale",
+    "SaleItem",
+    "Purchase",
+    "PurchaseItem",
+    "Shipment",
+    "Refund",
+
+    # Operational Models
+    "PickingList",
+    "PickingListItem",
+    "PlatformIntegration",
+    "SyncEvent",
+    "CustomerCommunication",
+
+    # Documentation & Utility Models
+    "DocumentationCategory",
+    "DocumentationResource",
+    "ApplicationContext",
+    "ContextualHelpMapping",
+    "FileMetadata",
+
+    # Enums (Exporting all imported enums)
+    "SaleStatus",
+    "PaymentStatus",
+    "PurchaseStatus",
+    "CustomerStatus",
+    "CustomerTier",
+    "CustomerSource",
+    "InventoryStatus",
+    "MaterialType",
+    "MaterialQualityGrade",
+    "HardwareType",
+    "HardwareMaterial",  # Export the Enum name
+    "HardwareFinish",
+    "LeatherType",
+    "LeatherFinish",
+    "ProjectType",
+    "ProjectStatus",
+    "SkillLevel",
+    "ComponentType",
+    "ToolCategory",
+    "EdgeFinishType",
+    "TransactionType",
+    "InventoryAdjustmentType",
+    "SupplierStatus",
+    "StorageLocationType",
+    "MeasurementUnit",
+    "QualityGrade",
+    "PickingListStatus",
+    "ToolListStatus",
+    "CommunicationChannel",
+    "CommunicationType",
+    "MaterialStatus",
+    "PatternFileType",
+    "FulfillmentStatus",
+    "UserRole",
+    "DocumentationType",
+    "DocumentationStatus",
+]
+
+# Note: The alias for HardwareMaterialModel remains to avoid conflict with the
+# HardwareMaterial enum. ProjectTemplate and ProjectTemplateComponent no longer
+# need aliases as they are correctly sourced from project.py.

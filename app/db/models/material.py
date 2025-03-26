@@ -11,60 +11,67 @@ The models use SQLAlchemy's single-table inheritance to represent the
 different material types, with a discriminator column to identify the type.
 """
 
-from typing import Optional, List, Dict, Any, ClassVar, Set
+from __future__ import annotations  # Allows type hinting models defined later
+
 from decimal import Decimal
+from typing import Any, ClassVar, Dict, List, Optional, Set
 
-from sqlalchemy import Column, String, Text, Float, Enum, Integer, ForeignKey, Boolean
-from sqlalchemy.orm import relationship, validates
+from sqlalchemy import (
+    JSON,  # Added JSON if needed by base classes
+    Boolean,
+    Column,
+    DateTime,  # Added DateTime if needed by base classes
+    Enum,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    and_,  # <<< Added import
+)
+# <<< Added imports
 from sqlalchemy.ext.hybrid import hybrid_property
+from sqlalchemy.orm import foreign, relationship, validates
 
+# Assuming these base classes and enums are correctly defined elsewhere
 from app.db.models.base import (
     AbstractBase,
-    ValidationMixin,
     CostingMixin,
     TimestampMixin,
+    ValidationMixin,
 )
 from app.db.models.enums import (
-    MaterialType,
-    MaterialQualityGrade,
-    InventoryStatus,
-    LeatherType,
-    LeatherFinish,
-    HardwareType,
-    HardwareMaterial as HardwareMaterialEnum,
     HardwareFinish,
+    HardwareMaterial as HardwareMaterialEnum,
+    HardwareType,
+    InventoryStatus,
+    LeatherFinish,
+    LeatherType,
+    MaterialQualityGrade,
+    MaterialType,  # Assuming MaterialType is defined if needed
     MeasurementUnit,
 )
+
+
+# Forward declarations if needed
+# class Inventory: pass
+# class Supplier: pass
+# class ComponentMaterial: pass
+# class PickingListItem: pass
 
 
 class Material(AbstractBase, ValidationMixin, CostingMixin, TimestampMixin):
     """
     Base Material model for inventory items.
-
-    This class represents all materials used in leatherworking projects,
-    with common attributes shared across all material types. It uses
-    SQLAlchemy's single-table inheritance to support specialized material types.
-
-    Attributes:
-        name: Material name/description
-        material_type: Type discriminator for inheritance
-        status: Current inventory status
-        quantity: Current quantity in stock
-        unit: Unit of measurement
-        quality: Quality grade
-        supplier_id: Reference to supplier
-        supplier: Name of the supplier (denormalized for convenience)
-        sku: Stock keeping unit (internal)
-        description: Detailed description
-        reorder_point: Quantity threshold for reordering
-        supplier_sku: Supplier's SKU for this material
-        last_purchased: Date last purchased
-        storage_location: Storage location identifier
-        notes: Additional notes
+    ... (rest of docstring) ...
     """
 
     __tablename__ = "materials"
     __validated_fields__: ClassVar[Set[str]] = {"name", "quantity", "reorder_point"}
+
+    # --- Primary Key ---
+    # IMPORTANT: Ensure Integer matches Inventory.item_id type
+    id = Column(Integer, primary_key=True)
 
     # Basic information
     name = Column(String(255), nullable=False)
@@ -77,15 +84,16 @@ class Material(AbstractBase, ValidationMixin, CostingMixin, TimestampMixin):
     quality = Column(Enum(MaterialQualityGrade), default=MaterialQualityGrade.STANDARD)
 
     # Supplier information
+    # Ensure Integer matches Supplier.id type
     supplier_id = Column(Integer, ForeignKey("suppliers.id"), nullable=True)
-    supplier = Column(String(255))
+    supplier = Column(String(255)) # Denormalized name
     sku = Column(String(100), index=True)
     description = Column(Text)
 
     # Inventory management
     reorder_point = Column(Float, default=0)
     supplier_sku = Column(String(100))
-    last_purchased = Column(String(50))  # ISO date string
+    last_purchased = Column(String(50))  # Consider using DateTime type
     storage_location = Column(String(100))
     notes = Column(Text)
     thumbnail = Column(String(255))  # URL or path to thumbnail image
@@ -93,18 +101,42 @@ class Material(AbstractBase, ValidationMixin, CostingMixin, TimestampMixin):
     # Inheritance configuration
     __mapper_args__ = {
         "polymorphic_on": material_type,
-        "polymorphic_identity": "material",
+        "polymorphic_identity": "material", # Base identity
     }
 
-    # Relationships
+    # --- RELATIONSHIPS ---
+
+    # Relationship to ComponentMaterial (One-to-Many)
     component_materials = relationship("ComponentMaterial", back_populates="material")
+
+    # Relationship to Supplier (Many-to-One)
     supplier_rel = relationship("Supplier", back_populates="materials")
+
+    # Relationship to PickingListItem (One-to-Many)
     picking_list_items = relationship(
-        "PickingListItem", back_populates="material", cascade="all, delete-orphan"
+        "PickingListItem", back_populates="material", cascade="save-update, merge" # Avoid deleting items if material deleted
     )
+
+    # --- ADD THIS RELATIONSHIP ---
+    # One-to-One relationship TO Inventory
+    inventory = relationship(
+        "Inventory",
+        primaryjoin="and_(Inventory.item_type=='material', foreign(Inventory.item_id)==Material.id)",
+        back_populates="material",
+        uselist=False,
+        cascade="all, delete-orphan",
+        lazy="joined",
+        passive_deletes=True,
+        overlaps="inventory",  # <<< ADD THIS
+    )
+    # --- END ADDED RELATIONSHIP ---
+
+    # --- End Relationships ---
+
 
     @validates("quantity")
     def validate_quantity(self, key: str, quantity: float) -> float:
+        """Validate quantity and update status based on reorder point."""
         if quantity < 0:
             raise ValueError("Quantity cannot be negative")
 
@@ -119,64 +151,24 @@ class Material(AbstractBase, ValidationMixin, CostingMixin, TimestampMixin):
             self.status = InventoryStatus.IN_STOCK
 
         return quantity
-        """
-        Validate and update quantity, updating status if needed.
-
-        Args:
-            key: Field name ('quantity')
-            quantity: New quantity value
-
-        Returns:
-            Validated quantity
-        """
-        if quantity < 0:
-            raise ValueError("Quantity cannot be negative")
-
-        # Update status based on quantity
-        if quantity <= 0:
-            self.status = InventoryStatus.OUT_OF_STOCK
-        elif quantity <= self.reorder_point:
-            self.status = InventoryStatus.LOW_STOCK
-        else:
-            self.status = InventoryStatus.IN_STOCK
-
-        return quantity
 
     @validates("reorder_point")
     def validate_reorder_point(self, key: str, value: float) -> float:
-        """
-        Validate reorder point.
-
-        Args:
-            key: Field name ('reorder_point')
-            value: New reorder point value
-
-        Returns:
-            Validated reorder point
-        """
+        """Validate reorder point (cannot be negative)."""
         if value < 0:
             raise ValueError("Reorder point cannot be negative")
         return value
 
     @hybrid_property
     def value(self) -> Optional[float]:
-        """
-        Calculate the total value of this material in inventory.
-
-        Returns:
-            Total value (quantity * cost_price) or None if cost_price is not set
-        """
-        if self.cost_price is None:
+        """Calculate the total value of this material in inventory."""
+        # Assumes CostingMixin provides self.cost_price
+        if not hasattr(self, "cost_price") or self.cost_price is None:
             return None
         return self.quantity * self.cost_price
 
     def to_dict(self) -> Dict[str, Any]:
-        """
-        Convert Material instance to a dictionary.
-
-        Returns:
-            Dictionary representation of the material
-        """
+        """Convert Material instance to a dictionary."""
         result = super().to_dict()
 
         # Convert enum values to strings for serialization
@@ -190,31 +182,25 @@ class Material(AbstractBase, ValidationMixin, CostingMixin, TimestampMixin):
         # Add calculated properties
         result["value"] = self.value
 
+        # Add inventory specific details if needed (pulled via relationship)
+        inv_record = self.inventory
+        if inv_record:
+             result["inventory_quantity"] = inv_record.quantity # Example
+             result["inventory_status"] = inv_record.status.name if inv_record.status else None # Example
+             result["storage_location"] = inv_record.storage_location # Example
+
         return result
 
     def __repr__(self) -> str:
         """Return string representation of the Material."""
-        return f"<Material(id={self.id}, name='{self.name}', type='{self.material_type}', quantity={self.quantity})>"
+        # Use self.id which should be populated after flush/commit
+        return f"<Material(id={getattr(self, 'id', None)}, name='{self.name}', type='{self.material_type}', quantity={self.quantity})>"
 
+
+# --- Subclasses remain the same, inheriting the new 'inventory' relationship ---
 
 class LeatherMaterial(Material):
-    """
-    Specialized Material model for leather inventory.
-
-    This class extends the base Material model with leather-specific attributes.
-
-    Attributes:
-        leather_type: Type of leather
-        tannage: Tanning method
-        animal_source: Animal source
-        thickness: Thickness in mm
-        area: Area in square feet/meters
-        is_full_hide: Whether this is a full hide
-        color: Color description
-        finish: Finish type
-        grade: Quality grade
-    """
-
+    """Specialized Material model for leather inventory."""
     __mapper_args__ = {"polymorphic_identity": "leather"}
 
     # Leather-specific attributes
@@ -229,24 +215,11 @@ class LeatherMaterial(Material):
     grade = Column(String(20))
 
     def __repr__(self) -> str:
-        """Return string representation of the LeatherMaterial."""
-        return f"<LeatherMaterial(id={self.id}, name='{self.name}', type='{self.leather_type.name if self.leather_type else None}', thickness={self.thickness})>"
+        return f"<LeatherMaterial(id={getattr(self, 'id', None)}, name='{self.name}', type='{self.leather_type.name if self.leather_type else None}', thickness={self.thickness})>"
 
 
 class HardwareMaterial(Material):
-    """
-    Specialized Material model for hardware inventory.
-
-    This class extends the base Material model with hardware-specific attributes.
-
-    Attributes:
-        hardware_type: Type of hardware
-        hardware_material: Material the hardware is made of
-        hardware_finish: Finish type
-        size: Size specification
-        hardware_color: Color description
-    """
-
+    """Specialized Material model for hardware inventory."""
     __mapper_args__ = {"polymorphic_identity": "hardware"}
 
     # Hardware-specific attributes
@@ -257,28 +230,11 @@ class HardwareMaterial(Material):
     hardware_color = Column(String(50))
 
     def __repr__(self) -> str:
-        """Return string representation of the HardwareMaterial."""
-        return f"<HardwareMaterial(id={self.id}, name='{self.name}', type='{self.hardware_type.name if self.hardware_type else None}')>"
+        return f"<HardwareMaterial(id={getattr(self, 'id', None)}, name='{self.name}', type='{self.hardware_type.name if self.hardware_type else None}')>"
 
 
 class SuppliesMaterial(Material):
-    """
-    Specialized Material model for supplies inventory.
-
-    This class extends the base Material model with supplies-specific attributes.
-
-    Attributes:
-        supplies_material_type: Type of supply material
-        supplies_color: Color description
-        thread_thickness: Thread thickness (for thread)
-        material_composition: Material composition description
-        volume: Volume (for liquids)
-        length: Length (for thread, cord, etc.)
-        drying_time: Drying time (for adhesives, dyes, etc.)
-        application_method: Application method
-        supplies_finish: Finish type
-    """
-
+    """Specialized Material model for supplies inventory."""
     __mapper_args__ = {"polymorphic_identity": "supplies"}
 
     # Supplies-specific attributes
@@ -293,5 +249,5 @@ class SuppliesMaterial(Material):
     supplies_finish = Column(String(50))
 
     def __repr__(self) -> str:
-        """Return string representation of the SuppliesMaterial."""
-        return f"<SuppliesMaterial(id={self.id}, name='{self.name}', type='{self.supplies_material_type}')>"
+        return f"<SuppliesMaterial(id={getattr(self, 'id', None)}, name='{self.name}', type='{self.supplies_material_type}')>"
+

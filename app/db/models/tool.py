@@ -109,9 +109,13 @@ class Tool(AbstractBase, ValidationMixin, TimestampMixin):
     )
     inventory = relationship(
         "Inventory",
-        primaryjoin="and_(Inventory.item_type=='tool', Inventory.item_id==Tool.id)",
-        foreign_keys="[Inventory.item_id]",
-        viewonly=True,
+        primaryjoin="and_(Inventory.item_type=='tool', foreign(Inventory.item_id)==Tool.id)",
+        back_populates="tool",
+        uselist=False,
+        cascade="all, delete-orphan",
+        lazy="joined",
+        passive_deletes=True,
+        overlaps="inventory",  # <<< ADD THIS
     )
 
     @validates("name")

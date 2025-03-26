@@ -1,10 +1,13 @@
 # File: app/db/models/user.py
 
+# Keep necessary imports
 from sqlalchemy import Boolean, Column, Integer, String, DateTime
 from sqlalchemy.orm import relationship
 import datetime
 
 from app.db.models.base import Base, AuditMixin, TimestampMixin
+# --- Import the user_role association table from associations.py ---
+from app.db.models.associations import user_role
 
 
 class User(Base, AuditMixin, TimestampMixin):
@@ -28,12 +31,20 @@ class User(Base, AuditMixin, TimestampMixin):
     # Relationships
     customer_communications = relationship(
         "CustomerCommunication", back_populates="staff"
-    )
+    ) # Assuming CustomerCommunication model exists and has 'staff' relationship
     files = relationship(
         "FileMetadata", back_populates="user", cascade="all, delete-orphan"
-    )
+    ) # Assuming FileMetadata model exists and has 'user' relationship
     annotations = relationship(
         "Annotation", back_populates="user", cascade="all, delete-orphan"
+    )
+
+    # --- Relationship uses the imported user_role table ---
+    roles = relationship(
+        "Role",
+        secondary=user_role,  # Use the imported association table
+        back_populates="users",
+        lazy="selectin",
     )
 
     # Add sensitive fields marker for encryption
@@ -41,3 +52,4 @@ class User(Base, AuditMixin, TimestampMixin):
 
     def __repr__(self):
         return f"User(id={self.id}, email={self.email}, username={self.username})"
+

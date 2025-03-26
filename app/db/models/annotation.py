@@ -6,7 +6,17 @@ This module defines the SQLAlchemy ORM model for annotations,
 including database schema, relationships, and methods.
 """
 
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Index, ARRAY
+# Import JSON type
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    Text,
+    DateTime,
+    ForeignKey,
+    Index,
+    JSON,  # <-- Import JSON
+)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -27,9 +37,14 @@ class Annotation(Base, AuditMixin, TimestampMixin):
     entity_type = Column(String(50), nullable=False, index=True)
     entity_id = Column(Integer, nullable=False, index=True)
     content = Column(Text, nullable=False)
-    visibility = Column(String(20), nullable=False, default="private",
-                        comment="PRIVATE/TEAM/PUBLIC")
-    tags = Column(ARRAY(String), nullable=True)
+    visibility = Column(
+        String(20),
+        nullable=False,
+        default="private",
+        comment="PRIVATE/TEAM/PUBLIC",
+    )
+    # Use JSON to store the list of tags in SQLite
+    tags = Column(JSON, nullable=True)  # <-- Changed ARRAY(String) to JSON
 
     # User who created the annotation
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
@@ -46,3 +61,7 @@ class Annotation(Base, AuditMixin, TimestampMixin):
     def __repr__(self):
         """String representation of the annotation."""
         return f"Annotation(id={self.id}, entity_type={self.entity_type}, entity_id={self.entity_id})"
+
+# Make sure User model has the corresponding relationship if it doesn't
+# In your User model (e.g., app/db/models/user.py):
+# annotations = relationship("Annotation", back_populates="user", cascade="all, delete-orphan")

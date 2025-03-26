@@ -6,9 +6,10 @@ This module initializes the FastAPI application, configures middleware,
 and includes API routers.
 """
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
+import logging
 
 from app.api.api import api_router
 from app.core.config import settings
@@ -38,6 +39,16 @@ if settings.BACKEND_CORS_ORIGINS:
 # Add metrics middleware
 app.add_middleware(MetricsMiddleware)
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("fastapi")
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    logger.info(f"Incoming request: {request.method} {request.url}")
+    response = await call_next(request)
+    logger.info(f"Outgoing response: {response.status_code}")
+    return response
 
 # Add security headers middleware
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -59,7 +70,6 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
         return response
 
-
 app.add_middleware(SecurityHeadersMiddleware)
 
 # Set up event handlers
@@ -67,7 +77,6 @@ setup_event_handlers(app)
 
 # Include the API router
 app.include_router(api_router, prefix=settings.API_V1_STR)
-
 
 @app.get("/")
 def root():
@@ -83,8 +92,8 @@ def root():
         "docs": f"{settings.API_V1_STR}/docs",
     }
 
-
 @app.get("/health")
+
 def health_check():
     """
     Health check endpoint.

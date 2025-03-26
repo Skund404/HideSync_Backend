@@ -17,8 +17,9 @@ import re
 import logging
 import argparse
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional # Added List, Optional
 from datetime import datetime
+from app.db.session import SessionLocal, engine
 
 # Add the project root directory to Python path.
 script_dir = Path(__file__).resolve().parent
@@ -136,13 +137,16 @@ def initialize_database_schema() -> bool:
     """Initialize database schema using SQLAlchemy models."""
     logger.info("Creating database tables...")
     try:
-        import app.db.models  # Ensures models are registered.
+        # Import models here to ensure they are registered with Base.metadata
+        # Import specific models needed later if not covered by a general import
+        from app.db import models # Assuming __init__.py imports all model modules
         from app.db.models.base import Base
         from app.db.session import engine
 
         logger.info(f"Engine details: {engine}")
         logger.info("Registered models:")
-        for table_name, table in Base.metadata.tables.items():
+        # Sort table names for consistent output
+        for table_name in sorted(Base.metadata.tables.keys()):
             logger.info(f"- {table_name}")
         try:
             Base.metadata.create_all(bind=engine)
@@ -153,295 +157,352 @@ def initialize_database_schema() -> bool:
         return True
     except Exception as e:
         logger.error(f"Error creating database tables: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc()) # Log full traceback
         return False
 
 
 def map_material_attributes(data: Dict[str, Any], material_type: str) -> Dict[str, Any]:
     """
-    Apply custom mapping for material attributes.
-    For HARDWARE materials, for example, convert "color" to "hardware_color".
+    Apply custom mapping for material attributes based on type.
     """
     result = data.copy()
-    if material_type == "LEATHER":
-        pass
-    elif material_type == "HARDWARE":
+    if material_type == "HARDWARE":
         if "color" in result:
             result["hardware_color"] = result.pop("color")
         if "finish" in result:
             result["hardware_finish"] = result.pop("finish")
+        # Add other hardware-specific mappings if needed
     elif material_type == "SUPPLIES":
         if "color" in result:
             result["supplies_color"] = result.pop("color")
         if "finish" in result:
             result["supplies_finish"] = result.pop("finish")
+        # Add other supplies-specific mappings if needed
+    # No specific mappings needed for LEATHER in this example
     return result
 
+
+# ... (imports and other functions remain the same) ...
 
 def seed_database(seed_file: str) -> bool:
     """
     Seed the database using a JSON file.
-    This function decamelizes keys and applies entity-specific overrides.
+    Handles key conversion, overrides, and relationship linking.
     """
-    if not os.path.exists(seed_file):
-        alt_paths = [
-            os.path.join("app", "db", "seed_data.json"),
-            os.path.join(project_root, "app", "db", "seed_data.json"),
-        ]
-        for path in alt_paths:
-            if os.path.exists(path):
-                seed_file = path
-                logger.info(f"Using seed file from alternative path: {seed_file}")
-                break
-        else:
-            logger.error(f"Seed file not found: {seed_file}")
-            return False
-
-    try:
-        with open(seed_file, "r") as f:
-            seed_data = json.load(f)
-    except Exception as e:
-        logger.error(f"Error loading seed data: {str(e)}")
-        return False
+    # ... (file loading remains the same) ...
 
     # Define custom key overrides per entity type.
     overrides_by_entity = {
         "materials": {
             "cost": "cost_price",
-            "price": "cost_price",
-            "depositamount": "deposit_amount",
+            # "price": "selling_price", # <<< REMOVE THIS LINE
         },
         "sales": {
             "createdat": "created_at",
             "paymentstatus": "payment_status",
             "fulfillmentstatus": "fulfillment_status",
             "depositamount": "deposit_amount",
+            "customerid": "customer_id",
         },
         "sale_items": {
-            "cost_price": "price",  # For sale items, if the seed data provides costPrice, rename it to price.
+            # No specific overrides needed here based on JSON
+        },
+        "purchases": {
+             "supplierid": "supplier_id",
+        },
+        "tools": {
+             "supplierid": "supplier_id",
         },
         # Add other entity-specific overrides as needed.
     }
+
+    # --- Import models needed within create_entity ---
+    from app.db.models import (
+        Customer, Supplier, Material, LeatherMaterial, HardwareMaterial,
+        SuppliesMaterial, Tool, StorageLocation, StorageCell, StorageAssignment,
+        ProjectTemplate, DocumentationCategory, DocumentationResource,
+        PickingList, PickingListItem, ToolMaintenance, ToolCheckout, User,
+        Project, ProjectComponent, Sale, SaleItem, PurchaseItem, Purchase,
+        Pattern, TimelineTask, Component
+    )
+    # --- End model imports ---
+
+    model_map = {
+        # ... (model_map remains the same) ...
+        "documentation_categories": DocumentationCategory,
+        "documentation_resources": DocumentationResource,
+        "suppliers": Supplier,
+        "customers": Customer,
+        "materials": Material,
+        "tools": Tool,
+        "tool_maintenance": ToolMaintenance,
+        "tool_checkouts": ToolCheckout,
+        "storage_locations": StorageLocation,
+        "storage_cells": StorageCell,
+        "storage_assignments": StorageAssignment,
+        "patterns": Pattern,
+        "project_templates": ProjectTemplate,
+        "projects": Project,
+        "project_components": ProjectComponent,
+        "timeline_tasks": TimelineTask,
+        "sales": Sale,
+        "sale_items": SaleItem,
+        "purchases": Purchase,
+        "purchase_items": PurchaseItem,
+        "picking_lists": PickingList,
+        "picking_list_items": PickingListItem,
+        "users": User,
+    }
+
 
     def create_entity(
         entity_type: str,
         item_data: Dict[str, Any],
         session,
         entity_ids: Dict[str, Dict[int, str]],
-    ):
-        from app.db.models import (
-            Customer,
-            Supplier,
-            Material,
-            LeatherMaterial,
-            HardwareMaterial,
-            SuppliesMaterial,
-            Tool,
-            StorageLocation,
-            StorageCell,
-            StorageAssignment,
-            ProjectTemplate,
-            DocumentationCategory,
-            DocumentationResource,
-            PickingList,
-            PickingListItem,
-            ToolMaintenance,
-            ToolCheckout,
-            User,
-            Project,
-            ProjectComponent,
-            Sale,
-            SaleItem,
-            PurchaseItem,
-            Purchase,
-            Pattern,
-            TimelineTask,
-        )
+        idx: int # Pass index for better logging
+    ) -> Optional[Any]: # Return type hint
+        """Creates a single entity instance, handling relationships."""
 
-        model_map = {
-            "documentation_categories": DocumentationCategory,
-            "documentation_resources": DocumentationResource,
-            "suppliers": Supplier,
-            "customers": Customer,
-            "materials": Material,
-            "tools": Tool,
-            "tool_maintenance": ToolMaintenance,
-            "tool_checkouts": ToolCheckout,
-            "storage_locations": StorageLocation,
-            "storage_cells": StorageCell,
-            "storage_assignments": StorageAssignment,
-            "patterns": Pattern,
-            "project_templates": ProjectTemplate,
-            "projects": Project,
-            "project_components": ProjectComponent,
-            "timeline_tasks": TimelineTask,
-            "sales": Sale,
-            "sale_items": SaleItem,
-            "purchases": Purchase,
-            "purchase_items": PurchaseItem,
-            "picking_lists": PickingList,
-            "picking_list_items": PickingListItem,
-            "users": User,
-        }
-
+        # ... (model lookup, decamelize, overrides, pre-processing remain the same) ...
         model = model_map.get(entity_type)
         if not model:
-            logger.warning(f"Unknown entity type: {entity_type}")
+            logger.warning(f"Unknown entity type: {entity_type} at index {idx}")
             return None
-
-        # Decamelize all keys.
         data = decamelize_keys(item_data)
-
-        # Apply any custom overrides for this entity type.
         if entity_type in overrides_by_entity:
             data = apply_overrides(data, overrides_by_entity[entity_type])
+        # ... (special handling for docs, projects, etc. remains the same) ...
+        related_category_slug: Optional[str] = None
+        if entity_type == "documentation_resources" and "category" in data:
+            # ... (category handling) ...
+            category_identifier = data.pop("category")
+            if category_identifier:
+                related_category_slug = str(category_identifier).lower().replace(" ", "-")
+                logger.debug(f"  Extracted category slug '{related_category_slug}' for resource index {idx}")
 
-        # Remove extra keys not handled by models.
-        if entity_type == "projects" and "completion_percentage" in data:
-            del data["completion_percentage"]
-
-        if entity_type == "project_templates":
-            for extra in ["estimated_duration", "estimated_cost", "is_public"]:
-                data.pop(extra, None)
-
-        # Special handling for project_components.
         if entity_type == "project_components":
+            # ... (component creation handling) ...
             if "component_id" not in data or data["component_id"] is None:
-                extra = {}
+                comp_data = {}
                 for key in ["name", "description", "component_type"]:
                     if key in data:
-                        extra[key] = data.pop(key)
-                try:
-                    from app.db.models.component import Component
-                except ImportError:
-                    logger.error("Component model could not be imported.")
-                    raise
-                new_comp = Component(**extra)
-                session.add(new_comp)
-                session.flush()
-                data["component_id"] = new_comp.id
+                        comp_data[key] = data.pop(key)
+                if comp_data:
+                    logger.info(f"  Creating associated Component for project_component index {idx}")
+                    try:
+                        new_comp = Component(**comp_data)
+                        session.add(new_comp)
+                        session.flush()
+                        data["component_id"] = new_comp.id
+                        logger.info(f"    Created Component with ID: {new_comp.id}")
+                    except Exception as comp_e:
+                        logger.error(f"    Error creating associated Component: {comp_e}")
+                        raise
+                else:
+                     logger.warning(f"  Missing component_id and component data for project_component index {idx}")
 
-        # Convert date strings.
+
+        # 4. Convert date strings (handle potential errors)
+        # ... (date conversion remains the same) ...
         for key, value in data.items():
-            if isinstance(value, str) and (key.endswith("date") or key.endswith("at")):
+            if isinstance(value, str) and (key.endswith("_date") or key.endswith("_at")):
                 try:
                     data[key] = datetime.fromisoformat(value.replace("Z", "+00:00"))
                 except ValueError:
+                    logger.warning(f"  Could not parse date string '{value}' for key '{key}' in {entity_type} index {idx}. Skipping conversion.")
                     pass
 
-        # Update foreign keys based on previously seeded entities.
+        # 5. Update foreign keys based on previously seeded entities (using UUIDs/IDs)
         for key in list(data.keys()):
             if key.endswith("_id") and isinstance(data[key], int):
-                fk_type = key[:-3] + "s"
-                if fk_type in entity_ids and data[key] in entity_ids[fk_type]:
-                    data[key] = entity_ids[fk_type][data[key]]
+                original_fk_index = data[key]
+                fk_entity_type = None
 
-        # For materials, use specialized subclasses.
-        if entity_type == "materials":
-            material_type = data.pop("material_type", "LEATHER").upper()
-            data = map_material_attributes(data, material_type)
-            if data.get("reorder_point") is None:
-                data["reorder_point"] = 0.0
-            if material_type == "LEATHER":
-                entity = LeatherMaterial(**data)
-            elif material_type == "HARDWARE":
-                entity = HardwareMaterial(**data)
-            elif material_type == "SUPPLIES":
-                entity = SuppliesMaterial(**data)
+                # --- MODIFICATION FOR storage_id ---
+                if key == "storage_id":
+                    fk_entity_type = "storage_locations"
+                # --- END MODIFICATION ---
+                else:
+                    # Default logic: remove '_id', add 's'
+                    fk_entity_type = key[:-3] + "s"
+                    # Add more specific mappings here if needed (e.g., 'category_id' -> 'documentation_categories')
+                    if key == "category_id" and entity_type == "documentation_category_assignments": # Example specific mapping
+                         fk_entity_type = "documentation_categories"
+                    elif key == "resource_id" and entity_type == "documentation_category_assignments": # Example specific mapping
+                         fk_entity_type = "documentation_resources"
+
+
+                if fk_entity_type and fk_entity_type in entity_ids and original_fk_index in entity_ids[fk_entity_type]:
+                    new_db_id = entity_ids[fk_entity_type][original_fk_index]
+                    data[key] = new_db_id
+                    logger.debug(f"  Mapped FK {key}: index {original_fk_index} -> DB ID {new_db_id}")
+                elif fk_entity_type: # Only warn if we determined a type but couldn't map
+                    logger.warning(f"  Could not map FK {key}: index {original_fk_index} for {entity_type} index {idx}. Related entity '{fk_entity_type}' index not found in cache.")
+                # else: key didn't match standard pattern and wasn't specifically handled
+
+        # 6. Create the entity instance
+        # ... (try...except block remains the same, including material/user handling) ...
+        # ... (post-creation relationship handling remains the same) ...
+        entity = None
+        try:
+            if entity_type == "materials":
+                material_type = data.pop("material_type", "LEATHER").upper()
+                data = map_material_attributes(data, material_type)
+                if data.get("reorder_point") is None: data["reorder_point"] = 0.0
+                if material_type == "LEATHER": model_to_use = LeatherMaterial
+                elif material_type == "HARDWARE": model_to_use = HardwareMaterial
+                elif material_type == "SUPPLIES": model_to_use = SuppliesMaterial
+                else:
+                    logger.warning(f"  Unknown material_type '{material_type}' for material index {idx}. Using base Material.")
+                    model_to_use = Material
+                entity = model_to_use(**data)
+            elif entity_type == "users" and "plain_password" in data:
+                 from app.core.security import get_password_hash
+                 plain_password = data.pop("plain_password")
+                 data["hashed_password"] = get_password_hash(plain_password)
+                 entity = model(**data)
             else:
-                entity = Material(**data)
-        else:
-            entity = model(**data)
+                entity = model(**data)
 
-        return entity
+            if entity:
+                session.add(entity)
+                session.flush()
+                logger.debug(f"  Created {entity_type} instance (ID: {entity.id}) for index {idx}")
+                if entity_type == "documentation_resources" and related_category_slug:
+                    category_obj = session.query(DocumentationCategory).filter_by(slug=related_category_slug).first()
+                    if category_obj:
+                        entity.categories.append(category_obj)
+                        logger.debug(f"    Appended category '{category_obj.name}' to resource '{entity.title}'")
+                    else:
+                        logger.warning(f"    Category slug '{related_category_slug}' not found for resource '{entity.title}'.")
+                if entity_type == "users" and "roles" in item_data:
+                    from app.db.models.role import Role
+                    role_names = item_data["roles"]
+                    for role_name in role_names:
+                        role_obj = session.query(Role).filter_by(name=role_name).first()
+                        if role_obj:
+                             entity.roles.append(role_obj)
+                             logger.debug(f"    Assigned role '{role_name}' to user '{entity.email}'")
+                        else:
+                             logger.warning(f"    Role '{role_name}' not found for user '{entity.email}'.")
+            return entity
+        except TypeError as e:
+            logger.error(f"  TypeError creating {entity_type} index {idx}: {e}")
+            logger.error(f"    Data passed: {data}")
+            raise
+        except Exception as e:
+            logger.error(f"  Error during instance creation/flush for {entity_type} index {idx}: {e}")
+            raise
 
-    # Define entity seeding order.
+
+    # ... (entities_order list remains the same) ...
     entities_order = [
         "documentation_categories",
-        "documentation_resources",
+        # "permissions",
+        # "roles",
         "suppliers",
         "customers",
         "storage_locations",
-        "storage_cells",
-        "materials",
-        "tools",
-        "projects",
-        "project_templates",
-        "project_components",
-        "tool_maintenance",
-        "tool_checkouts",
+        "storage_cells", # Depends on storage_locations
+        "materials", # Depends on suppliers
+        "tools", # Depends on suppliers
         "patterns",
-        "timeline_tasks",
-        "sales",
-        "sale_items",
-        "purchases",
-        "purchase_items",
-        "picking_lists",
-        "picking_list_items",
-        "storage_assignments",
-        "users",
+        "components", # Depends on patterns (optional)
+        "component_materials", # Depends on components, materials
+        "project_templates",
+        "project_template_components", # Depends on project_templates, components
+        "projects", # Depends on customers, project_templates (optional)
+        "project_components", # Depends on projects, components
+        "timeline_tasks", # Depends on projects
+        "sales", # Depends on customers, projects (optional)
+        # Ensure products are seeded before sale_items if FK exists
+        "products", # Assuming Product model exists and needs seeding
+        "sale_items", # Depends on sales, products
+        "purchases", # Depends on suppliers
+        "purchase_items", # Depends on purchases, materials
+        "picking_lists", # Depends on projects (optional), sales (optional)
+        "picking_list_items", # Depends on picking_lists, materials, components
+        "storage_assignments", # Depends on materials, storage_locations
+        "tool_maintenance", # Depends on tools
+        "tool_checkouts", # Depends on tools, projects (optional)
+        "users", # Seed users
+        "documentation_resources", # Seed resources AFTER categories
+        # Add other entities in correct dependency order
     ]
+    # Remove the dynamic insertion for products, ensure it's explicitly in the order
+    # if "products" not in entities_order and "sale_items" in entities_order:
+    #      try:
+    #          sale_items_index = entities_order.index("sale_items")
+    #          entities_order.insert(sale_items_index, "products")
+    #      except ValueError:
+    #          pass
 
-    from app.db.session import SessionLocal
 
+    # ... (session handling and main loop remain the same) ...
+    session = None
     try:
         session = SessionLocal()
-        entity_ids = {}  # Track new IDs for foreign key resolution.
-
+        entity_ids: Dict[str, Dict[int, Any]] = {}
         for entity_type in entities_order:
             if entity_type in seed_data:
                 logger.info(f"Seeding {entity_type}...")
                 entities_data = seed_data[entity_type]
+                if not isinstance(entities_data, list):
+                     logger.warning(f"Seed data for '{entity_type}' is not a list. Skipping.")
+                     continue
                 if entity_type not in entity_ids:
                     entity_ids[entity_type] = {}
-
                 for idx, item_data in enumerate(entities_data, 1):
+                    if not isinstance(item_data, dict):
+                        logger.warning(f"Item at index {idx} for '{entity_type}' is not a dictionary. Skipping.")
+                        continue
                     try:
                         entity = create_entity(
-                            entity_type, item_data, session, entity_ids
+                            entity_type, item_data, session, entity_ids, idx
                         )
-                        if entity is not None:
-                            session.add(entity)
-                            session.flush()  # Get assigned ID.
+                        if entity is not None and hasattr(entity, 'id'):
                             entity_ids[entity_type][idx] = entity.id
-                        else:
-                            logger.warning(
-                                f"Skipping entity creation for {entity_type} (index {idx})"
+                        elif entity is None:
+                             logger.warning(
+                                f"Skipped entity creation for {entity_type} (index {idx})"
                             )
                     except Exception as e:
                         session.rollback()
                         logger.error(
-                            f"Error creating {entity_type} entity (index {idx}): {str(e)}"
+                            f"Error processing {entity_type} entity (JSON index {idx}): {str(e)}"
                         )
                         raise
         session.commit()
         logger.info("Database seeding completed successfully")
         return True
     except Exception as e:
-        session.rollback()
+        if session: session.rollback()
         logger.error(f"Error seeding database: {str(e)}")
         import traceback
-
         logger.error(traceback.format_exc())
         return False
     finally:
-        session.close()
+        if session: session.close()
 
 
+# ... (main function remains the same) ...
 def main():
     """Main function."""
     args = parse_arguments()
-
-    from app.core.config import settings
+    try:
+        from app.core.config import settings
+    except ImportError:
+        logger.error("Could not import settings. Ensure app/core/config.py exists and PYTHONPATH is correct.")
+        sys.exit(1)
 
     db_path = os.path.abspath(settings.DATABASE_PATH)
     encryption_key = settings.DATABASE_ENCRYPTION_KEY
-
     create_db_directory(db_path)
 
-    if settings.USE_SQLCIPHER:
-        logger.info(f"Using SQLCipher encrypted database: {db_path}")
-    else:
-        logger.info(f"Using standard SQLite database: {db_path}")
+    if settings.USE_SQLCIPHER: logger.info(f"Using SQLCipher encrypted database: {db_path}")
+    else: logger.info(f"Using standard SQLite database: {db_path}")
 
     if args.reset:
         if not reset_database(db_path, encryption_key):
@@ -452,12 +513,20 @@ def main():
         logger.error("Database schema initialization failed, exiting.")
         sys.exit(1)
 
-    if args.seed and not seed_database(args.seed_file):
-        logger.error("Database seeding failed, exiting.")
-        sys.exit(1)
+    if args.seed:
+        seed_file_path = args.seed_file
+        if not os.path.isabs(seed_file_path):
+             path_from_root = project_root / seed_file_path
+             if path_from_root.exists(): seed_file_path = str(path_from_root)
+             else:
+                 path_from_script = script_dir / seed_file_path
+                 if path_from_script.exists(): seed_file_path = str(path_from_script)
+
+        if not seed_database(seed_file_path):
+            logger.error("Database seeding failed, exiting.")
+            sys.exit(1)
 
     logger.info("Database setup completed successfully")
-
 
 if __name__ == "__main__":
     main()

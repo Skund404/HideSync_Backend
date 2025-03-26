@@ -1,4 +1,37 @@
 {
+  "permissions": [
+    {
+      "code": "admin:all",
+      "name": "Full Admin Access",
+      "description": "Grants all permissions across the system.",
+      "resource": "*"
+    }
+  ],
+  "roles": [
+    {
+      "name": "Admin",
+      "description": "System Administrator with full access.",
+      "is_system_role": true,
+      "permissions": ["admin:all"]
+    },
+    {
+      "name": "Workshop Staff",
+      "description": "Standard user for workshop operations.",
+      "is_system_role": false,
+      "permissions": []
+    }
+  ],
+  "users": [
+    {
+      "email": "admin@example.com",
+      "username": "admin",
+      "plain_password": "changeme",
+      "full_name": "Default Admin",
+      "is_active": true,
+      "is_superuser": true,
+      "roles": ["Admin"]
+    }
+  ],
   "suppliers": [
     {
       "name": "Premium Leather Supply",
@@ -79,11 +112,7 @@
       "type": "CABINET",
       "section": "MAIN_WORKSHOP",
       "description": "Large cabinet for leather storage",
-      "dimensions": {
-        "width": 120,
-        "height": 200,
-        "depth": 60
-      },
+      "dimensions": { "width": 120, "height": 200, "depth": 60 },
       "capacity": 100,
       "utilized": 0,
       "status": "ACTIVE"
@@ -93,11 +122,7 @@
       "type": "DRAWER",
       "section": "MAIN_WORKSHOP",
       "description": "Small drawer for buckles and snaps",
-      "dimensions": {
-        "width": 50,
-        "height": 10,
-        "depth": 60
-      },
+      "dimensions": { "width": 50, "height": 10, "depth": 60 },
       "capacity": 50,
       "utilized": 0,
       "status": "ACTIVE"
@@ -107,11 +132,7 @@
       "type": "CABINET",
       "section": "TOOL_ROOM",
       "description": "Cabinet for cutting tools",
-      "dimensions": {
-        "width": 100,
-        "height": 180,
-        "depth": 50
-      },
+      "dimensions": { "width": 100, "height": 180, "depth": 50 },
       "capacity": 80,
       "utilized": 0,
       "status": "ACTIVE"
@@ -121,11 +142,7 @@
       "type": "SHELF",
       "section": "STORAGE_ROOM",
       "description": "Ventilated shelf for dyes and finishes",
-      "dimensions": {
-        "width": 120,
-        "height": 40,
-        "depth": 30
-      },
+      "dimensions": { "width": 120, "height": 40, "depth": 30 },
       "capacity": 60,
       "utilized": 0,
       "status": "ACTIVE"
@@ -134,38 +151,22 @@
   "storage_cells": [
     {
       "storageId": 1,
-      "position": {
-        "x": 1,
-        "y": 1,
-        "z": 1
-      },
+      "position": { "x": 1, "y": 1, "z": 1 },
       "occupied": false
     },
     {
       "storageId": 1,
-      "position": {
-        "x": 1,
-        "y": 2,
-        "z": 1
-      },
+      "position": { "x": 1, "y": 2, "z": 1 },
       "occupied": false
     },
     {
       "storageId": 2,
-      "position": {
-        "x": 1,
-        "y": 1,
-        "z": 1
-      },
+      "position": { "x": 1, "y": 1, "z": 1 },
       "occupied": false
     },
     {
       "storageId": 3,
-      "position": {
-        "x": 1,
-        "y": 1,
-        "z": 1
-      },
+      "position": { "x": 1, "y": 1, "z": 1 },
       "occupied": false
     }
   ],
@@ -350,11 +351,7 @@
       "fileType": "PDF",
       "filePath": "/patterns/minimalist_bifold.pdf",
       "thumbnail": "/images/thumbnails/minimalist_bifold.jpg",
-      "tags": [
-        "wallet",
-        "beginner",
-        "bifold"
-      ],
+      "tags": ["wallet", "beginner", "bifold"],
       "isFavorite": true,
       "estimatedTime": 4,
       "estimatedDifficulty": 2,
@@ -370,11 +367,7 @@
       "fileType": "PDF",
       "filePath": "/patterns/classic_messenger.pdf",
       "thumbnail": "/images/thumbnails/classic_messenger.jpg",
-      "tags": [
-        "bag",
-        "intermediate",
-        "messenger"
-      ],
+      "tags": ["bag", "intermediate", "messenger"],
       "isFavorite": false,
       "estimatedTime": 14,
       "estimatedDifficulty": 4,
@@ -390,11 +383,7 @@
       "fileType": "PDF",
       "filePath": "/patterns/card_holder_money_clip.pdf",
       "thumbnail": "/images/thumbnails/card_holder.jpg",
-      "tags": [
-        "card holder",
-        "money clip",
-        "minimal"
-      ],
+      "tags": ["card holder", "money clip", "minimal"],
       "isFavorite": true,
       "estimatedTime": 3,
       "estimatedDifficulty": 2,
@@ -412,11 +401,7 @@
       "estimatedDuration": 4,
       "estimatedCost": 35.0,
       "isPublic": true,
-      "tags": [
-        "wallet",
-        "bifold",
-        "production"
-      ],
+      "tags": ["wallet", "bifold", "production"],
       "version": "1.0",
       "notes": "Uses 2-3 sq ft of leather per wallet"
     },
@@ -428,11 +413,7 @@
       "estimatedDuration": 16,
       "estimatedCost": 150.0,
       "isPublic": true,
-      "tags": [
-        "bag",
-        "messenger",
-        "premium"
-      ],
+      "tags": ["bag", "messenger", "premium"],
       "version": "1.0",
       "notes": "Includes options for different hardware configurations"
     }
@@ -511,9 +492,7 @@
       "progress": 0,
       "status": "PENDING",
       "isCriticalPath": true,
-      "dependencies": [
-        "Cut leather pieces"
-      ]
+      "dependencies": ["Cut leather pieces"]
     },
     {
       "project_id": 1,
@@ -523,9 +502,7 @@
       "progress": 0,
       "status": "PENDING",
       "isCriticalPath": true,
-      "dependencies": [
-        "Skive edges"
-      ]
+      "dependencies": ["Skive edges"]
     },
     {
       "project_id": 2,
@@ -727,11 +704,7 @@
       "materialId": 1,
       "materialType": "LEATHER",
       "storageId": 1,
-      "position": {
-        "x": 1,
-        "y": 1,
-        "z": 1
-      },
+      "position": { "x": 1, "y": 1, "z": 1 },
       "quantity": 5,
       "assignedBy": "Workshop Owner",
       "notes": "Main leather storage"
@@ -740,11 +713,7 @@
       "materialId": 3,
       "materialType": "HARDWARE",
       "storageId": 2,
-      "position": {
-        "x": 1,
-        "y": 1,
-        "z": 1
-      },
+      "position": { "x": 1, "y": 1, "z": 1 },
       "quantity": 50,
       "assignedBy": "Workshop Owner",
       "notes": "Hardware storage"
@@ -767,17 +736,20 @@
     {
       "name": "Getting Started",
       "description": "Guides for new users",
-      "icon": "book-open"
+      "icon": "book-open",
+      "slug": "getting-started"
     },
     {
       "name": "Materials",
       "description": "Information about leather and other materials",
-      "icon": "layers"
+      "icon": "layers",
+      "slug": "materials"
     },
     {
       "name": "Projects",
       "description": "Project management guides",
-      "icon": "clipboard"
+      "icon": "clipboard",
+      "slug": "projects"
     }
   ],
   "documentation_resources": [
@@ -788,11 +760,7 @@
       "category": "GETTING_STARTED",
       "type": "GUIDE",
       "skill_level": "BEGINNER",
-      "tags": [
-        "intro",
-        "overview",
-        "getting started"
-      ],
+      "tags": ["intro", "overview", "getting started"],
       "author": "HideSync Team"
     },
     {
@@ -802,11 +770,7 @@
       "category": "MATERIALS",
       "type": "REFERENCE",
       "skill_level": "BEGINNER",
-      "tags": [
-        "leather",
-        "materials",
-        "reference"
-      ],
+      "tags": ["leather", "materials", "reference"],
       "author": "HideSync Team"
     }
   ]
