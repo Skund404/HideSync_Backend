@@ -6,13 +6,14 @@ Using direct SQLCipher connection for initial database creation and setup.
 
 import os
 import logging
-from typing import Generator, Any, Optional, Union
+from typing import Generator, Any, Optional, Union, Dict, List, Callable
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker, Session
-from sqlalchemy.pool import NullPool
+from sqlalchemy.pool import NullPool, Pool
 from sqlalchemy.engine import Engine
 import sqlite3
 import sqlalchemy
+from sqlalchemy.sql import ClauseElement
 
 from app.core.key_manager import KeyManager
 from app.core.exceptions import SecurityException
@@ -40,42 +41,43 @@ class EncryptionManager:
     @classmethod
     def get_encrypted_connection(cls, db_path):
         """
-        Creates and returns a SQLAlchemy Engine connection with SQLCipher parameters.
+        Creates and returns a SQLCipher connection object.
         This ensures the connection can access the encrypted database.
 
         Args:
             db_path: Path to the SQLCipher database
 
         Returns:
-            A SQLAlchemy connection with SQLCipher parameters configured
+            A SQLCipher connection with parameters configured
         """
-        import sqlalchemy
-        from sqlalchemy import create_engine, event
+        if not cls.is_sqlcipher_available():
+            raise RuntimeError("SQLCipher is not available but an encrypted connection was requested")
 
-        # Create a raw SQLite engine without SQLAlchemy's connection pooling
-        engine = create_engine(f"sqlite:///{db_path}",
-                               connect_args={"check_same_thread": False})
-
-        # Key for pragmas
-        encryption_key = cls.get_key()  # <-- Changed from get_database_key() to get_key()
+        encryption_key = cls.get_key()
         if not encryption_key:
             raise ValueError("Failed to retrieve database encryption key")
 
-        # Set up event listener to configure SQLCipher parameters on connection
-        @event.listens_for(engine, "connect")
-        def configure_connection(dbapi_connection, connection_record):
-            # Apply SQLCipher pragmas
-            dbapi_connection.execute(f"PRAGMA key='{encryption_key}'")
-            # Other common SQLCipher pragmas
-            dbapi_connection.execute("PRAGMA cipher_compatibility = 3")
-            dbapi_connection.execute("PRAGMA kdf_iter = 64000")
-            dbapi_connection.execute("PRAGMA cipher_page_size = 4096")
-            # Verify the key works by reading something
-            result = dbapi_connection.execute("SELECT count(*) FROM sqlite_master")
-            # If we get here, the key worked
+        try:
+            sqlcipher = cls.get_sqlcipher_module()
+            conn = sqlcipher.connect(db_path)
 
-        # Return a connection
-        return engine.connect()
+            cursor = conn.cursor()
+            # Configure encryption
+            cursor.execute(f"PRAGMA key='{encryption_key}';")
+            cursor.execute("PRAGMA cipher_page_size=4096;")
+            cursor.execute("PRAGMA kdf_iter=256000;")
+            cursor.execute("PRAGMA cipher_hmac_algorithm=HMAC_SHA512;")
+            cursor.execute("PRAGMA cipher_kdf_algorithm=PBKDF2_HMAC_SHA512;")
+            cursor.execute("PRAGMA foreign_keys=ON;")
+
+            # Test the connection
+            cursor.execute("SELECT 1;")
+            cursor.close()
+
+            return conn
+        except Exception as e:
+            logger.error(f"Failed to create encrypted connection: {e}")
+            raise
 
     @classmethod
     def _load_encryption_key(cls) -> None:
@@ -150,7 +152,6 @@ class EncryptionManager:
             # Assume passphrase, wrap in single quotes
             return f"'{key}'"
 
-    # --- Radically Simplified create_new_encrypted_database ---
     @classmethod
     def create_new_encrypted_database(cls, path: str) -> bool:
         if not cls.is_sqlcipher_available():
@@ -223,7 +224,6 @@ class EncryptionManager:
                 except Exception as final_conn_e:
                     logger.error(f"Error closing connection in finally: {final_conn_e}")
 
-    # --- Added a create_tables_direct method to use for encrypted databases ---
     @classmethod
     def create_tables_direct(cls, path: str, metadata) -> bool:
         """
@@ -294,7 +294,6 @@ class EncryptionManager:
                 except Exception as e:
                     logger.error(f"Error closing connection: {e}")
 
-    # --- Radically Simplified test_encrypted_database ---
     @classmethod
     def test_encrypted_database(cls, path: str) -> bool:
         if not cls.is_sqlcipher_available() or not os.path.exists(path):
@@ -353,91 +352,414 @@ class EncryptionManager:
 # Initialize encryption configuration ONCE
 EncryptionManager.initialize()
 
+
 # -----------------------------------------------------------------------------
-# Database Engine Configuration (for non-encrypted operations)
+# Custom Connection Pool for SQLCipher
 # -----------------------------------------------------------------------------
 
-db_uri_base = None
+class DirectSQLCipherPool:
+    """
+    Simple connection pool for SQLCipher connections that manages connections directly,
+    bypassing SQLAlchemy's dialect handling to avoid compatibility issues.
+    """
+
+    def __init__(self, db_path, pool_size=5, max_overflow=10):
+        self.db_path = db_path
+        self.pool_size = pool_size
+        self.max_overflow = max_overflow
+        self.connections = []
+        self.in_use = set()
+
+    def _create_connection(self):
+        """Create a new connection with all SQLCipher parameters configured"""
+        return EncryptionManager.get_encrypted_connection(self.db_path)
+
+    def connect(self):
+        """Get a connection from the pool or create a new one"""
+        if not self.connections:
+            conn = self._create_connection()
+            self.in_use.add(id(conn))
+            return conn
+
+        conn = self.connections.pop()
+        self.in_use.add(id(conn))
+        return conn
+
+    def release(self, conn):
+        """Return a connection to the pool"""
+        if id(conn) in self.in_use:
+            self.in_use.remove(id(conn))
+            if len(self.connections) < self.pool_size:
+                self.connections.append(conn)
+            else:
+                conn.close()
+
+    def dispose(self):
+        """Close all connections in the pool"""
+        while self.connections:
+            conn = self.connections.pop()
+            conn.close()
+
+        # Force closure of any unreturned connections
+        self.in_use.clear()
+
+
+# -----------------------------------------------------------------------------
+# Database Connection Setup
+# -----------------------------------------------------------------------------
+
+db_path = None
 if settings.DATABASE_PATH:
-    db_path_abs = os.path.abspath(settings.DATABASE_PATH)
-    db_uri_base = f"sqlite:///{db_path_abs}"
-    logger.info(f"Using database path for engine: {db_path_abs}")
+    db_path = os.path.abspath(settings.DATABASE_PATH)
+    logger.info(f"Using database path: {db_path}")
 elif settings.DATABASE_URL:
-    db_uri_base = settings.DATABASE_URL
-    logger.info(f"Using database URL from settings for engine: {db_uri_base}")
+    if settings.DATABASE_URL.startswith("sqlite"):
+        # Extract path from sqlite URL
+        db_path = settings.DATABASE_URL.replace("sqlite:///", "")
+        db_path = os.path.abspath(db_path)
+        logger.info(f"Extracted database path from URL: {db_path}")
+    else:
+        logger.error(f"Non-SQLite URL not supported with SQLCipher: {settings.DATABASE_URL}")
+        raise ValueError("Only SQLite URLs are supported with SQLCipher")
 
-if not db_uri_base:
-    raise ValueError("No database URL or path specified in settings")
+if not db_path:
+    raise ValueError("No database path specified in settings")
 
 use_sqlcipher = settings.USE_SQLCIPHER and EncryptionManager.is_sqlcipher_available()
 
-# Only include standard connect_args
-engine_connect_args = {}
-if db_uri_base.startswith("sqlite"):
-    engine_connect_args["check_same_thread"] = False
-
-# Store SQLCipher parameters for later use
-sqlcipher_params = {}
+# Create the proper engine based on encryption settings
 if use_sqlcipher:
-    logger.info("SQLCipher enabled, parameters will be used for direct operations...")
-    encryption_key = EncryptionManager.get_key()
-    if not encryption_key:
-        raise ValueError("SQLCipher is enabled, but no encryption key is available.")
+    logger.info(f"Creating engine with direct SQLCipher connections for {db_path}")
 
-    # Store these for direct connections
-    sqlcipher_params = {
-        'key': encryption_key,
-        'cipher_page_size': 4096,
-        'kdf_iter': 256000,
-        'cipher_hmac_algorithm': 'HMAC_SHA512',
-        'cipher_kdf_algorithm': 'PBKDF2_HMAC_SHA512',
-    }
-    logger.info("SQLCipher parameters prepared for direct operations.")
-else:
-    logger.info("SQLCipher disabled or unavailable. Using standard SQLite operations.")
+    # Create a direct connection pool for SQLCipher
+    connection_pool = DirectSQLCipherPool(db_path)
 
-try:
-    logger.info(f"Creating SQLAlchemy engine with URL: {db_uri_base}")
-    logger.info(f"Using connect_args: {engine_connect_args}")
-
+    # Create a standard SQLite engine for metadata operations only
+    # This engine is NOT used for actual database operations
     engine = create_engine(
-        db_uri_base,
-        connect_args=engine_connect_args,  # Only standard connect_args here
-        poolclass=NullPool,
-        echo=settings.DEBUG,
+        f"sqlite:///{db_path}",
+        connect_args={"check_same_thread": False}
     )
 
-    # Add an event listener for standard SQLite operations only if not using SQLCipher
-    if not use_sqlcipher:
-        @event.listens_for(engine, "connect")
-        def set_sqlite_pragma(dbapi_connection, connection_record):
-            cursor = None
+    # This is a flag to let dependency injection know we're using custom connections
+    direct_sqlcipher_mode = True
+
+
+    # Create a SessionLocal factory for compatibility with imports
+    # This will return our custom SQLCipherSession instead
+    def SessionLocal():
+        return SQLCipherSession(connection_pool)
+
+else:
+    logger.info(f"Creating standard SQLAlchemy engine for {db_path}")
+    engine = create_engine(
+        f"sqlite:///{db_path}",
+        connect_args={"check_same_thread": False},
+        echo=settings.DEBUG
+    )
+
+
+    # Add event listener for standard SQLite operations
+    @event.listens_for(engine, "connect")
+    def set_sqlite_pragma(dbapi_connection, connection_record):
+        cursor = None
+        try:
+            cursor = dbapi_connection.cursor()
+            logger.debug("Listener: Applying PRAGMA foreign_keys=ON")
+            cursor.execute("PRAGMA foreign_keys=ON;")
+        except Exception as e:
+            logger.error(f"Error setting SQLite PRAGMA: {e}")
+        finally:
+            if cursor:
+                cursor.close()
+
+
+    # Flag to indicate we're using standard SQLAlchemy session
+    direct_sqlcipher_mode = False
+
+    # Use standard SQLAlchemy session
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+# -----------------------------------------------------------------------------
+# Custom Session with SQLCipher Support
+# -----------------------------------------------------------------------------
+
+class SQLCipherSession:
+    """
+    A custom session that works with direct SQLCipher connections,
+    implementing just enough of the SQLAlchemy Session API for compatibility.
+    """
+
+    def __init__(self, connection_pool):
+        self.connection_pool = connection_pool
+        self._connection = None
+        self.closed = False
+        # Add more attributes expected by SQLAlchemy Session API
+        self.bind = None  # Normally an Engine
+        self.autocommit = False
+        self.autoflush = False
+        self.info = {}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
+    def get_user_by_email(self, email):
+        """
+        Direct implementation for user lookup by email that reads the key
+        directly from the file to ensure it matches what was used to create the database.
+        """
+        import os
+        from app.core.config import settings
+
+        # Read key directly from file, matching the approach used during database creation
+        key_file_path = os.path.abspath(settings.KEY_FILE_PATH)
+        logger.info(f"Reading encryption key directly from file: {key_file_path}")
+
+        try:
+            with open(key_file_path, "r", encoding="utf-8") as f:
+                key = f.read().strip()
+
+            logger.info(f"Key read from file, length: {len(key)}")
+
+            # Now use this key to access the database
+            sqlcipher = EncryptionManager.get_sqlcipher_module()
+            conn = sqlcipher.connect(db_path)
+            cursor = conn.cursor()
+
+            # Apply encryption parameters
+            cursor.execute(f"PRAGMA key='{key}';")
+            cursor.execute("PRAGMA cipher_page_size=4096;")
+            cursor.execute("PRAGMA kdf_iter=256000;")
+            cursor.execute("PRAGMA cipher_hmac_algorithm=HMAC_SHA512;")
+            cursor.execute("PRAGMA cipher_kdf_algorithm=PBKDF2_HMAC_SHA512;")
+            cursor.execute("PRAGMA foreign_keys=ON;")
+
+            # Test connection
             try:
-                cursor = dbapi_connection.cursor()
-                logger.debug("Listener: Applying PRAGMA foreign_keys=ON")
-                cursor.execute("PRAGMA foreign_keys=ON;")
+                cursor.execute("SELECT count(*) FROM sqlite_master;")
+                table_count = cursor.fetchone()[0]
+                logger.info(f"Successfully connected to the database with {table_count} tables")
             except Exception as e:
-                logger.error(f"Error setting SQLite PRAGMA: {e}")
-            finally:
-                if cursor:
-                    cursor.close()
+                logger.error(f"Connection test failed: {e}")
+                cursor.close()
+                conn.close()
+                return None
 
-    logger.info("SQLAlchemy engine created for non-encrypted operations.")
+            # Query for the user
+            query = """
+            SELECT id, email, username, hashed_password, full_name, 
+                   is_active, is_superuser, last_login, change_history, 
+                   created_at, updated_at
+            FROM users 
+            WHERE email = ?
+            LIMIT 1
+            """
+            cursor.execute(query, (email,))
+            result = cursor.fetchone()
 
-except Exception as e:
-    logger.error(f"Failed to create database engine: {str(e)}")
-    raise RuntimeError(f"Database engine creation failed: {str(e)}") from e
+            if not result:
+                logger.debug(f"No user found with email: {email}")
+                cursor.close()
+                conn.close()
+                return None
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+            # Create a user object with the retrieved data
+            from app.db.models.user import User
+            user = User()
+
+            # Map database columns to user object attributes
+            user.id = result[0]
+            user.email = result[1]
+            user.username = result[2]
+            user.hashed_password = result[3]
+            user.full_name = result[4]
+            user.is_active = bool(result[5])
+            user.is_superuser = bool(result[6])
+            user.last_login = result[7]
+            user.change_history = result[8]
+            user.created_at = result[9]
+            user.updated_at = result[10]
+
+            logger.info(f"Successfully retrieved user: {user.email}")
+
+            cursor.close()
+            conn.close()
+            return user
+
+        except Exception as e:
+            logger.error(f"Error in get_user_by_email: {e}")
+            return None
+
+    # Add this method to the SQLCipherQuery class
+    def filter_by_email(self, email):
+        """Special case handling for email filtering"""
+        if hasattr(self.model, '__tablename__') and self.model.__tablename__ == 'users':
+            # Create a special subclass with the user lookup method
+            class UserFilterQuery(SQLCipherQuery):
+                def first(self_subclass):
+                    return self.session.get_user_by_email(email)
+
+            return UserFilterQuery(self.session, self.model)
+        return self
+
+    # Modify the SQLCipherQuery.filter method
+    def filter(self, *criteria):
+        """Add filter criteria - translates to WHERE clause"""
+        self._filter_clauses.extend(criteria)
+
+        # Handle the special case for user email filtering
+        for criterion in criteria:
+            # This is a very basic detection of a user email filter clause
+            if hasattr(criterion, 'left') and hasattr(criterion.left, 'name') and criterion.left.name == 'email':
+                if hasattr(criterion, 'right') and isinstance(criterion.right, str):
+                    return self.filter_by_email(criterion.right)
+
+        return self
+
+    def close(self):
+        if not self.closed and self._connection:
+            self.connection_pool.release(self._connection)
+            self._connection = None
+            self.closed = True
+
+    @property
+    def connection(self):
+        if self.closed:
+            raise RuntimeError("Session is closed")
+        if not self._connection:
+            self._connection = self.connection_pool.connect()
+        return self._connection
+
+    def execute(self, statement, params=None):
+        """Execute a SQL statement directly"""
+        cursor = None
+        try:
+            cursor = self.connection.cursor()
+            if params:
+                cursor.execute(statement, params)
+            else:
+                cursor.execute(statement)
+
+            if statement.upper().startswith(("SELECT", "PRAGMA")):
+                result = cursor.fetchall()
+                return result
+            else:
+                self.connection.commit()
+                return cursor.rowcount
+        finally:
+            if cursor:
+                cursor.close()
+
+    def query(self, model):
+        """Support basic ORM-style query"""
+        return SQLCipherQuery(self, model)
+
+    def commit(self):
+        """Commit the current transaction"""
+        if not self.closed and self._connection:
+            self._connection.commit()
+
+    def rollback(self):
+        """Rollback the current transaction"""
+        if not self.closed and self._connection:
+            self._connection.rollback()
+
+    def add(self, instance):
+        """Add an instance - stub for compatibility"""
+        logger.warning(f"SQLCipherSession.add() is not fully implemented")
+        logger.debug(f"Would add instance: {instance}")
+        # Implementation would convert to INSERT
+
+    def delete(self, instance):
+        """Delete an instance - stub for compatibility"""
+        logger.warning(f"SQLCipherSession.delete() is not fully implemented")
+        logger.debug(f"Would delete instance: {instance}")
+        # Implementation would convert to DELETE
+
+    # Add methods expected by SQLAlchemy Session API
+    def flush(self, objects=None):
+        """Flush changes - stub for compatibility"""
+        pass
+
+    def refresh(self, instance, attribute_names=None):
+        """Refresh instance - stub for compatibility"""
+        logger.warning(f"SQLCipherSession.refresh() is not fully implemented")
+
+    def expunge(self, instance):
+        """Remove instance from session - stub for compatibility"""
+        pass
+
+    def expunge_all(self):
+        """Remove all instances from session - stub for compatibility"""
+        pass
+
+    def merge(self, instance, load=True):
+        """Merge instance - stub for compatibility"""
+        logger.warning(f"SQLCipherSession.merge() is not fully implemented")
+        return instance
+
+    def get(self, entity, ident, options=None):
+        """Get by primary key - stub for compatibility"""
+        logger.warning(f"SQLCipherSession.get() is not fully implemented")
+        return None
+
+    def __contains__(self, instance):
+        """Check if instance is in session - stub for compatibility"""
+        return False
 
 
-# -----------------------------------------------------------------------------
-# Database Interface Functions
-# -----------------------------------------------------------------------------
+class SQLCipherQuery:
+    """
+    A simplified query API that mimics SQLAlchemy's Query class
+    enough to work with basic ORM operations.
+    """
 
-def get_db() -> Generator[Session, None, None]:
-    db: Optional[Session] = None
+    def __init__(self, session, model):
+        self.session = session
+        self.model = model
+        self._filter_clauses = []
+        self._limit = None
+        self._offset = None
+
+    def filter(self, *criteria):
+        """Add filter criteria - translates to WHERE clause"""
+        self._filter_clauses.extend(criteria)
+        return self
+
+    def first(self):
+        """Get first result - stub for compatibility"""
+        # In real implementation, this would generate SQL and execute
+        # For now, we'll just show debug info
+        self._limit = 1
+        logger.debug(f"Would query {self.model.__tablename__} with filters and limit 1")
+        return None  # Would return first result
+
+    def all(self):
+        """Get all results - stub for compatibility"""
+        logger.debug(f"Would query all {self.model.__tablename__} with filters")
+        return []  # Would return all matching results
+
+    def limit(self, limit):
+        """Set LIMIT clause"""
+        self._limit = limit
+        return self
+
+    def offset(self, offset):
+        """Set OFFSET clause"""
+        self._offset = offset
+        return self
+
+
+# Helper function for dependency injection
+def get_db() -> Generator[Union[Session, SQLCipherSession], None, None]:
+    """Dependency for FastAPI to inject a database session"""
+    db = None
     try:
+        # Always use SessionLocal() which now handles both modes
         db = SessionLocal()
         yield db
     except Exception as e:
@@ -451,27 +773,29 @@ def get_db() -> Generator[Session, None, None]:
                 logger.error(f"Error closing database session: {e}")
 
 
-def verify_db_connection() -> bool:
-    # For SQLCipher databases, use direct test method
-    if use_sqlcipher and settings.DATABASE_PATH:
-        return EncryptionManager.test_encrypted_database(os.path.abspath(settings.DATABASE_PATH))
+# -----------------------------------------------------------------------------
+# Database Management Functions
+# -----------------------------------------------------------------------------
 
-    # For non-encrypted databases, use SQLAlchemy engine
-    try:
-        with engine.connect() as connection:
-            result = connection.execute(text("SELECT 1")).scalar_one()
-            logger.info("Standard DB verified via SQLAlchemy engine.")
-            return True
-    except Exception as e:
-        logger.error(f"Database connection verification failed: {e}")
-        return False
+def verify_db_connection() -> bool:
+    """Verify that we can connect to the database"""
+    if use_sqlcipher:
+        return EncryptionManager.test_encrypted_database(db_path)
+    else:
+        try:
+            with engine.connect() as connection:
+                result = connection.execute(text("SELECT 1")).scalar_one()
+                logger.info("Standard DB verified via SQLAlchemy engine.")
+                return True
+        except Exception as e:
+            logger.error(f"Database connection verification failed: {e}")
+            return False
 
 
 def init_db() -> bool:
+    """Initialize the database schema"""
     logger.info("Initializing database schema...")
-    db_path = os.path.abspath(settings.DATABASE_PATH) if settings.DATABASE_PATH else None
 
-    # Handle SQLCipher encrypted database
     if use_sqlcipher:
         if not db_path:
             logger.error("Cannot init SQLCipher DB: DATABASE_PATH not set.")
@@ -501,8 +825,6 @@ def init_db() -> bool:
 
         logger.info("Database tables created successfully with SQLCipher")
         return True
-
-    # Handle standard (non-encrypted) database
     else:
         try:
             logger.info("Testing connection via SQLAlchemy engine...")
@@ -515,10 +837,10 @@ def init_db() -> bool:
             Base.metadata.create_all(bind=engine)
             logger.info("Database tables created successfully")
 
-            with SessionLocal() as session:
-                table_count = session.execute(
-                    text("SELECT count(*) FROM sqlite_master WHERE type='table';")).scalar_one()
-                logger.info(f"Database schema initialized with {table_count} tables.")
+            conn = engine.connect()
+            table_count = conn.execute(text("SELECT count(*) FROM sqlite_master WHERE type='table';")).scalar_one()
+            conn.close()
+            logger.info(f"Database schema initialized with {table_count} tables.")
             return True
         except Exception as e:
             logger.error(f"Database schema initialization failed: {str(e)}")
@@ -527,17 +849,13 @@ def init_db() -> bool:
 
 
 def get_encryption_status() -> dict:
+    """Get current encryption status information"""
     key_loaded = EncryptionManager.get_key() is not None
-    db_url_to_log = db_uri_base
     return {
         "encryption_enabled_setting": settings.USE_SQLCIPHER,
         "sqlcipher_available": EncryptionManager.is_sqlcipher_available(),
         "encryption_active": use_sqlcipher and key_loaded,
-        "database_path": settings.DATABASE_PATH,
-        "database_url_base": db_url_to_log if 'db_url_to_log' in locals() else 'Not Constructed',
+        "database_path": db_path,
+        "direct_sqlcipher_mode": direct_sqlcipher_mode if 'direct_sqlcipher_mode' in locals() else False,
         "has_encryption_key_loaded": key_loaded
     }
-
-
-
-

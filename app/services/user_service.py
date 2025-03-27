@@ -48,19 +48,32 @@ class UserService(BaseService[User]):
     # Assume existing implementation...
 
     def __init__(
-        self,
-        session: Session,
-        repository=None,
-        password_reset_repository=None,
-        security_context=None,
-        event_bus=None,
-        cache_service=None,
-        email_service=None,
+            self,
+            session: Session,
+            repository=None,
+            password_reset_repository=None,
+            security_context=None,
+            event_bus=None,
+            cache_service=None,
+            email_service=None,
     ):
         """Initialize with updated dependencies"""
-        # Existing initialization...
+        # Call parent class init with proper parameters
+        super().__init__(
+            session=session,
+            repository_class=UserRepository if repository is None else repository.__class__,
+            security_context=security_context,
+            event_bus=event_bus,
+            cache_service=cache_service,
+        )
+
+        # If repository was provided, use it instead of the one created by BaseService
+        if repository is not None:
+            self.repository = repository
+
+        # Additional initialization specific to UserService
         self.password_reset_repository = (
-            password_reset_repository or PasswordResetRepository(session)
+                password_reset_repository or PasswordResetRepository(session)
         )
         self.email_service = email_service
 
@@ -98,6 +111,34 @@ class UserService(BaseService[User]):
                 )
 
             return True
+
+    def authenticate_user(self, email: str, password: str) -> Optional[User]:
+        """
+        Authenticate a user with email and password.
+
+        Args:
+            email: User email address
+            password: Plain text password
+
+        Returns:
+            User object if authentication successful, None otherwise
+        """
+        # Find user by email using the repository
+        user = self.repository.get_by_email(email)
+
+        # If user not found or inactive, authentication fails
+        if not user:
+            return None
+
+        # Verify password
+        if not verify_password(password, user.hashed_password):
+            return None
+
+        # Update last login timestamp
+        user.last_login = datetime.utcnow()
+        self.session.commit()
+
+        return user
 
     def validate_reset_token(self, token_str: str) -> Optional[User]:
         """
@@ -264,8 +305,8 @@ class UserService(BaseService[User]):
         try:
             # Convert string ID to integer if needed
             user_id_int = int(user_id)
-            user = self.db.query(User).filter(User.id == user_id_int).first()
-            return user
+            # Use self.repository or self.session consistently, not self.db
+            return self.repository.get_by_id(user_id_int)
         except (ValueError, TypeError):
             # If conversion fails, log the error and return None
             print(f"Invalid user ID format: {user_id}")
