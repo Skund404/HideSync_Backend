@@ -45,21 +45,25 @@ async def login_for_access_token(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Inactive user"
         )
 
-    # Generate access token with user ID (not email) as subject
-    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    # Print user info for debugging
+    print(f"Authenticated user: ID={user.id}, email={user.email}")
 
-    # Updated to use 'subject' parameter instead of 'data'
+    # Generate access token with the authenticated user's actual ID
+    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = security.create_access_token(
-        subject=str(user.id),  # Use the same parameter name as create_refresh_token
+        subject=str(user.id),  # Use the actual authenticated user's ID
         expires_delta=access_token_expires,
     )
 
-    # Always generate refresh token
+    # Always generate refresh token with the actual user ID
     refresh_token_expires = timedelta(days=30)  # 30 days for refresh token
     refresh_token = security.create_refresh_token(
-        subject=str(user.id),
+        subject=str(user.id),  # Use the actual authenticated user's ID
         expires_delta=refresh_token_expires,
     )
+
+    # Log for debugging
+    print(f"Generated tokens for user ID: {user.id}")
 
     return {
         "access_token": access_token,

@@ -174,6 +174,80 @@ class UserRepository(BaseRepository[User]):
             # Fall back to standard ORM approach
             return self.session.query(self.model).filter(self.model.email == email).first()
 
+    def get_by_id(self, id):
+        """Get a user by ID using direct SQLCipher access"""
+        import os
+        import logging
+        from app.db.session import EncryptionManager, db_path
+        from app.core.config import settings
+        from app.db.models.user import User
+
+        logger = logging.getLogger(__name__)
+
+        try:
+            # Read key directly from file
+            key_file_path = os.path.abspath(settings.KEY_FILE_PATH)
+            logger.info(f"Reading encryption key directly from file: {key_file_path}")
+
+            with open(key_file_path, "r", encoding="utf-8") as f:
+                key = f.read().strip()
+
+            logger.info(f"Key read from file, length: {len(key)}")
+
+            # Use SQLCipher directly with the Hex key format approach that worked for login
+            sqlcipher = EncryptionManager.get_sqlcipher_module()
+            conn = sqlcipher.connect(db_path)
+            cursor = conn.cursor()
+
+            # Use the Hex key format approach that worked for login
+            logger.info("Using Hex key format approach for user lookup by ID")
+            cursor.execute(f"PRAGMA key=\"x'{key}'\";")
+            cursor.execute("PRAGMA foreign_keys=ON;")
+
+            # Query for the user by ID
+            query = """
+            SELECT id, email, username, hashed_password, full_name, 
+                   is_active, is_superuser, last_login, change_history, 
+                   created_at, updated_at
+            FROM users 
+            WHERE id = ?
+            LIMIT 1
+            """
+            cursor.execute(query, (id,))
+            result = cursor.fetchone()
+
+            if not result:
+                logger.info(f"No user found with ID: {id}")
+                cursor.close()
+                conn.close()
+                return None
+
+            # Create user object
+            user = User()
+
+            # Map columns
+            user.id = result[0]
+            user.email = result[1]
+            user.username = result[2]
+            user.hashed_password = result[3]
+            user.full_name = result[4]
+            user.is_active = bool(result[5])
+            user.is_superuser = bool(result[6])
+            user.last_login = result[7]
+            user.change_history = result[8]
+            user.created_at = result[9]
+            user.updated_at = result[10]
+
+            cursor.close()
+            conn.close()
+            logger.info(f"Found user with ID: {user.id}, email: {user.email}")
+            return user
+
+        except Exception as e:
+            logger.error(f"Error in direct SQLCipher access for get_by_id: {e}")
+            # Fall back to standard ORM approach as a last resort
+            return super().get(id)
+
     def get_by_username(self, username: str) -> Optional[User]:
         """
         Get a user by username.

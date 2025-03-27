@@ -507,6 +507,92 @@ class SQLCipherSession:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
 
+    def get_user_by_id(self, user_id):
+        """
+        Direct implementation for user lookup by ID that reads the key
+        directly from the file to ensure it matches what was used during login.
+        """
+        import os
+        from app.core.config import settings
+        from app.db.models.user import User
+
+        # Print debug information to logs
+        logger.info(f"Looking up user with ID: {user_id}")
+
+        # Read key directly from file, matching the approach used during database creation
+        key_file_path = os.path.abspath(settings.KEY_FILE_PATH)
+        logger.debug(f"Reading encryption key directly from file: {key_file_path}")
+
+        try:
+            with open(key_file_path, "r", encoding="utf-8") as f:
+                key = f.read().strip()
+
+            logger.debug(f"Key read from file, length: {len(key)}")
+
+            # Now use this key to access the database
+            sqlcipher = EncryptionManager.get_sqlcipher_module()
+            conn = sqlcipher.connect(db_path)
+            cursor = conn.cursor()
+
+            # Use the Hex key format which was successful in login
+            cursor.execute(f"PRAGMA key=\"x'{key}'\";")
+            cursor.execute("PRAGMA foreign_keys=ON;")
+
+            # Test connection
+            try:
+                cursor.execute("SELECT count(*) FROM sqlite_master;")
+                table_count = cursor.fetchone()[0]
+                logger.debug(f"Successfully connected to the database with {table_count} tables")
+            except Exception as e:
+                logger.error(f"Connection test failed: {e}")
+                cursor.close()
+                conn.close()
+                return None
+
+            # Query for the user by ID
+            query = """
+            SELECT id, email, username, hashed_password, full_name, 
+                   is_active, is_superuser, last_login, change_history, 
+                   created_at, updated_at
+            FROM users 
+            WHERE id = ?
+            LIMIT 1
+            """
+            cursor.execute(query, (user_id,))
+            result = cursor.fetchone()
+
+            if not result:
+                logger.error(f"No user found with ID: {user_id}")
+                cursor.close()
+                conn.close()
+                return None
+
+            # Create a user object with the retrieved data
+            user = User()
+
+            # Map database columns to user object attributes
+            user.id = result[0]
+            user.email = result[1]
+            user.username = result[2]
+            user.hashed_password = result[3]
+            user.full_name = result[4]
+            user.is_active = bool(result[5])
+            user.is_superuser = bool(result[6])
+            user.last_login = result[7]
+            user.change_history = result[8]
+            user.created_at = result[9]
+            user.updated_at = result[10]
+
+            logger.info(f"Successfully retrieved user ID: {user.id}, email: {user.email}")
+
+            cursor.close()
+            conn.close()
+            return user
+
+        except Exception as e:
+            logger.error(f"Error in get_user_by_id: {e}")
+            return None
+
     def get_user_by_email(self, email):
         """
         Direct implementation for user lookup by email that reads the key

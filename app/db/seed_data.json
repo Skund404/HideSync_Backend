@@ -23,6 +23,7 @@
   ],
   "users": [
     {
+      "id": 1,
       "email": "admin@example.com",
       "username": "admin",
       "plain_password": "changeme",

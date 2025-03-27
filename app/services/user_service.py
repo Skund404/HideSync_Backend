@@ -124,19 +124,32 @@ class UserService(BaseService[User]):
             User object if authentication successful, None otherwise
         """
         # Find user by email using the repository
+        print(f"Authenticating user with email: {email}")
         user = self.repository.get_by_email(email)
 
+        # Add debug info
+        if user:
+            print(f"User found: ID={user.id}, email={user.email}")
+        else:
+            print(f"No user found with email: {email}")
+            return None
+
         # If user not found or inactive, authentication fails
-        if not user:
+        if not user.is_active:
+            print(f"User {user.email} is inactive")
             return None
 
         # Verify password
-        if not verify_password(password, user.hashed_password):
+        password_valid = verify_password(password, user.hashed_password)
+        print(f"Password verification result: {password_valid}")
+
+        if not password_valid:
             return None
 
         # Update last login timestamp
         user.last_login = datetime.utcnow()
         self.session.commit()
+        print(f"Authentication successful for user {user.email} (ID={user.id})")
 
         return user
 
@@ -291,23 +304,34 @@ class UserService(BaseService[User]):
             "expires_in": settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         }
 
-    # Add this to app/services/user_service.py
-    def get_by_id(self, user_id: str):
+    # In app/services/user_service.py
+    def get_by_id(self, user_id):
         """
         Get a user by ID.
 
         Args:
-            user_id: User ID (string)
+            user_id: User ID (string or int)
 
         Returns:
             User or None
         """
         try:
-            # Convert string ID to integer if needed
-            user_id_int = int(user_id)
-            # Use self.repository or self.session consistently, not self.db
-            return self.repository.get_by_id(user_id_int)
-        except (ValueError, TypeError):
-            # If conversion fails, log the error and return None
-            print(f"Invalid user ID format: {user_id}")
+            # Ensure we're working with an integer ID
+            user_id_int = int(user_id) if not isinstance(user_id, int) else user_id
+
+            # Debug log
+            print(f"Looking up user with ID: {user_id_int}")
+
+            # Get the user from repository
+            user = self.repository.get_by_id(user_id_int)
+
+            # Log result for debugging
+            if user:
+                print(f"Found user: {user.id} - {user.email}")
+            else:
+                print(f"No user found with ID: {user_id_int}")
+
+            return user
+        except (ValueError, TypeError) as e:
+            print(f"Invalid user ID format: {user_id}, error: {str(e)}")
             return None

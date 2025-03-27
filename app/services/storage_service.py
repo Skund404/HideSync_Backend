@@ -542,6 +542,320 @@ class FileStorageService:
             logger.error(f"Failed to rename file: {str(e)}", exc_info=True)
             raise StorageException(f"Failed to rename file: {str(e)}", "STORAGE_012")
 
+    # Add these methods to the StorageLocationService class
+
+    def get_storage_locations(self, skip: int = 0, limit: int = 100, search_params=None):
+        """
+        Retrieve storage locations with pagination and filtering.
+
+        Args:
+            skip: Number of records to skip
+            limit: Maximum number of records to return
+            search_params: Optional search parameters
+
+        Returns:
+            List of storage locations matching the criteria
+        """
+        filters = {}
+
+        if search_params:
+            if search_params.type:
+                filters["type"] = search_params.type
+            if search_params.section:
+                filters["section"] = search_params.section
+            if search_params.status:
+                filters["status"] = search_params.status
+            if search_params.search:
+                filters["search"] = search_params.search
+
+        return self.repository.list(skip=skip, limit=limit, **filters)
+
+    def get_storage_location(self, location_id: str):
+        """
+        Get a specific storage location by ID.
+
+        Args:
+            location_id: ID of the storage location to retrieve
+
+        Returns:
+            Storage location if found
+
+        Raises:
+            EntityNotFoundException: If the storage location doesn't exist
+        """
+        location = self.repository.get_by_id(location_id)
+        if not location:
+            from app.core.exceptions import EntityNotFoundException
+            raise EntityNotFoundException("Storage location", location_id)
+        return location
+
+    def get_storage_cells(self, location_id: str, occupied: bool = None):
+        """
+        Get storage cells for a specific location.
+
+        Args:
+            location_id: ID of the storage location
+            occupied: Optional filter by occupancy status
+
+        Returns:
+            List of cells in the location
+
+        Raises:
+            EntityNotFoundException: If the storage location doesn't exist
+        """
+        # Check if the location exists
+        location = self.repository.get_by_id(location_id)
+        if not location:
+            from app.core.exceptions import EntityNotFoundException
+            raise EntityNotFoundException("Storage location", location_id)
+
+        # Get cells with filter if provided
+        filters = {"storage_id": location_id}
+        if occupied is not None:
+            filters["occupied"] = occupied
+
+        return self.cell_repository.list(**filters)
+
+    def create_storage_cell(self, location_id: str, cell_data, user_id=None):
+        """
+        Create a new storage cell in a location.
+
+        Args:
+            location_id: ID of the storage location
+            cell_data: Cell creation data
+            user_id: ID of the user creating the cell
+
+        Returns:
+            Created storage cell
+
+        Raises:
+            EntityNotFoundException: If the storage location doesn't exist
+        """
+        # Check if the location exists
+        location = self.repository.get_by_id(location_id)
+        if not location:
+            from app.core.exceptions import EntityNotFoundException
+            raise EntityNotFoundException("Storage location", location_id)
+
+        # Prepare cell data
+        cell_data_dict = cell_data.dict() if hasattr(cell_data, "dict") else dict(cell_data)
+        cell_data_dict["storage_id"] = location_id
+
+        # Create cell
+        return self.cell_repository.create(cell_data_dict)
+
+    def get_storage_assignments(self, item_id=None, item_type=None, location_id=None):
+        """
+        Get storage assignments with optional filtering.
+
+        Args:
+            item_id: Optional filter by item ID
+            item_type: Optional filter by item type
+            location_id: Optional filter by storage location ID
+
+        Returns:
+            List of assignments matching the criteria
+        """
+        filters = {}
+        if item_id is not None:
+            filters["material_id"] = item_id
+        if item_type is not None:
+            filters["material_type"] = item_type
+        if location_id is not None:
+            filters["storage_id"] = location_id
+
+        return self.assignment_repository.list(**filters)
+
+    def create_storage_assignment(self, assignment_data, user_id=None):
+        """
+        Create a new storage assignment.
+
+        Args:
+            assignment_data: Assignment creation data
+            user_id: ID of the user creating the assignment
+
+        Returns:
+            Created storage assignment
+
+        Raises:
+            EntityNotFoundException: If related entities don't exist
+        """
+        # Extract data
+        assignment_dict = assignment_data.dict() if hasattr(assignment_data, "dict") else dict(assignment_data)
+
+        # Add assigned_by if provided
+        if user_id and "assigned_by" not in assignment_dict:
+            assignment_dict["assigned_by"] = str(user_id)
+
+        # Set assigned date if not provided
+        if "assigned_date" not in assignment_dict:
+            from datetime import datetime
+            assignment_dict["assigned_date"] = datetime.now().isoformat()
+
+        # Make sure location exists
+        storage_id = assignment_dict.get("storage_id")
+        if storage_id:
+            location = self.repository.get_by_id(storage_id)
+            if not location:
+                from app.core.exceptions import EntityNotFoundException
+                raise EntityNotFoundException("Storage location", storage_id)
+
+        return self.assign_material_to_location(assignment_dict)
+
+    def delete_storage_assignment(self, assignment_id, user_id=None):
+        """
+        Delete a storage assignment.
+
+        Args:
+            assignment_id: ID of the assignment to delete
+            user_id: ID of the user deleting the assignment
+
+        Returns:
+            True if successfully deleted
+
+        Raises:
+            EntityNotFoundException: If the assignment doesn't exist
+        """
+        return self.remove_material_from_location(assignment_id)
+
+    def get_storage_moves(self, skip=0, limit=100, item_id=None, item_type=None):
+        """
+        Get storage moves with optional filtering and pagination.
+
+        Args:
+            skip: Number of records to skip
+            limit: Maximum number of records to return
+            item_id: Optional filter by item ID
+            item_type: Optional filter by item type
+
+        Returns:
+            List of moves matching the criteria
+        """
+        filters = {}
+        if item_id is not None:
+            filters["material_id"] = item_id
+        if item_type is not None:
+            filters["material_type"] = item_type
+
+        return self.move_repository.list(skip=skip, limit=limit, **filters)
+
+    def create_storage_move(self, move_data, user_id=None):
+        """
+        Create a new storage move.
+
+        Args:
+            move_data: Move creation data
+            user_id: ID of the user creating the move
+
+        Returns:
+            Created storage move
+
+        Raises:
+            EntityNotFoundException: If related entities don't exist
+        """
+        # Extract data
+        move_dict = move_data.dict() if hasattr(move_data, "dict") else dict(move_data)
+
+        # Add moved_by if provided
+        if user_id and "moved_by" not in move_dict:
+            move_dict["moved_by"] = str(user_id)
+
+        # Set move date if not provided
+        if "move_date" not in move_dict:
+            from datetime import datetime
+            move_dict["move_date"] = datetime.now().isoformat()
+
+        return self.move_material_between_locations(move_dict)
+
+    def get_storage_occupancy_report(self, section=None, location_type=None):
+        """
+        Get a storage occupancy report.
+
+        Args:
+            section: Optional filter by section
+            location_type: Optional filter by location type
+
+        Returns:
+            Storage occupancy report
+        """
+        # Get storage locations with filters
+        filters = {}
+        if section:
+            filters["section"] = section
+        if location_type:
+            filters["type"] = location_type
+
+        locations = self.repository.list(**filters)
+
+        # Calculate occupancy metrics
+        total_capacity = sum(location.capacity or 0 for location in locations)
+        total_utilized = sum(location.utilized or 0 for location in locations)
+
+        # Group by section
+        sections = {}
+        for location in locations:
+            if location.section not in sections:
+                sections[location.section] = {
+                    "capacity": 0,
+                    "utilized": 0,
+                    "locations": 0
+                }
+
+            sections[location.section]["capacity"] += location.capacity or 0
+            sections[location.section]["utilized"] += location.utilized or 0
+            sections[location.section]["locations"] += 1
+
+        # Group by type
+        types = {}
+        for location in locations:
+            location_type = location.type
+            if location_type not in types:
+                types[location_type] = {
+                    "capacity": 0,
+                    "utilized": 0,
+                    "locations": 0
+                }
+
+            types[location_type]["capacity"] += location.capacity or 0
+            types[location_type]["utilized"] += location.utilized or 0
+            types[location_type]["locations"] += 1
+
+        # Calculate percentages
+        for section_data in sections.values():
+            section_data["percentage"] = (
+                section_data["utilized"] / section_data["capacity"] * 100
+                if section_data["capacity"] > 0 else 0
+            )
+
+        for type_data in types.values():
+            type_data["percentage"] = (
+                type_data["utilized"] / type_data["capacity"] * 100
+                if type_data["capacity"] > 0 else 0
+            )
+
+        # Create report
+        return {
+            "total_locations": len(locations),
+            "total_capacity": total_capacity,
+            "total_utilized": total_utilized,
+            "utilization_percentage": (
+                total_utilized / total_capacity * 100
+                if total_capacity > 0 else 0
+            ),
+            "by_section": sections,
+            "by_type": types,
+            "locations_at_capacity": len([
+                loc for loc in locations
+                if loc.capacity and loc.utilized and
+                   (loc.utilized / loc.capacity) >= 0.9
+            ]),
+            "locations_nearly_empty": len([
+                loc for loc in locations
+                if loc.capacity and loc.utilized and
+                   (loc.utilized / loc.capacity) <= 0.1
+            ])
+        }
+
     def _get_storage_path(self, file_id: str, extension: str) -> Path:
         """
         Generate storage path for a file.
