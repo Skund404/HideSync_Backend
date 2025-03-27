@@ -7,6 +7,7 @@ resources, contextual help mappings, and application contexts. These models supp
 a knowledge base for users with hierarchical organization and contextual help.
 """
 
+import uuid
 from typing import List, Optional, Dict, Any, ClassVar, Set
 from datetime import datetime
 from enum import Enum as PyEnum
@@ -25,7 +26,9 @@ from sqlalchemy import (
     Float,
     UniqueConstraint,
 )
-from sqlalchemy.orm import relationship, validates
+# Assuming Mapped and mapped_column are needed if using newer SQLAlchemy syntax
+# If not, remove these imports.
+from sqlalchemy.orm import relationship, validates, Mapped, mapped_column
 from sqlalchemy.ext.hybrid import hybrid_property
 from app.db.models.base import AbstractBase, ValidationMixin, TimestampMixin
 from app.db.models.enums import SkillLevel
@@ -34,7 +37,8 @@ from app.db.models.enums import SkillLevel
 documentation_category_assignment = Table(
     "documentation_category_assignments",
     AbstractBase.metadata,
-    Column("id", String(36), primary_key=True),
+    # *** FIXED: Add default UUID generator for the primary key ***
+    Column("id", String(36), primary_key=True, default=lambda: str(uuid.uuid4())),
     Column(
         "category_id",
         String(36),
@@ -103,13 +107,15 @@ class DocumentationCategory(AbstractBase, ValidationMixin, TimestampMixin):
         "DocumentationCategory",
         back_populates="subcategories",
         remote_side="DocumentationCategory.id",
-        foreign_keys=[parent_category_id],
+        # *** FIXED: Use string for foreign_keys ***
+        foreign_keys="DocumentationCategory.parent_category_id",
     )
 
     subcategories = relationship(
         "DocumentationCategory",
         back_populates="parent",
-        foreign_keys=[parent_category_id],
+        # *** FIXED: Use string for foreign_keys ***
+        foreign_keys="DocumentationCategory.parent_category_id",
     )
 
     resources = relationship(
@@ -173,7 +179,8 @@ class DocumentationCategory(AbstractBase, ValidationMixin, TimestampMixin):
         Returns:
             Number of resources in the category
         """
-        return len(self.resources) if hasattr(self, "resources") else 0
+        # Ensure relationship is loaded or handle potential None
+        return len(self.resources) if self.resources is not None else 0
 
     @hybrid_property
     def has_subcategories(self) -> bool:
@@ -183,7 +190,8 @@ class DocumentationCategory(AbstractBase, ValidationMixin, TimestampMixin):
         Returns:
             True if category has subcategories, False otherwise
         """
-        return len(self.subcategories) > 0
+        # Ensure relationship is loaded or handle potential None
+        return len(self.subcategories) > 0 if self.subcategories is not None else False
 
     def to_dict(self) -> Dict[str, Any]:
         """
@@ -229,7 +237,8 @@ class DocumentationResource(AbstractBase, ValidationMixin, TimestampMixin):
     related_resource_ids = Column(JSON, nullable=True)  # List of resource IDs
 
     # Author and timestamps
-    author_id = Column(String(36))
+    # Assuming author_id links to a User model's ID (adjust ForeignKey if needed)
+    author_id = Column(String(36), ForeignKey("users.id"), nullable=True)
 
     # Publication info
     is_public = Column(Boolean, default=True)
@@ -249,6 +258,9 @@ class DocumentationResource(AbstractBase, ValidationMixin, TimestampMixin):
     contextual_help_mappings = relationship(
         "ContextualHelpMapping", back_populates="resource", cascade="all, delete-orphan"
     )
+
+    # Optional: Relationship to User model if you want to access the author object
+    # author = relationship("User", back_populates="documentation_resources")
 
     @validates("title")
     def validate_title(self, key: str, title: str) -> str:
@@ -331,15 +343,20 @@ class DocumentationResource(AbstractBase, ValidationMixin, TimestampMixin):
         if self.skill_level:
             result["skill_level"] = self.skill_level.name
 
-        # Handle JSON fields
+        # Handle JSON fields (ensure they are lists/dicts, not strings)
         for field in ["tags", "related_resource_ids", "media_attachments"]:
-            if isinstance(result.get(field), str):
+            value = getattr(self, field, None)
+            if isinstance(value, str):
                 import json
-
                 try:
-                    result[field] = json.loads(result[field])
-                except:
-                    result[field] = []
+                    result[field] = json.loads(value)
+                except json.JSONDecodeError:
+                    # Handle potential invalid JSON string, default to empty list/dict
+                    result[field] = [] if field != "media_attachments" else {}
+            elif value is None:
+                 result[field] = [] if field != "media_attachments" else {}
+            else:
+                 result[field] = value # Already a list/dict
 
         # Add calculated properties
         result["word_count"] = self.word_count
@@ -487,6 +504,8 @@ class ContextualHelpMapping(AbstractBase, ValidationMixin, TimestampMixin):
         Raises:
             ValueError: If score is outside valid range
         """
+        if not isinstance(score, int):
+             raise ValueError("Relevance score must be an integer")
         if score < 1 or score > 100:
             raise ValueError("Relevance score must be between 1 and 100")
         return score
@@ -494,3 +513,4 @@ class ContextualHelpMapping(AbstractBase, ValidationMixin, TimestampMixin):
     def __repr__(self) -> str:
         """Return string representation of the ContextualHelpMapping."""
         return f"<ContextualHelpMapping(id='{self.id}', resource_id='{self.resource_id}', context_key='{self.context_key}')>"
+

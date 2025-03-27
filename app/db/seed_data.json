@@ -186,7 +186,7 @@
       "supplierId": 1,
       "cost": 12.5,
       "price": 25.0,
-      "storageLocation": "Main Workshop Cabinet A",
+      "storageLocation": 1,
       "description": "Premium full grain vegetable tanned leather, perfect for wallets and small goods",
       "sku": "LTHR-VTAN-BRN-2MM"
     },
@@ -205,7 +205,7 @@
       "supplierId": 1,
       "cost": 15.0,
       "price": 30.0,
-      "storageLocation": "Main Workshop Cabinet A",
+      "storageLocation": 1,
       "description": "Smooth Italian calfskin with excellent burnishing properties",
       "sku": "LTHR-BTRO-BLK-1MM"
     },
@@ -223,7 +223,7 @@
       "supplierId": 2,
       "cost": 2.5,
       "price": 5.0,
-      "storageLocation": "Hardware Drawer 1",
+      "storageLocation": 2,
       "description": "Solid brass rectangular center bar buckle",
       "sku": "HDW-BCKL-BRS-1IN"
     },
@@ -241,7 +241,7 @@
       "supplierId": 2,
       "cost": 0.5,
       "price": 1.0,
-      "storageLocation": "Hardware Drawer 1",
+      "storageLocation": 2,
       "description": "10mm Chicago screws for leather projects",
       "sku": "HDW-SCRW-BRS-10MM"
     },
@@ -259,7 +259,7 @@
       "supplierId": 3,
       "cost": 12.0,
       "price": 22.0,
-      "storageLocation": "Main Workshop Cabinet A",
+      "storageLocation": 1,
       "description": "Premium waxed polyester thread for leather stitching",
       "sku": "SPL-THRD-BRN-08MM"
     },
@@ -276,7 +276,7 @@
       "supplierId": 3,
       "cost": 8.0,
       "price": 15.0,
-      "storageLocation": "Dye Storage",
+      "storageLocation": 4,
       "description": "Alcohol-based leather dye",
       "sku": "SPL-DYE-DBRN-4OZ"
     }
@@ -428,7 +428,7 @@
       "dueDate": "2026-04-15T17:00:00",
       "progress": 25,
       "completionPercentage": 25,
-      "customer": "Alice Johnson",
+      "customer": 1,
       "notes": "Customer requested dark brown with contrasting stitching"
     },
     {
@@ -440,7 +440,7 @@
       "dueDate": "2026-04-20T17:00:00",
       "progress": 10,
       "completionPercentage": 10,
-      "customer": "Bob Williams",
+      "customer": 2,
       "notes": "Using Italian Buttero leather"
     }
   ],
@@ -663,13 +663,13 @@
     {
       "project_id": 1,
       "status": "IN_PROGRESS",
-      "assignedTo": "Workshop Owner",
+      "assignedTo": 1,
       "notes": "Materials for Alice's wallet"
     },
     {
       "project_id": 2,
       "status": "PENDING",
-      "assignedTo": "Workshop Owner",
+      "assignedTo": 1,
       "notes": "Materials for Bob's card holder"
     }
   ],
@@ -706,7 +706,7 @@
       "storageId": 1,
       "position": { "x": 1, "y": 1, "z": 1 },
       "quantity": 5,
-      "assignedBy": "Workshop Owner",
+      "assignedBy": 1,
       "notes": "Main leather storage"
     },
     {
@@ -715,7 +715,7 @@
       "storageId": 2,
       "position": { "x": 1, "y": 1, "z": 1 },
       "quantity": 50,
-      "assignedBy": "Workshop Owner",
+      "assignedBy": 1,
       "notes": "Hardware storage"
     }
   ],
@@ -723,7 +723,7 @@
     {
       "toolId": 1,
       "toolName": "Japanese Skiving Knife",
-      "checkedOutBy": "Workshop Owner",
+      "checkedOutBy": 1,
       "checkedOutDate": "2023-04-02T09:00:00",
       "dueDate": "2026-04-07T17:00:00",
       "projectId": 1,
@@ -750,6 +750,12 @@
       "description": "Project management guides",
       "icon": "clipboard",
       "slug": "projects"
+    },
+    {
+      "name": "Techniques",
+      "description": "Basic leatherworking techniques and skills.",
+      "icon": "tool",
+      "slug": "techniques"
     }
   ],
   "documentation_resources": [
@@ -771,6 +777,56 @@
       "type": "REFERENCE",
       "skill_level": "BEGINNER",
       "tags": ["leather", "materials", "reference"],
+      "author": "HideSync Team"
+    },
+    {
+      "title": "Essential Leatherworking Tools",
+      "description": "An overview of basic tools needed to start leatherworking.",
+      "content": "# Essential Leatherworking Tools\n\nStarting leathercraft requires a few key tools. Here's a basic list:\n\n- **Cutting Mat:** Self-healing mat to protect your work surface and blade.\n- **Utility Knife / Craft Knife:** Sharp blade for cutting leather (e.g., X-Acto, Stanley).\n- **Metal Ruler / Straight Edge:** For guiding cuts.\n- **Stitching Chisels / Pricking Irons:** To create holes for stitching (diamond, french, etc.).\n- **Mallet / Maul:** Rawhide, poly, or wooden mallet for striking tools (chisels, stamps).\n- **Harness Needles:** Blunt-tipped needles for hand stitching.\n- **Waxed Thread:** Durable thread designed for leather (polyester, linen).\n- **Edge Beveler:** Removes the sharp corner from leather edges.\n- **Burnisher:** Smooths and seals leather edges (wood, plastic, bone folder).\n- **Optional:** Skiving knife, hole punches, stamps, dye, applicators.",
+      "category": "GETTING_STARTED",
+      "type": "GUIDE",
+      "skill_level": "BEGINNER",
+      "tags": ["tools", "beginner", "getting started", "essentials"],
+      "author": "HideSync Team"
+    },
+    {
+      "title": "Cutting Leather Accurately",
+      "description": "Tips for getting clean, straight cuts in leather.",
+      "content": "# Cutting Leather Accurately\n\nClean cuts are fundamental to professional-looking leather goods.\n\n1.  **Sharp Blade:** Always use a very sharp blade. Dull blades drag and tear leather. Snap-off utility knives are convenient.\n2.  **Secure the Leather:** Place the leather grain-side up on a cutting mat. Ensure it doesn't shift.\n3.  **Use a Metal Ruler:** Place a heavy metal ruler firmly along your cutting line.\n4.  **Multiple Passes:** Don't try to cut through thick leather in one pass. Make several light, controlled passes, keeping the blade vertical against the ruler.\n5.  **Start and Stop:** Begin your cut slightly before the start line and end slightly after the end line for clean corners when cutting out patterns.\n6.  **Curves:** For curves, use a sharp round knife or make multiple small, straight cuts tangent to the curve with a utility knife.",
+      "category": "TECHNIQUES",
+      "type": "HOW_TO",
+      "skill_level": "BEGINNER",
+      "tags": ["cutting", "technique", "knife", "beginner"],
+      "author": "HideSync Team"
+    },
+    {
+      "title": "Preparing Leather for Hand Stitching",
+      "description": "Marking and creating stitching holes.",
+      "content": "# Preparing Leather for Hand Stitching\n\nConsistent stitching starts with proper preparation.\n\n1.  **Mark Stitch Line:** Use wing dividers or a groover to mark a consistent line parallel to the edge where your stitches will go.\n2.  **Choose Your Tool:** Decide between stitching chisels (create diamond-shaped holes) or pricking irons (mark stitch locations, holes punched later with an awl). Spacing is measured in SPI (Stitches Per Inch) or millimeters.\n3.  **Punching Holes (Chisels):**\n    *   Place leather on a poundo board or scrap leather.\n    *   Align the chisel on the stitch line, ensuring it's perpendicular to the surface.\n    *   Strike firmly with a mallet. Ensure the chisel goes all the way through.\n    *   For the next set of holes, place the first tooth of the chisel in the last hole made.\n4.  **Marking Holes (Pricking Irons):**\n    *   Mark lightly with the pricking iron along the stitch line.\n    *   Use a stitching awl (diamond or round) to pierce the holes fully, following the marks, often done during the stitching process itself.\n\nConsistency is key for a neat stitch line.",
+      "category": "TECHNIQUES",
+      "type": "HOW_TO",
+      "skill_level": "BEGINNER",
+      "tags": ["stitching", "technique", "chisels", "pricking irons", "awl", "beginner"],
+      "author": "HideSync Team"
+    },
+    {
+      "title": "The Saddle Stitch",
+      "description": "How to perform the basic and durable hand stitch for leather.",
+      "content": "# The Saddle Stitch\n\nThe saddle stitch is the most common and durable hand stitch for leather. It uses two needles on a single thread.\n\n1.  **Measure Thread:** Measure thread about 3-4 times the length of the seam you're stitching.\n2.  **Thread Needles:** Thread a harness needle onto each end of the thread. Lock the thread onto the needle (pass needle through thread, pull tight).\n3.  **Start Stitching:** Push one needle through the first hole. Pull the thread through until equal lengths are on both sides.\n4.  **First Stitch:** Push the left needle through the second hole. Pull the thread snug, but not tight.\n5.  **Second Needle:** Push the right needle through the *same* second hole. Be careful *not* to pierce the thread already in the hole. Wiggle the needle or use an awl to open the hole slightly if needed. Pull the right thread through.\n6.  **Set the Stitch:** Pull both threads simultaneously outwards and slightly upwards/downwards (depending on preference) to set the stitch evenly in the hole. Consistency in how you pass the needles (e.g., left needle first, right needle second *behind* the first thread) and how you pull tight is crucial for a uniform look.\n7.  **Continue:** Repeat steps 4-6 for all holes.\n8.  **Backstitch:** To finish, stitch backward 2-3 holes for security.\n9.  **Trim and Melt:** Cut the threads close to the surface. If using polyester thread, carefully melt the ends with a lighter to prevent unraveling.",
+      "category": "TECHNIQUES",
+      "type": "HOW_TO",
+      "skill_level": "BEGINNER",
+      "tags": ["stitching", "technique", "saddle stitch", "hand sewing", "beginner"],
+      "author": "HideSync Team"
+    },
+    {
+      "title": "Basic Edge Finishing",
+      "description": "Introduction to beveling and burnishing leather edges.",
+      "content": "# Basic Edge Finishing\n\nFinishing the edges elevates the look and durability of leather goods.\n\n1.  **Level Edges:** Ensure the edges to be finished are flush and even. Sand lightly if necessary.\n2.  **Beveling:** Use an edge beveler tool appropriate for your leather thickness. Hold it at a consistent angle (often ~45 degrees) and run it along the corners of the edge (both top and bottom) to remove the sharp corner, creating a rounded profile. Use smooth, controlled strokes.\n3.  **Applying Agent (Optional but Recommended):** Apply water, gum tragacanth, or a dedicated burnishing agent (like Tokonole) sparingly along the beveled edge.\n4.  **Burnishing:** Rub the edge vigorously with a wood slicker, canvas cloth, or bone folder. The friction and pressure (and burnishing agent) compress the leather fibers, darkening and smoothing the edge, creating a sealed, glossy finish.\n5.  **Repeat if Needed:** You may need multiple applications of agent and burnishing for a perfect result.\n6.  **Waxing (Optional):** For extra protection and shine, rub beeswax onto the burnished edge and buff with a cloth.",
+      "category": "TECHNIQUES",
+      "type": "HOW_TO",
+      "skill_level": "BEGINNER",
+      "tags": ["edge finishing", "beveling", "burnishing", "technique", "beginner"],
       "author": "HideSync Team"
     }
   ]

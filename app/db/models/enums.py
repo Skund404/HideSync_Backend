@@ -220,6 +220,7 @@ class InventoryStatus(Enum):
     LIMITED_EDITION = "limited_edition"
     SPECIAL_ORDER = "special_order"
     CUSTOM_ORDER = "custom_order"
+    ACTIVE = "active"
 
 
 class MaterialType(Enum):
@@ -468,7 +469,7 @@ class HardwareType(Enum):
     OTHER = "other"
 
 
-class HardwareMaterial(Enum):
+class HardwareMaterialEnum(Enum):
     """Materials that hardware items can be made of."""
 
     # Metals
@@ -643,6 +644,7 @@ class LeatherType(Enum):
 class LeatherFinish(Enum):
     """Detailed enumeration of leather finishing techniques."""
 
+    PULL_UP = "pull_up"
     ANILINE = "aniline"
     SEMI_ANILINE = "semi_aniline"
     PIGMENTED = "pigmented"
@@ -1623,3 +1625,95 @@ class UserRole(Enum):
     EMPLOYEE = "employee"
     CUSTOMER = "customer"
     GUEST = "guest"
+
+class ToolStatus(enum.Enum):
+    """Represents the possible statuses of a tool."""
+    IN_STOCK = "In Stock"           # Available for use
+    CHECKED_OUT = "Checked Out"     # Currently assigned or in use
+    IN_MAINTENANCE = "In Maintenance" # Undergoing repair/sharpening
+    RETIRED = "Retired"             # No longer in service
+    LOST = "Lost"                   # Missing or unaccounted for
+
+
+
+class FileType(enum.Enum):
+    """Represents common file types for patterns or resources."""
+    PDF = "pdf"
+    SVG = "svg"
+    DXF = "dxf"
+    AI = "ai"  # Adobe Illustrator
+    PNG = "png"
+    JPG = "jpg"
+    JPEG = "jpeg"
+    TXT = "txt"
+    MD = "md"  # Markdown
+    OTHER = "other"
+
+
+class InventoryItemType(enum.Enum):
+    """Distinguishes between different types of items in inventory."""
+    MATERIAL = "material"
+    TOOL = "tool"
+    PRODUCT = "product" # Finished goods
+    COMPONENT = "component" # If components are tracked separately
+    OTHER = "other"
+
+class InventoryTransactionType(Enum):
+    """
+    Enumeration of transaction types specifically affecting inventory levels.
+    This focuses on the movement of stock.
+    """
+
+    PURCHASE_RECEIPT = "purchase_receipt"  # Stock in from supplier
+    SALE_FULFILLMENT = "sale_fulfillment"  # Stock out for customer sale
+    PRODUCTION_USAGE = "production_usage"  # Stock out for use in a project
+    PROJECT_ALLOCATION = "project_allocation"  # Reserved for a project
+    PROJECT_DEALLOCATION = "project_deallocation"  # Released from project reservation
+    WASTAGE = "wastage"  # Stock out due to damage, scrap, etc.
+    ADJUSTMENT_INCREASE = "adjustment_increase"  # Stock in due to correction, count, etc.
+    ADJUSTMENT_DECREASE = "adjustment_decrease"  # Stock out due to correction, count, etc.
+    CUSTOMER_RETURN = "customer_return"  # Stock in from customer
+    SUPPLIER_RETURN = "supplier_return"  # Stock out back to supplier
+    TRANSFER_OUT = "transfer_out"  # Stock out from one location
+    TRANSFER_IN = "transfer_in"  # Stock in to another location
+    INITIAL_STOCK = "initial_stock"  # Stock in when first adding item
+    CONVERSION_IN = "conversion_in"  # Stock in as result of converting another item
+    CONVERSION_OUT = "conversion_out"  # Stock out when converting to another item
+    INTERNAL_USE = "internal_use"  # Stock out for non-production use (e.g., samples, testing)
+    CONSIGNMENT_RECEIPT = "consignment_receipt" # Stock in (consignment)
+    CONSIGNMENT_SALE = "consignment_sale" # Stock out (consignment)
+    CONSIGNMENT_RETURN = "consignment_return" # Stock out (returning unsold consignment)
+    FOUND = "found" # Stock in for previously lost items
+    LOST_THEFT = "lost_theft" # Stock out due to loss or theft
+    OTHER = "other" # Catch-all for less common types
+
+class StorageLocationStatus(Enum):
+    """Status for storage locations."""
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    UNDER_MAINTENANCE = "under_maintenance"
+    ARCHIVED = "archived"
+
+# Added alias for backward compatibility
+HardwareMaterial = HardwareMaterialEnum
+
+class TimelineTaskStatus(Enum):
+    """Status values for timeline tasks within a project."""
+    IN_PROGRESS = "in_progress"
+    PENDING = "pending"
+    PLANNING = "planning"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+    DELAYED = "delayed"
+    WAITING = "waiting"
+    BLOCKED = "blocked"
+
+class PickingListItemStatus(Enum):
+    """Status values for individual items in a picking list."""
+    PENDING = "pending"
+    COMPLETE = "complete"
+    PARTIAL = "partial"
+    UNAVAILABLE = "unavailable"
+    SUBSTITUTED = "substituted"
+    BACKORDERED = "backordered"
+    CANCELLED = "cancelled"

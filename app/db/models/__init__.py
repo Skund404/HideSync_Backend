@@ -26,7 +26,7 @@ from app.db.models.enums import (
     MaterialType,
     MaterialQualityGrade,
     HardwareType,
-    HardwareMaterial,  # Enum
+    HardwareMaterialEnum,  # Correct import name
     HardwareFinish,
     LeatherType,
     LeatherFinish,
@@ -51,6 +51,9 @@ from app.db.models.enums import (
     FulfillmentStatus,
     UserRole,
 )
+
+# Create alias for backward compatibility
+HardwareMaterial = HardwareMaterialEnum
 
 # Import Enums defined within documentation.py
 from app.db.models.documentation import (
@@ -123,7 +126,6 @@ from app.db.models.documentation import (
     # Enums already imported above
 )
 from app.db.models.file_metadata import FileMetadata
-
 
 # Define __all__ for explicit namespace export
 __all__ = [
@@ -205,7 +207,8 @@ __all__ = [
     "MaterialType",
     "MaterialQualityGrade",
     "HardwareType",
-    "HardwareMaterial",  # Export the Enum name
+    "HardwareMaterial",  # Still export HardwareMaterial for backward compatibility
+    "HardwareMaterialEnum",  # Also export the original enum name
     "HardwareFinish",
     "LeatherType",
     "LeatherFinish",
