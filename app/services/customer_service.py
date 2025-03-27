@@ -969,10 +969,10 @@ def get_customer_analytics(self) -> Dict[str, Any]:
         "customer_distribution": {
             "status": status_distribution,
             "tier": tier_distribution,
-            "source": source_distribution
+            "source": source_distribution,
         },
         "average_lifetime_value": avg_ltv,
-        "top_customers": top_customers
+        "top_customers": top_customers,
     }
 
 
@@ -1030,13 +1030,9 @@ def _calculate_average_lifetime_value(self) -> float:
     from sqlalchemy import func
     from app.db.models.sales import Sale
 
-    query = (
-        self.session.query(
-            Sale.customer_id,
-            func.sum(Sale.total_amount).label('total_spent')
-        )
-        .group_by(Sale.customer_id)
-    )
+    query = self.session.query(
+        Sale.customer_id, func.sum(Sale.total_amount).label("total_spent")
+    ).group_by(Sale.customer_id)
 
     results = query.all()
 
@@ -1063,11 +1059,11 @@ def _get_top_customers_by_sales(self, limit: int = 10) -> List[Dict[str, Any]]:
     query = (
         self.session.query(
             Sale.customer_id,
-            func.sum(Sale.total_amount).label('total_spent'),
-            func.count(Sale.id).label('order_count')
+            func.sum(Sale.total_amount).label("total_spent"),
+            func.count(Sale.id).label("order_count"),
         )
         .group_by(Sale.customer_id)
-        .order_by(desc('total_spent'))
+        .order_by(desc("total_spent"))
         .limit(limit)
     )
 
@@ -1077,14 +1073,22 @@ def _get_top_customers_by_sales(self, limit: int = 10) -> List[Dict[str, Any]]:
     for row in results:
         customer = self.repository.get_by_id(row.customer_id)
         if customer:
-            top_customers.append({
-                "id": customer.id,
-                "name": customer.name,
-                "email": customer.email,
-                "tier": customer.tier.name if hasattr(customer.tier, "name") else customer.tier,
-                "total_spent": row.total_spent,
-                "order_count": row.order_count,
-                "average_order_value": row.total_spent / row.order_count if row.order_count else 0
-            })
+            top_customers.append(
+                {
+                    "id": customer.id,
+                    "name": customer.name,
+                    "email": customer.email,
+                    "tier": (
+                        customer.tier.name
+                        if hasattr(customer.tier, "name")
+                        else customer.tier
+                    ),
+                    "total_spent": row.total_spent,
+                    "order_count": row.order_count,
+                    "average_order_value": (
+                        row.total_spent / row.order_count if row.order_count else 0
+                    ),
+                }
+            )
 
     return top_customers

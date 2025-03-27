@@ -308,14 +308,15 @@ def get_recurring_project_count(
 
 # Add this endpoint to your app/api/endpoints/recurring_projects.py file
 
+
 @router.patch("/{project_id}/toggle-active", response_model=RecurringProject)
 def toggle_recurring_project_active_state(
-        *,
-        db: Session = Depends(get_db),
-        project_id: str = Path(
-            ..., description="The ID of the recurring project to toggle"
-        ),
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    db: Session = Depends(get_db),
+    project_id: str = Path(
+        ..., description="The ID of the recurring project to toggle"
+    ),
+    current_user: Any = Depends(get_current_active_user),
 ):
     """
     Toggle the active state of a recurring project.
@@ -337,10 +338,12 @@ def toggle_recurring_project_active_state(
     recurring_project_service = RecurringProjectService(db)
     try:
         # Get the current recurring project to determine its active state
-        project = recurring_project_service.get_recurring_project_with_details(project_id)
+        project = recurring_project_service.get_recurring_project_with_details(
+            project_id
+        )
 
         # Toggle the is_active state
-        update_data = {"is_active": not project['is_active']}
+        update_data = {"is_active": not project["is_active"]}
 
         # Update the recurring project
         return recurring_project_service.update_recurring_project(

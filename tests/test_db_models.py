@@ -10,11 +10,13 @@ TEST_DATABASE_URL = "sqlite:///./test.db"
 engine = create_engine(TEST_DATABASE_URL)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+
 @pytest.fixture()
 def test_db():
     Base.metadata.create_all(bind=engine)
     yield
     Base.metadata.drop_all(bind=engine)
+
 
 def test_import_project_template(test_db):
     # This test simply imports ProjectTemplate and creates/drops tables

@@ -91,13 +91,13 @@ from app.db.models.storage import (
 from app.db.models.tool import Tool, ToolMaintenance, ToolCheckout
 
 # Import Design & Project Models
-from app.db.models.pattern import Pattern # Only Pattern is in pattern.py
+from app.db.models.pattern import Pattern  # Only Pattern is in pattern.py
 from app.db.models.component import Component, ComponentMaterial
 from app.db.models.project import (
     Project,
     ProjectComponent,
-    ProjectTemplate,          # Correctly imported from project.py
-    ProjectTemplateComponent, # Correctly imported from project.py
+    ProjectTemplate,  # Correctly imported from project.py
+    ProjectTemplateComponent,  # Correctly imported from project.py
 )
 from app.db.models.timeline_task import TimelineTask
 from app.db.models.recurring_project import (
@@ -131,20 +131,17 @@ from app.db.models.file_metadata import FileMetadata
 __all__ = [
     # Base
     "Base",
-
     # Core Models
     "User",
     "Role",
     "Permission",
     "PasswordResetToken",
     "Annotation",
-
     # Business Entity Models
     "Customer",
     "Supplier",
     "SupplierHistory",
     "SupplierRating",
-
     # Inventory & Material Models
     "Material",
     "LeatherMaterial",
@@ -160,20 +157,18 @@ __all__ = [
     "Tool",
     "ToolMaintenance",
     "ToolCheckout",
-
     # Design & Project Models
     "Pattern",
     "Component",
     "ComponentMaterial",
     "Project",
     "ProjectComponent",
-    "ProjectTemplate",          # Correctly exported
-    "ProjectTemplateComponent", # Correctly exported
+    "ProjectTemplate",  # Correctly exported
+    "ProjectTemplateComponent",  # Correctly exported
     "TimelineTask",
     "RecurrencePattern",
     "RecurringProject",
     "GeneratedProject",
-
     # Sales & Purchase Models
     "Sale",
     "SaleItem",
@@ -181,21 +176,18 @@ __all__ = [
     "PurchaseItem",
     "Shipment",
     "Refund",
-
     # Operational Models
     "PickingList",
     "PickingListItem",
     "PlatformIntegration",
     "SyncEvent",
     "CustomerCommunication",
-
     # Documentation & Utility Models
     "DocumentationCategory",
     "DocumentationResource",
     "ApplicationContext",
     "ContextualHelpMapping",
     "FileMetadata",
-
     # Enums (Exporting all imported enums)
     "SaleStatus",
     "PaymentStatus",

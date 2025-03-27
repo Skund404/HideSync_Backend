@@ -62,6 +62,7 @@ class Annotation(Base, AuditMixin, TimestampMixin):
         """String representation of the annotation."""
         return f"Annotation(id={self.id}, entity_type={self.entity_type}, entity_id={self.entity_id})"
 
+
 # Make sure User model has the corresponding relationship if it doesn't
 # In your User model (e.g., app/db/models/user.py):
 # annotations = relationship("Annotation", back_populates="user", cascade="all, delete-orphan")

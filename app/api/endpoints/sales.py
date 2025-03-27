@@ -355,13 +355,17 @@ def remove_sale_item(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.post("/{sale_id}/refund", response_model=RefundResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{sale_id}/refund",
+    response_model=RefundResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 def process_sale_refund(
-        *,
-        db: Session = Depends(get_db),
-        sale_id: int = Path(..., ge=1, description="The ID of the sale"),
-        refund_in: RefundCreate,
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    db: Session = Depends(get_db),
+    sale_id: int = Path(..., ge=1, description="The ID of the sale"),
+    refund_in: RefundCreate,
+    current_user: Any = Depends(get_current_active_user),
 ) -> RefundResponse:
     """
     Process a refund for a sale.
@@ -409,10 +413,10 @@ def process_sale_refund(
 
 @router.get("/{sale_id}/refunds", response_model=List[RefundResponse])
 def get_sale_refunds(
-        *,
-        db: Session = Depends(get_db),
-        sale_id: int = Path(..., ge=1, description="The ID of the sale"),
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    db: Session = Depends(get_db),
+    sale_id: int = Path(..., ge=1, description="The ID of the sale"),
+    current_user: Any = Depends(get_current_active_user),
 ) -> List[RefundResponse]:
     """
     Get refund history for a sale.
@@ -448,13 +452,17 @@ def get_sale_refunds(
     return refund_service.get_refunds_by_sale(sale_id)
 
 
-@router.post("/{sale_id}/ship", response_model=ShipmentResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{sale_id}/ship",
+    response_model=ShipmentResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 def create_sale_shipment(
-        *,
-        db: Session = Depends(get_db),
-        sale_id: int = Path(..., ge=1, description="The ID of the sale"),
-        shipment_in: ShipmentCreate,
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    db: Session = Depends(get_db),
+    sale_id: int = Path(..., ge=1, description="The ID of the sale"),
+    shipment_in: ShipmentCreate,
+    current_user: Any = Depends(get_current_active_user),
 ) -> ShipmentResponse:
     """
     Create a shipment for a sale.
@@ -502,10 +510,10 @@ def create_sale_shipment(
 
 @router.get("/{sale_id}/shipments", response_model=ShipmentResponse)
 def get_sale_shipment(
-        *,
-        db: Session = Depends(get_db),
-        sale_id: int = Path(..., ge=1, description="The ID of the sale"),
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    db: Session = Depends(get_db),
+    sale_id: int = Path(..., ge=1, description="The ID of the sale"),
+    current_user: Any = Depends(get_current_active_user),
 ) -> ShipmentResponse:
     """
     Get shipment history for a sale.
@@ -549,10 +557,10 @@ def get_sale_shipment(
 
 @router.post("/import", response_model=List[Sale], status_code=status.HTTP_201_CREATED)
 def batch_import_sales(
-        *,
-        db: Session = Depends(get_db),
-        sales_data: List[SaleCreate] = Body(...),
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    db: Session = Depends(get_db),
+    sales_data: List[SaleCreate] = Body(...),
+    current_user: Any = Depends(get_current_active_user),
 ) -> List[Sale]:
     """
     Batch import sales data.
@@ -581,16 +589,11 @@ def batch_import_sales(
             except Exception as e:
                 # Log the error and continue with the next sale
                 logger.error(f"Error importing sale: {str(e)}", exc_info=True)
-                failed_sales.append({
-                    "data": sale_data.dict(),
-                    "error": str(e)
-                })
+                failed_sales.append({"data": sale_data.dict(), "error": str(e)})
 
         # If all sales failed, raise an exception
         if len(failed_sales) == len(sales_data):
-            raise BusinessRuleException(
-                f"All {len(sales_data)} sales failed to import"
-            )
+            raise BusinessRuleException(f"All {len(sales_data)} sales failed to import")
 
         # If some sales failed, log the failures
         if failed_sales:

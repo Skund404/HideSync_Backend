@@ -14,20 +14,28 @@ from pydantic import BaseModel, Field, validator
 class AnnotationBase(BaseModel):
     """Base class for annotation schemas with common fields."""
 
-    entity_type: str = Field(..., description="Type of entity this annotation is attached to")
-    entity_id: int = Field(..., ge=1, description="ID of the entity this annotation is attached to")
+    entity_type: str = Field(
+        ..., description="Type of entity this annotation is attached to"
+    )
+    entity_id: int = Field(
+        ..., ge=1, description="ID of the entity this annotation is attached to"
+    )
     content: str = Field(..., description="Annotation content")
-    visibility: str = Field("private", description="Annotation visibility (private, team, public)")
+    visibility: str = Field(
+        "private", description="Annotation visibility (private, team, public)"
+    )
 
 
 class AnnotationCreate(AnnotationBase):
     """Schema for creating a new annotation."""
 
-    tags: Optional[List[str]] = Field(None, description="List of tags for the annotation")
+    tags: Optional[List[str]] = Field(
+        None, description="List of tags for the annotation"
+    )
 
-    @validator('visibility')
+    @validator("visibility")
     def validate_visibility(cls, v):
-        allowed_values = ['private', 'team', 'public']
+        allowed_values = ["private", "team", "public"]
         if v not in allowed_values:
             raise ValueError(f"Visibility must be one of {allowed_values}")
         return v
@@ -40,10 +48,10 @@ class AnnotationUpdate(BaseModel):
     visibility: Optional[str] = Field(None, description="Updated annotation visibility")
     tags: Optional[List[str]] = Field(None, description="Updated list of tags")
 
-    @validator('visibility')
+    @validator("visibility")
     def validate_visibility(cls, v):
         if v is not None:
-            allowed_values = ['private', 'team', 'public']
+            allowed_values = ["private", "team", "public"]
             if v not in allowed_values:
                 raise ValueError(f"Visibility must be one of {allowed_values}")
         return v

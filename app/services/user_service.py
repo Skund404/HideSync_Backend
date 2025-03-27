@@ -5,6 +5,7 @@ User service for HideSync.
 This module provides functionality for user management,
 authentication, and authorization.
 """
+from app.core import security
 
 # app/services/user_service.py
 """
@@ -248,3 +249,24 @@ class UserService(BaseService[User]):
             "token_type": "bearer",
             "expires_in": settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         }
+
+    # Add this to app/services/user_service.py
+    def get_by_id(self, user_id: str):
+        """
+        Get a user by ID.
+
+        Args:
+            user_id: User ID (string)
+
+        Returns:
+            User or None
+        """
+        try:
+            # Convert string ID to integer if needed
+            user_id_int = int(user_id)
+            user = self.db.query(User).filter(User.id == user_id_int).first()
+            return user
+        except (ValueError, TypeError):
+            # If conversion fails, log the error and return None
+            print(f"Invalid user ID format: {user_id}")
+            return None

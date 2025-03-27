@@ -52,12 +52,7 @@ class ProjectTemplateRepository(BaseRepository[ProjectTemplate]):
             .first()
         )
 
-    def list(
-        self,
-        skip: int = 0,
-        limit: int = 100,
-        **filters
-    ) -> List[ProjectTemplate]:
+    def list(self, skip: int = 0, limit: int = 100, **filters) -> List[ProjectTemplate]:
         """
         List project templates with optional filtering and pagination.
 
@@ -75,10 +70,12 @@ class ProjectTemplateRepository(BaseRepository[ProjectTemplate]):
         if filters:
             for key, value in filters.items():
                 if hasattr(self.model, key):
-                    if key == 'name':
+                    if key == "name":
                         # Case-insensitive name search
                         query = query.filter(
-                            func.lower(getattr(self.model, key)).like(f"%{value.lower()}%")
+                            func.lower(getattr(self.model, key)).like(
+                                f"%{value.lower()}%"
+                            )
                         )
                     else:
                         query = query.filter(getattr(self.model, key) == value)
@@ -168,17 +165,16 @@ class ProjectTemplateRepository(BaseRepository[ProjectTemplate]):
         """
         # Import Project here to avoid circular import
         from app.db.models.project import Project
+
         return (
             self.session.query(func.count(Project.id))
             .filter(Project.template_id == template_id)
-            .scalar() or 0
+            .scalar()
+            or 0
         )
 
     def search_templates(
-        self,
-        query: str,
-        skip: int = 0,
-        limit: int = 100
+        self, query: str, skip: int = 0, limit: int = 100
     ) -> List[ProjectTemplate]:
         """
         Search project templates by name, description, or tags.
@@ -196,7 +192,7 @@ class ProjectTemplateRepository(BaseRepository[ProjectTemplate]):
                 func.lower(self.model.name).like(f"%{query.lower()}%"),
                 func.lower(self.model.description).like(f"%{query.lower()}%"),
                 # If tags are stored as a string or JSON array
-                func.lower(self.model.tags.astext).like(f"%{query.lower()}%")
+                func.lower(self.model.tags.astext).like(f"%{query.lower()}%"),
             )
         )
 

@@ -82,7 +82,7 @@ class SuppliesMaterialCreate(SuppliesMaterialBase):
                 "reorder_point": 1,
                 "cost": 15.00,
                 "supplier_id": 3,
-                "storage_location": "Cabinet C-2"
+                "storage_location": "Cabinet C-2",
             }
         }
 
@@ -153,7 +153,7 @@ class SuppliesMaterialUpdate(BaseModel):
                 "quantity": 10,
                 "color": "Black",
                 "reorder_point": 2,
-                "notes": "Higher demand for this color"
+                "notes": "Higher demand for this color",
             }
         }
 

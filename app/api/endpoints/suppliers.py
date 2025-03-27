@@ -14,21 +14,21 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_active_user
 from app.db.session import get_db
 from app.schemas.supplier import (
-    Supplier,
+    SupplierResponse as Supplier,
     SupplierCreate,
     SupplierUpdate,
-    SupplierDetailResponse
+    SupplierDetailResponse,
 )
 from app.schemas.supplier_rating import (
     SupplierRatingCreate,
     SupplierRatingResponse,
-    SupplierRatingSummary
+    SupplierRatingSummary,
 )
 from app.schemas.supplier_history import (
     SupplierHistoryCreate,
     SupplierHistoryResponse,
     SupplierEventCreate,
-    SupplierEventInDB
+    SupplierEventInDB,
 )
 from app.schemas.compatibility import (
     SupplierSearchParams,
@@ -44,19 +44,19 @@ router = APIRouter()
 
 @router.get("/", response_model=List[Supplier])
 def list_suppliers(
-        *,
-        db: Session = Depends(get_db),
-        current_user: Any = Depends(get_current_active_user),
-        skip: int = Query(0, ge=0, description="Number of records to skip"),
-        limit: int = Query(
-            100, ge=1, le=1000, description="Maximum number of records to return"
-        ),
-        status: Optional[str] = Query(None, description="Filter by supplier status"),
-        category: Optional[str] = Query(None, description="Filter by supplier category"),
-        material_category: Optional[str] = Query(
-            None, description="Filter by material category"
-        ),
-        search: Optional[str] = Query(None, description="Search term for name or contact"),
+    *,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_active_user),
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(
+        100, ge=1, le=1000, description="Maximum number of records to return"
+    ),
+    status: Optional[str] = Query(None, description="Filter by supplier status"),
+    category: Optional[str] = Query(None, description="Filter by supplier category"),
+    material_category: Optional[str] = Query(
+        None, description="Filter by material category"
+    ),
+    search: Optional[str] = Query(None, description="Search term for name or contact"),
 ) -> List[Supplier]:
     """
     Retrieve suppliers with optional filtering and pagination.
@@ -89,10 +89,10 @@ def list_suppliers(
 
 @router.post("/", response_model=Supplier, status_code=status.HTTP_201_CREATED)
 def create_supplier(
-        *,
-        db: Session = Depends(get_db),
-        supplier_in: SupplierCreate,
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    db: Session = Depends(get_db),
+    supplier_in: SupplierCreate,
+    current_user: Any = Depends(get_current_active_user),
 ) -> Supplier:
     """
     Create a new supplier.
@@ -117,12 +117,12 @@ def create_supplier(
 
 @router.get("/{supplier_id}", response_model=SupplierDetailResponse)
 def get_supplier(
-        *,
-        db: Session = Depends(get_db),
-        supplier_id: int = Path(
-            ..., ge=1, description="The ID of the supplier to retrieve"
-        ),
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    db: Session = Depends(get_db),
+    supplier_id: int = Path(
+        ..., ge=1, description="The ID of the supplier to retrieve"
+    ),
+    current_user: Any = Depends(get_current_active_user),
 ) -> SupplierDetailResponse:
     """
     Get detailed information about a specific supplier.
@@ -150,11 +150,11 @@ def get_supplier(
 
 @router.put("/{supplier_id}", response_model=Supplier)
 def update_supplier(
-        *,
-        db: Session = Depends(get_db),
-        supplier_id: int = Path(..., ge=1, description="The ID of the supplier to update"),
-        supplier_in: SupplierUpdate,
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    db: Session = Depends(get_db),
+    supplier_id: int = Path(..., ge=1, description="The ID of the supplier to update"),
+    supplier_in: SupplierUpdate,
+    current_user: Any = Depends(get_current_active_user),
 ) -> Supplier:
     """
     Update a supplier.
@@ -187,10 +187,10 @@ def update_supplier(
 
 @router.delete("/{supplier_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_supplier(
-        *,
-        db: Session = Depends(get_db),
-        supplier_id: int = Path(..., ge=1, description="The ID of the supplier to delete"),
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    db: Session = Depends(get_db),
+    supplier_id: int = Path(..., ge=1, description="The ID of the supplier to delete"),
+    current_user: Any = Depends(get_current_active_user),
 ) -> None:
     """
     Delete a supplier.
@@ -217,11 +217,13 @@ def delete_supplier(
 
 @router.get("/{supplier_id}/ratings", response_model=List[SupplierRatingResponse])
 def get_supplier_ratings(
-        *,
-        db: Session = Depends(get_db),
-        supplier_id: int = Path(..., ge=1, description="The ID of the supplier"),
-        current_user: Any = Depends(get_current_active_user),
-        limit: int = Query(50, ge=1, le=100, description="Maximum number of ratings to return"),
+    *,
+    db: Session = Depends(get_db),
+    supplier_id: int = Path(..., ge=1, description="The ID of the supplier"),
+    current_user: Any = Depends(get_current_active_user),
+    limit: int = Query(
+        50, ge=1, le=100, description="Maximum number of ratings to return"
+    ),
 ) -> List[SupplierRatingResponse]:
     """
     Get ratings for a supplier.
@@ -250,10 +252,10 @@ def get_supplier_ratings(
 
 @router.get("/{supplier_id}/rating-summary", response_model=SupplierRatingSummary)
 def get_supplier_rating_summary(
-        *,
-        db: Session = Depends(get_db),
-        supplier_id: int = Path(..., ge=1, description="The ID of the supplier"),
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    db: Session = Depends(get_db),
+    supplier_id: int = Path(..., ge=1, description="The ID of the supplier"),
+    current_user: Any = Depends(get_current_active_user),
 ) -> SupplierRatingSummary:
     """
     Get detailed rating statistics for a supplier.
@@ -280,7 +282,7 @@ def get_supplier_rating_summary(
         return SupplierRatingSummary(
             supplier_id=supplier_id,
             current_rating=supplier.rating or 0,
-            statistics=metrics
+            statistics=metrics,
         )
     except EntityNotFoundException:
         raise HTTPException(
@@ -295,11 +297,11 @@ def get_supplier_rating_summary(
     status_code=status.HTTP_201_CREATED,
 )
 def create_supplier_rating(
-        *,
-        db: Session = Depends(get_db),
-        supplier_id: int = Path(..., ge=1, description="The ID of the supplier"),
-        rating_in: SupplierRatingCreate,
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    db: Session = Depends(get_db),
+    supplier_id: int = Path(..., ge=1, description="The ID of the supplier"),
+    rating_in: SupplierRatingCreate,
+    current_user: Any = Depends(get_current_active_user),
 ) -> SupplierRatingResponse:
     """
     Create a rating for a supplier.
@@ -321,7 +323,7 @@ def create_supplier_rating(
         return supplier_rating_service.record_rating(
             supplier_id=supplier_id,
             rating=rating_in.rating,
-            comments=rating_in.comments
+            comments=rating_in.comments,
         )
     except EntityNotFoundException:
         raise HTTPException(
@@ -334,11 +336,13 @@ def create_supplier_rating(
 
 @router.get("/{supplier_id}/history", response_model=List[SupplierHistoryResponse])
 def get_supplier_history(
-        *,
-        db: Session = Depends(get_db),
-        supplier_id: int = Path(..., ge=1, description="The ID of the supplier"),
-        current_user: Any = Depends(get_current_active_user),
-        limit: int = Query(50, ge=1, le=100, description="Maximum number of history entries to return"),
+    *,
+    db: Session = Depends(get_db),
+    supplier_id: int = Path(..., ge=1, description="The ID of the supplier"),
+    current_user: Any = Depends(get_current_active_user),
+    limit: int = Query(
+        50, ge=1, le=100, description="Maximum number of history entries to return"
+    ),
 ) -> List[SupplierHistoryResponse]:
     """
     Get history entries for a supplier.
@@ -357,7 +361,9 @@ def get_supplier_history(
     """
     supplier_history_service = SupplierHistoryService(db)
     try:
-        return supplier_history_service.get_history_by_supplier(supplier_id, limit=limit)
+        return supplier_history_service.get_history_by_supplier(
+            supplier_id, limit=limit
+        )
     except EntityNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -371,11 +377,11 @@ def get_supplier_history(
     status_code=status.HTTP_201_CREATED,
 )
 def add_supplier_history(
-        *,
-        db: Session = Depends(get_db),
-        supplier_id: int = Path(..., ge=1, description="The ID of the supplier"),
-        history_in: SupplierHistoryCreate,
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    db: Session = Depends(get_db),
+    supplier_id: int = Path(..., ge=1, description="The ID of the supplier"),
+    history_in: SupplierHistoryCreate,
+    current_user: Any = Depends(get_current_active_user),
 ) -> SupplierHistoryResponse:
     """
     Add a history entry for a supplier.
@@ -406,7 +412,7 @@ def add_supplier_history(
             supplier_id=supplier_id,
             previous_status=history_in.previous_status,
             new_status=history_in.new_status,
-            reason=history_in.reason
+            reason=history_in.reason,
         )
     except EntityNotFoundException:
         raise HTTPException(
@@ -417,10 +423,10 @@ def add_supplier_history(
 
 @router.get("/{supplier_id}/status-timeline", response_model=List[dict])
 def get_supplier_status_timeline(
-        *,
-        db: Session = Depends(get_db),
-        supplier_id: int = Path(..., ge=1, description="The ID of the supplier"),
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    db: Session = Depends(get_db),
+    supplier_id: int = Path(..., ge=1, description="The ID of the supplier"),
+    current_user: Any = Depends(get_current_active_user),
 ) -> List[dict]:
     """
     Get status timeline for a supplier.
@@ -448,12 +454,12 @@ def get_supplier_status_timeline(
 
 @router.get("/{supplier_id}/purchases", response_model=PurchaseHistorySummary)
 def get_supplier_purchase_history(
-        *,
-        db: Session = Depends(get_db),
-        supplier_id: int = Path(..., ge=1, description="The ID of the supplier"),
-        start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
-        end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    db: Session = Depends(get_db),
+    supplier_id: int = Path(..., ge=1, description="The ID of the supplier"),
+    start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
+    current_user: Any = Depends(get_current_active_user),
 ) -> PurchaseHistorySummary:
     """
     Get purchase history summary for a supplier.
@@ -483,9 +489,9 @@ def get_supplier_purchase_history(
 
 @router.get("/analytics/status-trends", response_model=Dict[str, Any])
 def get_supplier_status_trends(
-        *,
-        db: Session = Depends(get_db),
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_active_user),
 ) -> Dict[str, Any]:
     """
     Get trends in supplier status changes.
@@ -503,11 +509,13 @@ def get_supplier_status_trends(
 
 @router.get("/analytics/top-rated", response_model=List[dict])
 def get_top_rated_suppliers(
-        *,
-        db: Session = Depends(get_db),
-        min_ratings: int = Query(3, ge=1, description="Minimum number of ratings required"),
-        limit: int = Query(5, ge=1, le=20, description="Maximum number of suppliers to return"),
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    db: Session = Depends(get_db),
+    min_ratings: int = Query(3, ge=1, description="Minimum number of ratings required"),
+    limit: int = Query(
+        5, ge=1, le=20, description="Maximum number of suppliers to return"
+    ),
+    current_user: Any = Depends(get_current_active_user),
 ) -> List[dict]:
     """
     Get top-rated suppliers.
@@ -532,11 +540,13 @@ def get_top_rated_suppliers(
     for supplier_id, average_rating in top_rated:
         supplier = supplier_service.get_by_id(supplier_id)
         if supplier:
-            result.append({
-                "id": supplier.id,
-                "name": supplier.name,
-                "category": supplier.category,
-                "average_rating": average_rating,
-            })
+            result.append(
+                {
+                    "id": supplier.id,
+                    "name": supplier.name,
+                    "category": supplier.category,
+                    "average_rating": average_rating,
+                }
+            )
 
     return result

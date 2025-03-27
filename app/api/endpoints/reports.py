@@ -4,11 +4,7 @@ from sqlalchemy.orm import Session
 from fastapi.responses import StreamingResponse
 
 from app.api import deps
-from app.schemas.report import (
-    ReportRequest,
-    ReportResponse,
-    ReportTemplate
-)
+from app.schemas.report import ReportRequest, ReportResponse, ReportTemplate
 from app.services.report_service import ReportService
 
 router = APIRouter()
@@ -16,9 +12,9 @@ router = APIRouter()
 
 @router.post("/generate", response_model=ReportResponse)
 def generate_report(
-        request: ReportRequest,
-        session: Session = Depends(deps.get_db),
-        current_user: dict = Depends(deps.get_current_user)
+    request: ReportRequest,
+    session: Session = Depends(deps.get_db),
+    current_user: dict = Depends(deps.get_current_user),
 ):
     """
     Generate a custom report based on the specified parameters.
@@ -30,7 +26,7 @@ def generate_report(
             report_type=request.report_type,
             parameters=request.parameters,
             format=request.format,
-            include_metadata=request.include_metadata
+            include_metadata=request.include_metadata,
         )
         return report
     except Exception as e:
@@ -39,8 +35,8 @@ def generate_report(
 
 @router.get("/templates", response_model=List[ReportTemplate])
 def list_report_templates(
-        session: Session = Depends(deps.get_db),
-        current_user: dict = Depends(deps.get_current_user)
+    session: Session = Depends(deps.get_db),
+    current_user: dict = Depends(deps.get_current_user),
 ):
     """
     Get available report templates with their parameters.
@@ -51,9 +47,9 @@ def list_report_templates(
 
 @router.get("/{report_id}/download")
 def download_report(
-        report_id: str,
-        session: Session = Depends(deps.get_db),
-        current_user: dict = Depends(deps.get_current_user)
+    report_id: str,
+    session: Session = Depends(deps.get_db),
+    current_user: dict = Depends(deps.get_current_user),
 ):
     """
     Download a previously generated report file.
@@ -66,7 +62,7 @@ def download_report(
         return StreamingResponse(
             iter([file_data]),
             media_type=content_type,
-            headers={"Content-Disposition": f"attachment; filename={filename}"}
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
         )
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -74,10 +70,10 @@ def download_report(
 
 @router.get("/{report_id}", response_model=ReportResponse)
 def get_report(
-        report_id: str,
-        include_data: bool = True,
-        session: Session = Depends(deps.get_db),
-        current_user: dict = Depends(deps.get_current_user)
+    report_id: str,
+    include_data: bool = True,
+    session: Session = Depends(deps.get_db),
+    current_user: dict = Depends(deps.get_current_user),
 ):
     """
     Get a previously generated report by ID.
@@ -93,9 +89,9 @@ def get_report(
 
 @router.get("/recent", response_model=List[Dict[str, Any]])
 def get_recent_reports(
-        limit: int = 10,
-        session: Session = Depends(deps.get_db),
-        current_user: dict = Depends(deps.get_current_user)
+    limit: int = 10,
+    session: Session = Depends(deps.get_db),
+    current_user: dict = Depends(deps.get_current_user),
 ):
     """
     Get recently generated reports.

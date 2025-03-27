@@ -28,12 +28,12 @@ router = APIRouter()
 
 @router.post("/generate")
 def generate_qrcode(
-        *,
-        db: Session = Depends(get_db),
-        data: Dict[str, Any],
-        size: int = Query(10, ge=1, le=40, description="QR code size (1-40)"),
-        format: str = Query("PNG", description="Output format (PNG, SVG, Base64)"),
-        current_user=Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    data: Dict[str, Any],
+    size: int = Query(10, ge=1, le=40, description="QR code size (1-40)"),
+    format: str = Query("PNG", description="Output format (PNG, SVG, Base64)"),
+    current_user=Depends(get_current_active_user),
 ) -> Response:
     """
     Generate a QR code for arbitrary data.
@@ -70,12 +70,13 @@ def generate_qrcode(
 
         if format.upper() == "SVG":
             import qrcode.image.svg
+
             qr = qrcode.QRCode(
                 version=size,
                 error_correction=qrcode.constants.ERROR_CORRECT_L,
                 box_size=10,
                 border=4,
-                image_factory=qrcode.image.svg.SvgImage
+                image_factory=qrcode.image.svg.SvgImage,
             )
             qr.add_data(json_data)
             qr.make(fit=True)
@@ -95,19 +96,21 @@ def generate_qrcode(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to generate QR code: {str(e)}"
+            detail=f"Failed to generate QR code: {str(e)}",
         )
 
 
 @router.get("/storage-location/{location_id}")
 def get_storage_location_qrcode(
-        *,
-        db: Session = Depends(get_db),
-        location_id: str = Path(..., description="The ID of the storage location"),
-        size: int = Query(10, ge=1, le=40, description="QR code size (1-40)"),
-        format: str = Query("PNG", description="Output format (PNG, SVG, Base64)"),
-        include_metadata: bool = Query(True, description="Include location metadata in QR code"),
-        current_user=Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    location_id: str = Path(..., description="The ID of the storage location"),
+    size: int = Query(10, ge=1, le=40, description="QR code size (1-40)"),
+    format: str = Query("PNG", description="Output format (PNG, SVG, Base64)"),
+    include_metadata: bool = Query(
+        True, description="Include location metadata in QR code"
+    ),
+    current_user=Depends(get_current_active_user),
 ) -> Response:
     """
     Generate a QR code for a storage location.
@@ -136,13 +139,10 @@ def get_storage_location_qrcode(
                 "id": location_id,
                 "name": location.name,
                 "section": location.section,
-                "status": location.status
+                "status": location.status,
             }
         else:
-            qr_data = {
-                "type": "storage_location",
-                "id": location_id
-            }
+            qr_data = {"type": "storage_location", "id": location_id}
 
         # Convert data to JSON string
         json_data = json.dumps(qr_data)
@@ -165,12 +165,13 @@ def get_storage_location_qrcode(
 
         if format.upper() == "SVG":
             import qrcode.image.svg
+
             qr = qrcode.QRCode(
                 version=size,
                 error_correction=qrcode.constants.ERROR_CORRECT_M,
                 box_size=10,
                 border=4,
-                image_factory=qrcode.image.svg.SvgImage
+                image_factory=qrcode.image.svg.SvgImage,
             )
             qr.add_data(json_data)
             qr.make(fit=True)
@@ -190,24 +191,26 @@ def get_storage_location_qrcode(
     except EntityNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Storage location with ID {location_id} not found"
+            detail=f"Storage location with ID {location_id} not found",
         )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to generate QR code: {str(e)}"
+            detail=f"Failed to generate QR code: {str(e)}",
         )
 
 
 @router.get("/purchase/{purchase_id}")
 def get_purchase_qrcode(
-        *,
-        db: Session = Depends(get_db),
-        purchase_id: str = Path(..., description="The ID of the purchase"),
-        size: int = Query(10, ge=1, le=40, description="QR code size (1-40)"),
-        format: str = Query("PNG", description="Output format (PNG, SVG, Base64)"),
-        include_metadata: bool = Query(True, description="Include purchase metadata in QR code"),
-        current_user=Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    purchase_id: str = Path(..., description="The ID of the purchase"),
+    size: int = Query(10, ge=1, le=40, description="QR code size (1-40)"),
+    format: str = Query("PNG", description="Output format (PNG, SVG, Base64)"),
+    include_metadata: bool = Query(
+        True, description="Include purchase metadata in QR code"
+    ),
+    current_user=Depends(get_current_active_user),
 ) -> Response:
     """
     Generate a QR code for a purchase order.
@@ -232,7 +235,7 @@ def get_purchase_qrcode(
         if not purchase:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Purchase with ID {purchase_id} not found"
+                detail=f"Purchase with ID {purchase_id} not found",
             )
 
         # Prepare data for QR code
@@ -241,15 +244,22 @@ def get_purchase_qrcode(
                 "type": "purchase",
                 "id": purchase_id,
                 "supplier_id": purchase.supplier_id,
-                "supplier": purchase.supplier if hasattr(purchase, "supplier") else None,
-                "status": purchase.status.value if hasattr(purchase.status, "value") else purchase.status,
-                "date": purchase.date.isoformat() if hasattr(purchase.date, "isoformat") else purchase.date
+                "supplier": (
+                    purchase.supplier if hasattr(purchase, "supplier") else None
+                ),
+                "status": (
+                    purchase.status.value
+                    if hasattr(purchase.status, "value")
+                    else purchase.status
+                ),
+                "date": (
+                    purchase.date.isoformat()
+                    if hasattr(purchase.date, "isoformat")
+                    else purchase.date
+                ),
             }
         else:
-            qr_data = {
-                "type": "purchase",
-                "id": purchase_id
-            }
+            qr_data = {"type": "purchase", "id": purchase_id}
 
         # Convert data to JSON string
         json_data = json.dumps(qr_data)
@@ -272,12 +282,13 @@ def get_purchase_qrcode(
 
         if format.upper() == "SVG":
             import qrcode.image.svg
+
             qr = qrcode.QRCode(
                 version=size,
                 error_correction=qrcode.constants.ERROR_CORRECT_M,
                 box_size=10,
                 border=4,
-                image_factory=qrcode.image.svg.SvgImage
+                image_factory=qrcode.image.svg.SvgImage,
             )
             qr.add_data(json_data)
             qr.make(fit=True)
@@ -297,20 +308,24 @@ def get_purchase_qrcode(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to generate QR code: {str(e)}"
+            detail=f"Failed to generate QR code: {str(e)}",
         )
 
 
 @router.get("/inventory/{item_id}")
 def get_inventory_qrcode(
-        *,
-        db: Session = Depends(get_db),
-        item_id: int = Path(..., description="The ID of the inventory item"),
-        item_type: str = Query(..., description="Type of inventory item (material, product, etc.)"),
-        size: int = Query(10, ge=1, le=40, description="QR code size (1-40)"),
-        format: str = Query("PNG", description="Output format (PNG, SVG, Base64)"),
-        include_metadata: bool = Query(True, description="Include inventory metadata in QR code"),
-        current_user=Depends(get_current_active_user)
+    *,
+    db: Session = Depends(get_db),
+    item_id: int = Path(..., description="The ID of the inventory item"),
+    item_type: str = Query(
+        ..., description="Type of inventory item (material, product, etc.)"
+    ),
+    size: int = Query(10, ge=1, le=40, description="QR code size (1-40)"),
+    format: str = Query("PNG", description="Output format (PNG, SVG, Base64)"),
+    include_metadata: bool = Query(
+        True, description="Include inventory metadata in QR code"
+    ),
+    current_user=Depends(get_current_active_user),
 ) -> Response:
     """
     Generate a QR code for an inventory item.
@@ -336,11 +351,11 @@ def get_inventory_qrcode(
         if not item:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Inventory item with ID {item_id} and type {item_type} not found"
+                detail=f"Inventory item with ID {item_id} and type {item_type} not found",
             )
 
         # Prepare data for QR code
-        if include_metadata and hasattr(item, 'to_dict'):
+        if include_metadata and hasattr(item, "to_dict"):
             item_dict = item.to_dict()
             # Limit the data to essential fields to keep QR code simple
             qr_data = {
@@ -349,14 +364,10 @@ def get_inventory_qrcode(
                 "item_type": item_type,
                 "name": item_dict.get("name", ""),
                 "sku": item_dict.get("sku", ""),
-                "quantity": item_dict.get("quantity", 0)
+                "quantity": item_dict.get("quantity", 0),
             }
         else:
-            qr_data = {
-                "type": "inventory",
-                "id": item_id,
-                "item_type": item_type
-            }
+            qr_data = {"type": "inventory", "id": item_id, "item_type": item_type}
 
         # Convert data to JSON string
         json_data = json.dumps(qr_data)
@@ -379,12 +390,13 @@ def get_inventory_qrcode(
 
         if format.upper() == "SVG":
             import qrcode.image.svg
+
             qr = qrcode.QRCode(
                 version=size,
                 error_correction=qrcode.constants.ERROR_CORRECT_M,
                 box_size=10,
                 border=4,
-                image_factory=qrcode.image.svg.SvgImage
+                image_factory=qrcode.image.svg.SvgImage,
             )
             qr.add_data(json_data)
             qr.make(fit=True)
@@ -404,10 +416,10 @@ def get_inventory_qrcode(
     except EntityNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Inventory item with ID {item_id} and type {item_type} not found"
+            detail=f"Inventory item with ID {item_id} and type {item_type} not found",
         )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to generate QR code: {str(e)}"
+            detail=f"Failed to generate QR code: {str(e)}",
         )

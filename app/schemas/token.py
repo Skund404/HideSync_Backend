@@ -1,4 +1,3 @@
-# app/schemas/token.py
 """
 Authentication token schemas for the HideSync API.
 
@@ -30,8 +29,9 @@ class TokenPayload(BaseModel):
     Contains user identifiers and other token-specific data.
     """
 
-    sub: Optional[int] = None
-    exp: Optional[int] = None
+    sub: str = Field(..., description="Subject identifier (user ID)")
+    exp: int = Field(..., description="Token expiration timestamp")
+    type: Optional[str] = Field(None, description="Token type (access or refresh)")
 
 
 class TokenRefresh(BaseModel):

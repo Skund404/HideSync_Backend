@@ -11,6 +11,7 @@ from sqlalchemy import Column, String, Integer, Boolean
 from sqlalchemy.orm import relationship
 
 from app.db.models.base import Base, TimestampMixin
+
 # --- Import association tables from the new file ---
 from app.db.models.associations import role_permission, user_role
 

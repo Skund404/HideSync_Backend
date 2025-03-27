@@ -71,7 +71,7 @@ class HardwareMaterialCreate(HardwareMaterialBase):
                 "reorder_point": 10,
                 "cost": 3.50,
                 "supplier_id": 2,
-                "storage_location": "Drawer B-3"
+                "storage_location": "Drawer B-3",
             }
         }
 
@@ -128,7 +128,7 @@ class HardwareMaterialUpdate(BaseModel):
                 "quantity": 25,
                 "finish": "POLISHED",
                 "reorder_point": 5,
-                "notes": "New supplier offers better quality"
+                "notes": "New supplier offers better quality",
             }
         }
 

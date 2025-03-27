@@ -80,7 +80,9 @@ class SupplierHistoryService(BaseService[SupplierHistory]):
         """
         self.session = session
         self.supplier_repository = supplier_repository or SupplierRepository(session)
-        self.repository = supplier_history_repository or SupplierHistoryRepository(session)
+        self.repository = supplier_history_repository or SupplierHistoryRepository(
+            session
+        )
         self.security_context = security_context
         self.event_bus = event_bus
         self.cache_service = cache_service
@@ -111,10 +113,14 @@ class SupplierHistoryService(BaseService[SupplierHistory]):
             # Check if supplier exists
             supplier = self.supplier_repository.get_by_id(supplier_id)
             if not supplier:
-                raise EntityNotFoundException(f"Supplier with ID {supplier_id} not found")
+                raise EntityNotFoundException(
+                    f"Supplier with ID {supplier_id} not found"
+                )
 
             # Get user ID from security context if available
-            user_id = self.security_context.current_user.id if self.security_context else None
+            user_id = (
+                self.security_context.current_user.id if self.security_context else None
+            )
 
             # Create history record
             history_data = {
@@ -146,7 +152,9 @@ class SupplierHistoryService(BaseService[SupplierHistory]):
 
             return history_entry
 
-    def get_history_by_supplier(self, supplier_id: int, limit: int = 50) -> List[SupplierHistory]:
+    def get_history_by_supplier(
+        self, supplier_id: int, limit: int = 50
+    ) -> List[SupplierHistory]:
         """
         Get history entries for a specific supplier.
 
@@ -242,12 +250,16 @@ class SupplierHistoryService(BaseService[SupplierHistory]):
         # Format as timeline entries
         timeline = []
         for entry in history:
-            timeline.append({
-                "date": entry.change_date.isoformat() if entry.change_date else None,
-                "previous_status": entry.previous_status,
-                "new_status": entry.new_status,
-                "reason": entry.reason,
-                "changed_by": entry.changed_by,
-            })
+            timeline.append(
+                {
+                    "date": (
+                        entry.change_date.isoformat() if entry.change_date else None
+                    ),
+                    "previous_status": entry.previous_status,
+                    "new_status": entry.new_status,
+                    "reason": entry.reason,
+                    "changed_by": entry.changed_by,
+                }
+            )
 
         return timeline

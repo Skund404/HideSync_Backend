@@ -41,10 +41,12 @@ def test_update_sync_settings_success(client, mock_db, mock_integration_service)
     )
 
     # Mock the service method
-    with patch("app.api.deps.get_db", return_value=mock_db), \
-            patch("app.api.deps.get_current_active_user", return_value={"id": mock_user_id}), \
-            patch("app.services.platform_integration_service.PlatformIntegrationService",
-                  return_value=mock_integration_service):
+    with patch("app.api.deps.get_db", return_value=mock_db), patch(
+        "app.api.deps.get_current_active_user", return_value={"id": mock_user_id}
+    ), patch(
+        "app.services.platform_integration_service.PlatformIntegrationService",
+        return_value=mock_integration_service,
+    ):
         mock_integration_service.update_sync_settings.return_value = mock_integration
 
         # Test data
@@ -59,8 +61,7 @@ def test_update_sync_settings_success(client, mock_db, mock_integration_service)
 
         # Make request
         response = client.put(
-            f"/api/v1/integrations/{integration_id}/settings",
-            json=settings_data
+            f"/api/v1/integrations/{integration_id}/settings", json=settings_data
         )
 
         # Assertions
@@ -76,13 +77,16 @@ def test_update_sync_settings_not_found(client, mock_db, mock_integration_servic
     mock_user_id = "user123"
 
     # Mock the service method to raise exception
-    with patch("app.api.deps.get_db", return_value=mock_db), \
-            patch("app.api.deps.get_current_active_user", return_value={"id": mock_user_id}), \
-            patch("app.services.platform_integration_service.PlatformIntegrationService",
-                  return_value=mock_integration_service):
+    with patch("app.api.deps.get_db", return_value=mock_db), patch(
+        "app.api.deps.get_current_active_user", return_value={"id": mock_user_id}
+    ), patch(
+        "app.services.platform_integration_service.PlatformIntegrationService",
+        return_value=mock_integration_service,
+    ):
         from app.core.exceptions import EntityNotFoundException
-        mock_integration_service.update_sync_settings.side_effect = EntityNotFoundException(
-            f"Integration with ID {integration_id} not found"
+
+        mock_integration_service.update_sync_settings.side_effect = (
+            EntityNotFoundException(f"Integration with ID {integration_id} not found")
         )
 
         # Test data
@@ -93,8 +97,7 @@ def test_update_sync_settings_not_found(client, mock_db, mock_integration_servic
 
         # Make request
         response = client.put(
-            f"/api/v1/integrations/{integration_id}/settings",
-            json=settings_data
+            f"/api/v1/integrations/{integration_id}/settings", json=settings_data
         )
 
         # Assertions
@@ -118,14 +121,16 @@ def test_create_sync_event_success(client, mock_db, mock_integration_service):
         status="success",
         items_processed=10,
         message="Test event",
-        created_at=created_at
+        created_at=created_at,
     )
 
     # Mock the service method
-    with patch("app.api.deps.get_db", return_value=mock_db), \
-            patch("app.api.deps.get_current_active_user", return_value={"id": mock_user_id}), \
-            patch("app.services.platform_integration_service.PlatformIntegrationService",
-                  return_value=mock_integration_service):
+    with patch("app.api.deps.get_db", return_value=mock_db), patch(
+        "app.api.deps.get_current_active_user", return_value={"id": mock_user_id}
+    ), patch(
+        "app.services.platform_integration_service.PlatformIntegrationService",
+        return_value=mock_integration_service,
+    ):
         mock_integration_service.create_sync_event.return_value = mock_event
 
         # Test data
@@ -133,13 +138,12 @@ def test_create_sync_event_success(client, mock_db, mock_integration_service):
             "event_type": "inventory_update",
             "status": "success",
             "items_processed": 10,
-            "message": "Test event"
+            "message": "Test event",
         }
 
         # Make request
         response = client.post(
-            f"/api/v1/integrations/{integration_id}/events",
-            json=event_data
+            f"/api/v1/integrations/{integration_id}/events", json=event_data
         )
 
         # Assertions
@@ -157,11 +161,14 @@ def test_create_sync_event_invalid_type(client, mock_db, mock_integration_servic
     mock_user_id = "user123"
 
     # Mock the service method
-    with patch("app.api.deps.get_db", return_value=mock_db), \
-            patch("app.api.deps.get_current_active_user", return_value={"id": mock_user_id}), \
-            patch("app.services.platform_integration_service.PlatformIntegrationService",
-                  return_value=mock_integration_service):
+    with patch("app.api.deps.get_db", return_value=mock_db), patch(
+        "app.api.deps.get_current_active_user", return_value={"id": mock_user_id}
+    ), patch(
+        "app.services.platform_integration_service.PlatformIntegrationService",
+        return_value=mock_integration_service,
+    ):
         from app.core.exceptions import BusinessRuleException
+
         mock_integration_service.create_sync_event.side_effect = BusinessRuleException(
             "Invalid event type"
         )
@@ -171,13 +178,12 @@ def test_create_sync_event_invalid_type(client, mock_db, mock_integration_servic
             "event_type": "invalid_type",
             "status": "success",
             "items_processed": 10,
-            "message": "Test event"
+            "message": "Test event",
         }
 
         # Make request
         response = client.post(
-            f"/api/v1/integrations/{integration_id}/events",
-            json=event_data
+            f"/api/v1/integrations/{integration_id}/events", json=event_data
         )
 
         # Assertions
@@ -186,7 +192,9 @@ def test_create_sync_event_invalid_type(client, mock_db, mock_integration_servic
 
 
 # Tests for GET /{integration_id}/with-details
-def test_get_integration_with_details_success(client, mock_db, mock_integration_service):
+def test_get_integration_with_details_success(
+    client, mock_db, mock_integration_service
+):
     """Test successful retrieval of integration with details."""
     # Mock setup
     integration_id = "12345"
@@ -199,10 +207,7 @@ def test_get_integration_with_details_success(client, mock_db, mock_integration_
         "shop_name": "testshop",
         "active": True,
         "last_sync_at": datetime.now(timezone.utc).isoformat(),
-        "settings": {
-            "auto_sync_enabled": True,
-            "sync_interval_minutes": 30
-        },
+        "settings": {"auto_sync_enabled": True, "sync_interval_minutes": 30},
         "events": [
             {
                 "id": "event1",
@@ -211,7 +216,7 @@ def test_get_integration_with_details_success(client, mock_db, mock_integration_
                 "status": "success",
                 "items_processed": 150,
                 "message": "Successfully updated inventory",
-                "created_at": datetime.now(timezone.utc).isoformat()
+                "created_at": datetime.now(timezone.utc).isoformat(),
             },
             {
                 "id": "event2",
@@ -220,8 +225,8 @@ def test_get_integration_with_details_success(client, mock_db, mock_integration_
                 "status": "success",
                 "items_processed": 25,
                 "message": "Successfully imported orders",
-                "created_at": datetime.now(timezone.utc).isoformat()
-            }
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            },
         ],
         "statistics": {
             "total_events": 245,
@@ -234,23 +239,24 @@ def test_get_integration_with_details_success(client, mock_db, mock_integration_
                 "status": "success",
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "items_processed": 150,
-                "message": "Successfully updated inventory"
-            }
+                "message": "Successfully updated inventory",
+            },
         },
         "connection_status": "Connected",
         "connection_health": "Good",
-        "platform_details": {
-            "shopify_plan": "Advanced",
-            "api_version": "2023-04"
-        }
+        "platform_details": {"shopify_plan": "Advanced", "api_version": "2023-04"},
     }
 
     # Mock the service method
-    with patch("app.api.deps.get_db", return_value=mock_db), \
-            patch("app.api.deps.get_current_active_user", return_value={"id": mock_user_id}), \
-            patch("app.services.platform_integration_service.PlatformIntegrationService",
-                  return_value=mock_integration_service):
-        mock_integration_service.get_integration_with_details.return_value = mock_details
+    with patch("app.api.deps.get_db", return_value=mock_db), patch(
+        "app.api.deps.get_current_active_user", return_value={"id": mock_user_id}
+    ), patch(
+        "app.services.platform_integration_service.PlatformIntegrationService",
+        return_value=mock_integration_service,
+    ):
+        mock_integration_service.get_integration_with_details.return_value = (
+            mock_details
+        )
 
         # Make request
         response = client.get(f"/api/v1/integrations/{integration_id}/with-details")
@@ -263,23 +269,30 @@ def test_get_integration_with_details_success(client, mock_db, mock_integration_
         assert len(result["events"]) == 2
         assert "statistics" in result
         assert "connection_health" in result
-        mock_integration_service.get_integration_with_details.assert_called_once_with(integration_id)
+        mock_integration_service.get_integration_with_details.assert_called_once_with(
+            integration_id
+        )
 
 
-def test_get_integration_with_details_not_found(client, mock_db, mock_integration_service):
+def test_get_integration_with_details_not_found(
+    client, mock_db, mock_integration_service
+):
     """Test get integration with details when integration not found."""
     # Mock setup
     integration_id = "99999"
     mock_user_id = "user123"
 
     # Mock the service method to raise exception
-    with patch("app.api.deps.get_db", return_value=mock_db), \
-            patch("app.api.deps.get_current_active_user", return_value={"id": mock_user_id}), \
-            patch("app.services.platform_integration_service.PlatformIntegrationService",
-                  return_value=mock_integration_service):
+    with patch("app.api.deps.get_db", return_value=mock_db), patch(
+        "app.api.deps.get_current_active_user", return_value={"id": mock_user_id}
+    ), patch(
+        "app.services.platform_integration_service.PlatformIntegrationService",
+        return_value=mock_integration_service,
+    ):
         from app.core.exceptions import EntityNotFoundException
-        mock_integration_service.get_integration_with_details.side_effect = EntityNotFoundException(
-            f"Integration with ID {integration_id} not found"
+
+        mock_integration_service.get_integration_with_details.side_effect = (
+            EntityNotFoundException(f"Integration with ID {integration_id} not found")
         )
 
         # Make request

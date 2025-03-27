@@ -17,7 +17,7 @@ from app.repositories.project_template_repository import ProjectTemplateReposito
 from app.core.exceptions import (
     EntityNotFoundException,
     ValidationException,
-    BusinessRuleException
+    BusinessRuleException,
 )
 from app.core.events import DomainEvent
 from app.core.validation import validate_input, validate_entity
@@ -28,10 +28,7 @@ class ProjectTemplateCreated(DomainEvent):
     """Event emitted when a project template is created."""
 
     def __init__(
-        self,
-        template_id: int,
-        project_type: str,
-        created_by: Optional[int] = None
+        self, template_id: int, project_type: str, created_by: Optional[int] = None
     ):
         """
         Initialize project template created event.
@@ -54,7 +51,7 @@ class ProjectTemplateUpdated(DomainEvent):
         self,
         template_id: int,
         changes: Dict[str, Any],
-        updated_by: Optional[int] = None
+        updated_by: Optional[int] = None,
     ):
         """
         Initialize project template updated event.
@@ -73,11 +70,7 @@ class ProjectTemplateUpdated(DomainEvent):
 class ProjectTemplateDeleted(DomainEvent):
     """Event emitted when a project template is deleted."""
 
-    def __init__(
-        self,
-        template_id: int,
-        deleted_by: Optional[int] = None
-    ):
+    def __init__(self, template_id: int, deleted_by: Optional[int] = None):
         """
         Initialize project template deleted event.
 
@@ -111,7 +104,7 @@ class ProjectTemplateService(BaseService[ProjectTemplate]):
         security_context=None,
         event_bus=None,
         cache_service=None,
-        component_service=None
+        component_service=None,
     ):
         """
         Initialize ProjectTemplateService with dependencies.
@@ -133,9 +126,7 @@ class ProjectTemplateService(BaseService[ProjectTemplate]):
 
     @validate_input(validate_project_template)
     def create_project_template(
-        self,
-        data: Dict[str, Any],
-        user_id: Optional[int] = None
+        self, data: Dict[str, Any], user_id: Optional[int] = None
     ) -> ProjectTemplate:
         """
         Create a new project template.
@@ -175,7 +166,7 @@ class ProjectTemplateService(BaseService[ProjectTemplate]):
                     ProjectTemplateCreated(
                         template_id=template.id,
                         project_type=template.project_type,
-                        created_by=user_id
+                        created_by=user_id,
                     )
                 )
 
@@ -201,8 +192,7 @@ class ProjectTemplateService(BaseService[ProjectTemplate]):
         template = self.repository.get_by_id(template_id)
         if not template:
             raise EntityNotFoundException(
-                entity_name="ProjectTemplate",
-                entity_id=template_id
+                entity_name="ProjectTemplate", entity_id=template_id
             )
 
         # Fetch components if needed
@@ -210,10 +200,7 @@ class ProjectTemplateService(BaseService[ProjectTemplate]):
         return template
 
     def list_project_templates(
-        self,
-        skip: int = 0,
-        limit: int = 100,
-        filters: Optional[Dict[str, Any]] = None
+        self, skip: int = 0, limit: int = 100, filters: Optional[Dict[str, Any]] = None
     ) -> List[ProjectTemplate]:
         """
         List project templates with optional filtering and pagination.
@@ -230,10 +217,7 @@ class ProjectTemplateService(BaseService[ProjectTemplate]):
         return self.repository.list(skip=skip, limit=limit, **filters)
 
     def update_project_template(
-        self,
-        template_id: int,
-        data: Dict[str, Any],
-        user_id: Optional[int] = None
+        self, template_id: int, data: Dict[str, Any], user_id: Optional[int] = None
     ) -> ProjectTemplate:
         """
         Update a project template.
@@ -255,8 +239,7 @@ class ProjectTemplateService(BaseService[ProjectTemplate]):
             original_template = self.repository.get_by_id(template_id)
             if not original_template:
                 raise EntityNotFoundException(
-                    entity_name="ProjectTemplate",
-                    entity_id=template_id
+                    entity_name="ProjectTemplate", entity_id=template_id
                 )
 
             # Separate components if provided
@@ -286,9 +269,7 @@ class ProjectTemplateService(BaseService[ProjectTemplate]):
 
                 self.event_bus.publish(
                     ProjectTemplateUpdated(
-                        template_id=template_id,
-                        changes=changes,
-                        updated_by=user_id
+                        template_id=template_id, changes=changes, updated_by=user_id
                     )
                 )
 
@@ -300,9 +281,7 @@ class ProjectTemplateService(BaseService[ProjectTemplate]):
             return updated_template
 
     def delete_project_template(
-        self,
-        template_id: int,
-        user_id: Optional[int] = None
+        self, template_id: int, user_id: Optional[int] = None
     ) -> bool:
         """
         Delete a project template.
@@ -322,8 +301,7 @@ class ProjectTemplateService(BaseService[ProjectTemplate]):
             template = self.repository.get_by_id(template_id)
             if not template:
                 raise EntityNotFoundException(
-                    entity_name="ProjectTemplate",
-                    entity_id=template_id
+                    entity_name="ProjectTemplate", entity_id=template_id
                 )
 
             # Check if template is used in any projects
@@ -339,10 +317,7 @@ class ProjectTemplateService(BaseService[ProjectTemplate]):
             # Publish event if event bus exists
             if result and self.event_bus:
                 self.event_bus.publish(
-                    ProjectTemplateDeleted(
-                        template_id=template_id,
-                        deleted_by=user_id
-                    )
+                    ProjectTemplateDeleted(template_id=template_id, deleted_by=user_id)
                 )
 
             # Invalidate cache if cache service exists
@@ -352,9 +327,7 @@ class ProjectTemplateService(BaseService[ProjectTemplate]):
             return result
 
     def add_template_component(
-        self,
-        template_id: int,
-        component_data: Dict[str, Any]
+        self, template_id: int, component_data: Dict[str, Any]
     ) -> ProjectTemplateComponent:
         """
         Add a component to a project template.
@@ -375,8 +348,7 @@ class ProjectTemplateService(BaseService[ProjectTemplate]):
             template = self.repository.get_by_id(template_id)
             if not template:
                 raise EntityNotFoundException(
-                    entity_name="ProjectTemplate",
-                    entity_id=template_id
+                    entity_name="ProjectTemplate", entity_id=template_id
                 )
 
             # Validate component data
@@ -393,7 +365,7 @@ class ProjectTemplateService(BaseService[ProjectTemplate]):
         self,
         template_id: int,
         customizations: Optional[Dict[str, Any]] = None,
-        user_id: Optional[int] = None
+        user_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         Generate a new project from a template.
@@ -420,27 +392,27 @@ class ProjectTemplateService(BaseService[ProjectTemplate]):
                 "type": template.project_type,
                 "template_id": template_id,
                 # Apply any custom overrides
-                **{k: v for k, v in (customizations or {}).items()
-                   if k not in ["components", "template_id"]}
+                **{
+                    k: v
+                    for k, v in (customizations or {}).items()
+                    if k not in ["components", "template_id"]
+                },
             }
 
             # Get project service to create the project
             from app.services.project_service import ProjectService
+
             project_service = ProjectService(self.session)
 
             # Prepare components from template
             components = [
-                {
-                    "component_id": comp.component_id,
-                    "quantity": comp.quantity
-                } for comp in template.components
+                {"component_id": comp.component_id, "quantity": comp.quantity}
+                for comp in template.components
             ]
 
             # Create project with components
             return project_service.create_project_with_components(
-                project_data,
-                components,
-                user_id
+                project_data, components, user_id
             )
 
     def _create_created_event(self, entity: ProjectTemplate) -> DomainEvent:
@@ -454,20 +426,14 @@ class ProjectTemplateService(BaseService[ProjectTemplate]):
             ProjectTemplateCreated event
         """
         user_id = (
-            self.security_context.current_user.id
-            if self.security_context
-            else None
+            self.security_context.current_user.id if self.security_context else None
         )
         return ProjectTemplateCreated(
-            template_id=entity.id,
-            project_type=entity.project_type,
-            created_by=user_id
+            template_id=entity.id, project_type=entity.project_type, created_by=user_id
         )
 
     def _create_updated_event(
-        self,
-        original: ProjectTemplate,
-        updated: ProjectTemplate
+        self, original: ProjectTemplate, updated: ProjectTemplate
     ) -> DomainEvent:
         """
         Create event for project template update.
@@ -488,14 +454,10 @@ class ProjectTemplateService(BaseService[ProjectTemplate]):
                 changes[key] = {"old": old_value, "new": new_value}
 
         user_id = (
-            self.security_context.current_user.id
-            if self.security_context
-            else None
+            self.security_context.current_user.id if self.security_context else None
         )
         return ProjectTemplateUpdated(
-            template_id=updated.id,
-            changes=changes,
-            updated_by=user_id
+            template_id=updated.id, changes=changes, updated_by=user_id
         )
 
     def _create_deleted_event(self, entity: ProjectTemplate) -> DomainEvent:
@@ -509,11 +471,6 @@ class ProjectTemplateService(BaseService[ProjectTemplate]):
             ProjectTemplateDeleted event
         """
         user_id = (
-            self.security_context.current_user.id
-            if self.security_context
-            else None
+            self.security_context.current_user.id if self.security_context else None
         )
-        return ProjectTemplateDeleted(
-            template_id=entity.id,
-            deleted_by=user_id
-        )
+        return ProjectTemplateDeleted(template_id=entity.id, deleted_by=user_id)

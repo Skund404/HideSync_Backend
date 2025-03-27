@@ -53,7 +53,7 @@ from app.db.models.enums import (
     MaterialQualityGrade,
     MaterialType,
     MeasurementUnit,
-    SkillLevel # Added SkillLevel if needed by other imports, check usage
+    SkillLevel,  # Added SkillLevel if needed by other imports, check usage
 )
 
 # --- REMOVED Association Table Definition ---
@@ -89,7 +89,12 @@ class Material(AbstractBase, ValidationMixin, CostingMixin, TimestampMixin):
     """
 
     __tablename__ = "materials"
-    __validated_fields__: ClassVar[Set[str]] = {"name", "quantity", "reorder_point", "price"} # Added price
+    __validated_fields__: ClassVar[Set[str]] = {
+        "name",
+        "quantity",
+        "reorder_point",
+        "price",
+    }  # Added price
 
     # --- Primary Key ---
     id = Column(Integer, primary_key=True)
@@ -106,7 +111,7 @@ class Material(AbstractBase, ValidationMixin, CostingMixin, TimestampMixin):
 
     # Supplier information
     supplier_id = Column(Integer, ForeignKey("suppliers.id"), nullable=True)
-    supplier = Column(String(255)) # Denormalized name
+    supplier = Column(String(255))  # Denormalized name
     sku = Column(String(100), index=True)
     description = Column(Text)
 
@@ -116,7 +121,7 @@ class Material(AbstractBase, ValidationMixin, CostingMixin, TimestampMixin):
 
     # --- Pricing ---
     # cost_price is inherited from CostingMixin
-    price = Column(Float, default=0.0) # Selling price per unit
+    price = Column(Float, default=0.0)  # Selling price per unit
 
     # --- Other ---
     last_purchased = Column(String(50))  # Consider using DateTime type
@@ -127,7 +132,7 @@ class Material(AbstractBase, ValidationMixin, CostingMixin, TimestampMixin):
     # Inheritance configuration
     __mapper_args__ = {
         "polymorphic_on": material_type,
-        "polymorphic_identity": "material", # Base identity
+        "polymorphic_identity": "material",  # Base identity
     }
 
     # --- RELATIONSHIPS ---
@@ -149,28 +154,32 @@ class Material(AbstractBase, ValidationMixin, CostingMixin, TimestampMixin):
     )
     # --- End Relationships ---
 
-
     @validates("quantity")
     def validate_quantity(self, key: str, quantity: float) -> float:
         """Validate quantity and update status based on reorder point."""
         if quantity < 0:
             raise ValueError("Quantity cannot be negative")
         reorder_point = self.reorder_point if self.reorder_point is not None else 0.0
-        if quantity <= 0: self.status = InventoryStatus.OUT_OF_STOCK
-        elif quantity <= reorder_point: self.status = InventoryStatus.LOW_STOCK
-        else: self.status = InventoryStatus.IN_STOCK
+        if quantity <= 0:
+            self.status = InventoryStatus.OUT_OF_STOCK
+        elif quantity <= reorder_point:
+            self.status = InventoryStatus.LOW_STOCK
+        else:
+            self.status = InventoryStatus.IN_STOCK
         return quantity
 
     @validates("reorder_point")
     def validate_reorder_point(self, key: str, value: float) -> float:
         """Validate reorder point (cannot be negative)."""
-        if value < 0: raise ValueError("Reorder point cannot be negative")
+        if value < 0:
+            raise ValueError("Reorder point cannot be negative")
         return value
 
     @validates("price")
     def validate_price(self, key: str, value: float) -> float:
         """Validate selling price (cannot be negative)."""
-        if value < 0: raise ValueError("Selling price cannot be negative")
+        if value < 0:
+            raise ValueError("Selling price cannot be negative")
         return value
 
     @hybrid_property
@@ -178,7 +187,8 @@ class Material(AbstractBase, ValidationMixin, CostingMixin, TimestampMixin):
         """Calculate the total cost value of this material in inventory."""
         # Ensure cost_price exists and is not None before calculation
         cost_price = getattr(self, "cost_price", None)
-        if cost_price is None: return None
+        if cost_price is None:
+            return None
         # Ensure quantity is not None
         quantity = self.quantity if self.quantity is not None else 0.0
         return quantity * cost_price
@@ -186,27 +196,37 @@ class Material(AbstractBase, ValidationMixin, CostingMixin, TimestampMixin):
     @hybrid_property
     def total_selling_value(self) -> Optional[float]:
         """Calculate the total selling value of this material in inventory."""
-        if self.price is None: return None
+        if self.price is None:
+            return None
         # Ensure quantity is not None
         quantity = self.quantity if self.quantity is not None else 0.0
         return quantity * self.price
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert Material instance to a dictionary."""
-        result = super().to_dict() # Assumes base class has a to_dict
-        if self.status: result["status"] = self.status.name
-        if self.unit: result["unit"] = self.unit.name
-        if self.quality: result["quality"] = self.quality.name
+        result = super().to_dict()  # Assumes base class has a to_dict
+        if self.status:
+            result["status"] = self.status.name
+        if self.unit:
+            result["unit"] = self.unit.name
+        if self.quality:
+            result["quality"] = self.quality.name
         result["value"] = self.value
         result["total_selling_value"] = self.total_selling_value
         inv_record = self.inventory
         if inv_record:
-             result["inventory_quantity"] = inv_record.quantity
-             result["inventory_status"] = inv_record.status.name if inv_record.status else None
-             # Prefer inventory's storage location if available
-             result["storage_location"] = inv_record.storage_location or self.storage_location
+            result["inventory_quantity"] = inv_record.quantity
+            result["inventory_status"] = (
+                inv_record.status.name if inv_record.status else None
+            )
+            # Prefer inventory's storage location if available
+            result["storage_location"] = (
+                inv_record.storage_location or self.storage_location
+            )
         else:
-             result["storage_location"] = self.storage_location # Fallback to material's field
+            result["storage_location"] = (
+                self.storage_location
+            )  # Fallback to material's field
         return result
 
     def __repr__(self) -> str:
@@ -216,8 +236,10 @@ class Material(AbstractBase, ValidationMixin, CostingMixin, TimestampMixin):
 
 # --- Subclasses ---
 
+
 class LeatherMaterial(Material):
     """Specialized Material model for leather inventory."""
+
     __mapper_args__ = {"polymorphic_identity": "leather"}
     leather_type = Column(Enum(LeatherType))
     tannage = Column(String(50))
@@ -228,22 +250,28 @@ class LeatherMaterial(Material):
     color = Column(String(50))
     finish = Column(Enum(LeatherFinish))
     grade = Column(String(20))
+
     def __repr__(self) -> str:
         return f"<LeatherMaterial(id={getattr(self, 'id', None)}, name='{self.name}', type='{self.leather_type.name if self.leather_type else None}', thickness={self.thickness})>"
 
+
 class HardwareMaterial(Material):
     """Specialized Material model for hardware inventory."""
+
     __mapper_args__ = {"polymorphic_identity": "hardware"}
     hardware_type = Column(Enum(HardwareType))
     hardware_material = Column(Enum(HardwareMaterialEnum))
     hardware_finish = Column(Enum(HardwareFinish))
     size = Column(String(50))
     hardware_color = Column(String(50))
+
     def __repr__(self) -> str:
         return f"<HardwareMaterial(id={getattr(self, 'id', None)}, name='{self.name}', type='{self.hardware_type.name if self.hardware_type else None}')>"
 
+
 class SuppliesMaterial(Material):
     """Specialized Material model for supplies inventory."""
+
     __mapper_args__ = {"polymorphic_identity": "supplies"}
     supplies_material_type = Column(String(50))
     supplies_color = Column(String(50))
@@ -254,5 +282,6 @@ class SuppliesMaterial(Material):
     drying_time = Column(String(50))
     application_method = Column(String(100))
     supplies_finish = Column(String(50))
+
     def __repr__(self) -> str:
         return f"<SuppliesMaterial(id={getattr(self, 'id', None)}, name='{self.name}', type='{self.supplies_material_type}')>"

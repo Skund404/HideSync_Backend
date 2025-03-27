@@ -81,8 +81,12 @@ class ShipmentInDB(ShipmentBase):
     id: int = Field(..., description="Unique identifier for the shipment")
     status: str = Field(..., description="Current shipment status")
     ship_date: Optional[datetime] = Field(None, description="Date when shipped")
-    created_at: datetime = Field(..., description="Timestamp when the shipment was created")
-    updated_at: datetime = Field(..., description="Timestamp when the shipment was last updated")
+    created_at: datetime = Field(
+        ..., description="Timestamp when the shipment was created"
+    )
+    updated_at: datetime = Field(
+        ..., description="Timestamp when the shipment was last updated"
+    )
 
     class Config:
         from_attributes = True
@@ -93,9 +97,13 @@ class ShipmentResponse(ShipmentInDB):
     Schema for shipment responses in the API.
     """
 
-    sale: Optional[Dict[str, Any]] = Field(None, description="Summary of the shipped sale")
+    sale: Optional[Dict[str, Any]] = Field(
+        None, description="Summary of the shipped sale"
+    )
     customer_name: Optional[str] = Field(None, description="Name of the customer")
-    days_since_shipped: Optional[int] = Field(None, description="Days elapsed since shipment")
+    days_since_shipped: Optional[int] = Field(
+        None, description="Days elapsed since shipment"
+    )
     tracking_url: Optional[str] = Field(None, description="URL to track the shipment")
 
     class Config:

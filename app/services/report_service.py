@@ -29,7 +29,7 @@ the data access layer through repository interfaces, and integrates with various
 domain services to source data for reports.
 """
 
-from typing import List, Optional, Dict, Any, Union, Callable, BinaryIO
+from typing import List, Optional, Dict, Any, Union, Callable, BinaryIO, Tuple
 from datetime import datetime, timedelta, date
 import logging
 import json
@@ -38,7 +38,7 @@ import io
 import uuid
 from enum import Enum
 
-from sqlalchemy import Tuple
+from sqlalchemy import Tuple as SQLATuple
 from sqlalchemy.orm import Session
 
 from app.core.events import DomainEvent

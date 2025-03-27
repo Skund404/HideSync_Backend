@@ -22,6 +22,7 @@ from sqlalchemy import (
     and_,  # <<< Added import
 )
 from sqlalchemy.ext.hybrid import hybrid_property
+
 # <<< Added imports
 from sqlalchemy.orm import foreign, relationship, validates
 
@@ -126,8 +127,8 @@ class Product(AbstractBase, ValidationMixin, CostingMixin, TimestampMixin):
     sale_items = relationship(
         "SaleItem",
         back_populates="product",  # Assumes SaleItem has 'product' reference
-        cascade="save-update, merge", # Don't delete sale items if product deleted
-        passive_deletes=True, # If SaleItem.product_id FK has ON DELETE SET NULL/RESTRICT
+        cascade="save-update, merge",  # Don't delete sale items if product deleted
+        passive_deletes=True,  # If SaleItem.product_id FK has ON DELETE SET NULL/RESTRICT
     )
 
     # --- End Relationships ---
@@ -137,9 +138,7 @@ class Product(AbstractBase, ValidationMixin, CostingMixin, TimestampMixin):
     def profit_margin(self) -> Optional[float]:
         """Calculate profit margin percentage: (Price - Cost) / Price"""
         if self.selling_price and self.total_cost and self.selling_price != 0:
-            margin = (
-                (self.selling_price - self.total_cost) / self.selling_price
-            ) * 100
+            margin = ((self.selling_price - self.total_cost) / self.selling_price) * 100
             return round(margin, 2)
         return None
 
@@ -184,14 +183,12 @@ class Product(AbstractBase, ValidationMixin, CostingMixin, TimestampMixin):
             # Get current stock info from the related Inventory record
             "quantity": inv_record.quantity if inv_record else 0,
             "status": current_status,
-            "storage_location": inv_record.storage_location
-            if inv_record
-            else None,
-            "reorder_point": self.reorder_point, # Characteristic of the product
+            "storage_location": inv_record.storage_location if inv_record else None,
+            "reorder_point": self.reorder_point,  # Characteristic of the product
             # Pricing and Metrics
             "selling_price": self.selling_price,
             "total_cost": self.total_cost,
-            "profit_margin": self.profit_margin, # Use hybrid property
+            "profit_margin": self.profit_margin,  # Use hybrid property
             "last_sold": self.last_sold.isoformat() if self.last_sold else None,
             "sales_velocity": self.sales_velocity,
             # Metadata
@@ -210,4 +207,3 @@ class Product(AbstractBase, ValidationMixin, CostingMixin, TimestampMixin):
     def __repr__(self) -> str:
         """Return string representation of the Product."""
         return f"<Product(id={self.id}, sku='{self.sku}', name='{self.name}')>"
-

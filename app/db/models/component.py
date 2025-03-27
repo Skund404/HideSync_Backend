@@ -7,7 +7,7 @@ in leatherworking projects, and the ComponentMaterial model that tracks
 materials required for each component.
 """
 
-from __future__ import annotations # Allows type hinting models defined later
+from __future__ import annotations  # Allows type hinting models defined later
 
 from datetime import datetime
 from typing import Any, ClassVar, Dict, List, Optional, Set
@@ -16,7 +16,7 @@ from sqlalchemy import (
     JSON,
     Boolean,
     Column,
-    DateTime, # Added if needed by base classes
+    DateTime,  # Added if needed by base classes
     Enum,
     Float,
     ForeignKey,
@@ -49,7 +49,7 @@ class Component(AbstractBase, ValidationMixin, TimestampMixin):
     __validated_fields__: ClassVar[Set[str]] = {"name", "component_type"}
 
     # --- Primary Key ---
-    id = Column(Integer, primary_key=True) # Assuming PK is needed
+    id = Column(Integer, primary_key=True)  # Assuming PK is needed
 
     # --- Foreign Keys ---
     # Ensure Integer matches Pattern.id type
@@ -75,11 +75,15 @@ class Component(AbstractBase, ValidationMixin, TimestampMixin):
     # --- RELATIONSHIPS ---
 
     # Many-to-One relationship FROM Component TO Pattern
-    pattern = relationship("Pattern", back_populates="components") # Assumes Pattern.components exists
+    pattern = relationship(
+        "Pattern", back_populates="components"
+    )  # Assumes Pattern.components exists
 
     # One-to-Many relationship FROM Component TO ProjectComponent (Association Object)
     # Shows which specific projects use this component
-    project_components = relationship("ProjectComponent", back_populates="component") # Assumes ProjectComponent.component exists
+    project_components = relationship(
+        "ProjectComponent", back_populates="component"
+    )  # Assumes ProjectComponent.component exists
 
     # One-to-Many relationship FROM Component TO ComponentMaterial (Association Object)
     # Shows which materials are needed for this component
@@ -89,7 +93,9 @@ class Component(AbstractBase, ValidationMixin, TimestampMixin):
 
     # One-to-Many relationship FROM Component TO PickingListItem
     # Shows which picking lists include this component directly (if applicable)
-    picking_list_items = relationship("PickingListItem", back_populates="component") # Assumes PickingListItem.component exists
+    picking_list_items = relationship(
+        "PickingListItem", back_populates="component"
+    )  # Assumes PickingListItem.component exists
 
     # --- ADD THIS RELATIONSHIP ---
     # One-to-Many relationship FROM Component TO ProjectTemplateComponent (Association Object)
@@ -99,13 +105,12 @@ class Component(AbstractBase, ValidationMixin, TimestampMixin):
         # This back_populates value MUST match the name of the relationship
         # attribute on ProjectTemplateComponent that points back to Component.
         back_populates="component",
-        cascade="all, delete-orphan", # If deleting component removes it from templates
+        cascade="all, delete-orphan",  # If deleting component removes it from templates
         passive_deletes=True,
     )
     # --- END ADDED RELATIONSHIP ---
 
     # --- End Relationships ---
-
 
     @validates("name")
     def validate_name(self, key: str, name: str) -> str:
@@ -123,14 +128,16 @@ class Component(AbstractBase, ValidationMixin, TimestampMixin):
             raise ValueError("Component type is required")
         return component_type
 
-    def get_total_material_requirements(self) -> Dict[int, float]: # Changed key type hint
+    def get_total_material_requirements(
+        self,
+    ) -> Dict[int, float]:  # Changed key type hint
         """Calculate total material requirements for this component."""
         requirements: Dict[int, float] = {}
         for material_req in self.materials:
             material_id = material_req.material_id
             quantity = material_req.quantity
 
-            if material_id is not None: # Check if material_id is valid
+            if material_id is not None:  # Check if material_id is valid
                 requirements[material_id] = requirements.get(material_id, 0) + quantity
 
         return requirements
@@ -147,10 +154,11 @@ class Component(AbstractBase, ValidationMixin, TimestampMixin):
         for field in ["attributes", "position"]:
             if isinstance(result.get(field), str):
                 import json
+
                 try:
                     result[field] = json.loads(result[field])
-                except json.JSONDecodeError: # Catch specific error
-                    result[field] = {} # Default to empty dict on error
+                except json.JSONDecodeError:  # Catch specific error
+                    result[field] = {}  # Default to empty dict on error
 
         # Add calculated requirements if desired
         # result["material_requirements"] = self.get_total_material_requirements()
@@ -169,6 +177,7 @@ class ComponentMaterial(AbstractBase, ValidationMixin):
     ComponentMaterial model linking components to required materials.
     ... (rest of docstring and class definition) ...
     """
+
     __tablename__ = "component_materials"
     __validated_fields__: ClassVar[Set[str]] = {
         "quantity",
@@ -215,6 +224,7 @@ class ComponentMaterial(AbstractBase, ValidationMixin):
         # Handle JSON fields
         if isinstance(result.get("alternative_material_ids"), str):
             import json
+
             try:
                 result["alternative_material_ids"] = json.loads(
                     result["alternative_material_ids"]
@@ -227,4 +237,3 @@ class ComponentMaterial(AbstractBase, ValidationMixin):
     def __repr__(self) -> str:
         """Return string representation of the ComponentMaterial."""
         return f"<ComponentMaterial(component_id={self.component_id}, material_id={self.material_id}, quantity={self.quantity})>"
-

@@ -166,11 +166,11 @@ def get_customer_with_sales(
 
 @router.patch("/{customer_id}/status", response_model=Customer)
 def update_customer_status(
-        *,
-        db: Session = Depends(get_db),
-        customer_id: int = Path(..., ge=1, description="The ID of the customer"),
-        status_update: CustomerStatusUpdate,
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    db: Session = Depends(get_db),
+    customer_id: int = Path(..., ge=1, description="The ID of the customer"),
+    status_update: CustomerStatusUpdate,
+    current_user: Any = Depends(get_current_active_user),
 ) -> Customer:
     """
     Update a customer's status.
@@ -191,8 +191,11 @@ def update_customer_status(
     try:
         return customer_service.update_customer(
             customer_id,
-            {"status": status_update.status, "status_change_reason": status_update.reason},
-            current_user.id
+            {
+                "status": status_update.status,
+                "status_change_reason": status_update.reason,
+            },
+            current_user.id,
         )
     except EntityNotFoundException:
         raise HTTPException(
@@ -205,11 +208,11 @@ def update_customer_status(
 
 @router.patch("/{customer_id}/tier", response_model=Customer)
 def update_customer_tier(
-        *,
-        db: Session = Depends(get_db),
-        customer_id: int = Path(..., ge=1, description="The ID of the customer"),
-        tier_update: CustomerTierUpdate,
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    db: Session = Depends(get_db),
+    customer_id: int = Path(..., ge=1, description="The ID of the customer"),
+    tier_update: CustomerTierUpdate,
+    current_user: Any = Depends(get_current_active_user),
 ) -> Customer:
     """
     Update a customer's tier.
@@ -240,16 +243,22 @@ def update_customer_tier(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.get("/{customer_id}/communications", response_model=List[CustomerCommunicationResponse])
+@router.get(
+    "/{customer_id}/communications", response_model=List[CustomerCommunicationResponse]
+)
 def get_customer_communications(
-        *,
-        db: Session = Depends(get_db),
-        customer_id: int = Path(..., ge=1, description="The ID of the customer"),
-        limit: int = Query(50, ge=1, le=1000, description="Maximum number of communications to return"),
-        communication_type: Optional[str] = Query(None, description="Filter by communication type"),
-        from_date: Optional[datetime] = Query(None, description="Filter by start date"),
-        to_date: Optional[datetime] = Query(None, description="Filter by end date"),
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    db: Session = Depends(get_db),
+    customer_id: int = Path(..., ge=1, description="The ID of the customer"),
+    limit: int = Query(
+        50, ge=1, le=1000, description="Maximum number of communications to return"
+    ),
+    communication_type: Optional[str] = Query(
+        None, description="Filter by communication type"
+    ),
+    from_date: Optional[datetime] = Query(None, description="Filter by start date"),
+    to_date: Optional[datetime] = Query(None, description="Filter by end date"),
+    current_user: Any = Depends(get_current_active_user),
 ) -> List[CustomerCommunicationResponse]:
     """
     Get communication history for a customer.
@@ -281,13 +290,15 @@ def get_customer_communications(
         )
 
 
-@router.post("/{customer_id}/communications", response_model=CustomerCommunicationResponse)
+@router.post(
+    "/{customer_id}/communications", response_model=CustomerCommunicationResponse
+)
 def add_customer_communication(
-        *,
-        db: Session = Depends(get_db),
-        customer_id: int = Path(..., ge=1, description="The ID of the customer"),
-        communication: CustomerCommunicationCreate,
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    db: Session = Depends(get_db),
+    customer_id: int = Path(..., ge=1, description="The ID of the customer"),
+    communication: CustomerCommunicationCreate,
+    current_user: Any = Depends(get_current_active_user),
 ) -> CustomerCommunicationResponse:
     """
     Add a new communication record for a customer.
@@ -322,9 +333,9 @@ def add_customer_communication(
 
 @router.get("/analytics", response_model=CustomerAnalytics)
 def get_customer_analytics(
-        *,
-        db: Session = Depends(get_db),
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_active_user),
 ) -> CustomerAnalytics:
     """
     Get customer analytics data.
@@ -342,10 +353,10 @@ def get_customer_analytics(
 
 @router.post("/import", response_model=BulkImportResult)
 def import_customers(
-        *,
-        db: Session = Depends(get_db),
-        import_data: CustomerImport = Body(...),
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    db: Session = Depends(get_db),
+    import_data: CustomerImport = Body(...),
+    current_user: Any = Depends(get_current_active_user),
 ) -> BulkImportResult:
     """
     Bulk import customers.
@@ -373,12 +384,12 @@ def import_customers(
 
 @router.get("/export")
 def export_customers(
-        *,
-        db: Session = Depends(get_db),
-        format: str = Query("csv", description="Export format (csv or json)"),
-        status: Optional[str] = Query(None, description="Filter by customer status"),
-        tier: Optional[str] = Query(None, description="Filter by customer tier"),
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    db: Session = Depends(get_db),
+    format: str = Query("csv", description="Export format (csv or json)"),
+    status: Optional[str] = Query(None, description="Filter by customer status"),
+    tier: Optional[str] = Query(None, description="Filter by customer tier"),
+    current_user: Any = Depends(get_current_active_user),
 ):
     """
     Export customer data.
@@ -406,5 +417,5 @@ def export_customers(
     return Response(
         content=content,
         media_type=content_type,
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
     )

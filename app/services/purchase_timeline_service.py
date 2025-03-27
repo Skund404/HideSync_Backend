@@ -22,13 +22,17 @@ from app.services.base_service import BaseService
 from app.db.models.purchase import Purchase, PurchaseItem
 from app.db.models.enums import PurchaseStatus, MaterialType
 from app.repositories.purchase_repository import PurchaseRepository
-from app.core.exceptions import ValidationException, EntityNotFoundException, BusinessRuleException
+from app.core.exceptions import (
+    ValidationException,
+    EntityNotFoundException,
+    BusinessRuleException,
+)
 from app.schemas.purchase_timeline import (
     PurchasePlan,
     PurchasePlanItem,
     PurchaseTimeline,
     PurchaseTimelinePeriod,
-    PurchaseTimelineItem
+    PurchaseTimelineItem,
 )
 
 logger = logging.getLogger(__name__)
@@ -45,15 +49,15 @@ class PurchaseTimelineService(BaseService):
     """
 
     def __init__(
-            self,
-            session: Session,
-            repository=None,
-            security_context=None,
-            event_bus=None,
-            cache_service=None,
-            supplier_service=None,
-            material_service=None,
-            inventory_service=None,
+        self,
+        session: Session,
+        repository=None,
+        security_context=None,
+        event_bus=None,
+        cache_service=None,
+        supplier_service=None,
+        material_service=None,
+        inventory_service=None,
     ):
         """
         Initialize PurchaseTimelineService with dependencies.
@@ -78,11 +82,11 @@ class PurchaseTimelineService(BaseService):
         self.inventory_service = inventory_service
 
     def get_purchase_timeline(
-            self,
-            start_date: Optional[date] = None,
-            end_date: Optional[date] = None,
-            period: str = "month",
-            supplier_id: Optional[int] = None
+        self,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+        period: str = "month",
+        supplier_id: Optional[int] = None,
     ) -> PurchaseTimeline:
         """
         Generate a purchase timeline for the specified date range.
@@ -107,40 +111,50 @@ class PurchaseTimelineService(BaseService):
             end_date = today + timedelta(days=90)
 
         # Validate period
-        valid_periods = ['day', 'week', 'month', 'quarter']
+        valid_periods = ["day", "week", "month", "quarter"]
         if period not in valid_periods:
             raise ValidationException(
                 f"Invalid period: {period}",
-                {"period": [f"Must be one of: {', '.join(valid_periods)}"]}
+                {"period": [f"Must be one of: {', '.join(valid_periods)}"]},
             )
 
         # Get purchases in date range
         purchases = self._get_purchases_in_range(start_date, end_date, supplier_id)
 
         # Group purchases by period
-        periods = self._group_purchases_by_period(purchases, start_date, end_date, period)
+        periods = self._group_purchases_by_period(
+            purchases, start_date, end_date, period
+        )
 
         # Get unique suppliers
-        suppliers = list(set(purchase.supplier for purchase in purchases if hasattr(purchase, 'supplier')))
+        suppliers = list(
+            set(
+                purchase.supplier
+                for purchase in purchases
+                if hasattr(purchase, "supplier")
+            )
+        )
 
         # Create timeline
         timeline = PurchaseTimeline(
             periods=periods,
             total_purchases=len(purchases),
-            total_amount=sum(purchase.total for purchase in purchases if hasattr(purchase, 'total')),
+            total_amount=sum(
+                purchase.total for purchase in purchases if hasattr(purchase, "total")
+            ),
             date_range_start=start_date,
             date_range_end=end_date,
-            suppliers=suppliers
+            suppliers=suppliers,
         )
 
         return timeline
 
     def create_purchase_plan(
-            self,
-            min_stock_days: int = 30,
-            supplier_id: Optional[int] = None,
-            material_type: Optional[str] = None,
-            include_pending: bool = True
+        self,
+        min_stock_days: int = 30,
+        supplier_id: Optional[int] = None,
+        material_type: Optional[str] = None,
+        include_pending: bool = True,
     ) -> PurchasePlan:
         """
         Create a purchase plan based on current inventory levels.
@@ -164,7 +178,7 @@ class PurchaseTimelineService(BaseService):
             raise BusinessRuleException(
                 "Cannot create purchase plan: required services unavailable",
                 "PURCHASE_PLAN_001",
-                {"service_dependencies": ["inventory_service", "material_service"]}
+                {"service_dependencies": ["inventory_service", "material_service"]},
             )
 
         # Get current inventory levels
@@ -172,8 +186,12 @@ class PurchaseTimelineService(BaseService):
 
         # Filter by material type if specified
         if material_type:
-            inventory_items = [item for item in inventory_items
-                               if hasattr(item, 'material_type') and item.material_type == material_type]
+            inventory_items = [
+                item
+                for item in inventory_items
+                if hasattr(item, "material_type")
+                and item.material_type == material_type
+            ]
 
         # Get pending purchases if included
         pending_purchases = []
@@ -183,7 +201,7 @@ class PurchaseTimelineService(BaseService):
                 PurchaseStatus.ACKNOWLEDGED.value,
                 PurchaseStatus.PROCESSING.value,
                 PurchaseStatus.SHIPPED.value,
-                PurchaseStatus.IN_TRANSIT.value
+                PurchaseStatus.IN_TRANSIT.value,
             ]
             pending_purchases = self.repository.list(status_in=pending_statuses)
 
@@ -191,7 +209,7 @@ class PurchaseTimelineService(BaseService):
         plan_items = []
         for inventory_item in inventory_items:
             # Skip if no material ID
-            if not hasattr(inventory_item, 'item_id') or not inventory_item.item_id:
+            if not hasattr(inventory_item, "item_id") or not inventory_item.item_id:
                 continue
 
             material_id = inventory_item.item_id
@@ -202,24 +220,41 @@ class PurchaseTimelineService(BaseService):
                 continue
 
             # Skip if filtered by supplier and not matching
-            if (supplier_id and hasattr(material, 'supplier_id') and
-                    material.supplier_id != supplier_id):
+            if (
+                supplier_id
+                and hasattr(material, "supplier_id")
+                and material.supplier_id != supplier_id
+            ):
                 continue
 
             # Get material attributes
-            material_name = material.name if hasattr(material, 'name') else f"Material {material_id}"
-            material_type = material.material_type if hasattr(material, 'material_type') else "Unknown"
-            current_stock = inventory_item.quantity if hasattr(inventory_item, 'quantity') else 0
-            min_stock_level = material.reorder_point if hasattr(material, 'reorder_point') else 0
-            unit = material.unit if hasattr(material, 'unit') else "PIECE"
+            material_name = (
+                material.name
+                if hasattr(material, "name")
+                else f"Material {material_id}"
+            )
+            material_type = (
+                material.material_type
+                if hasattr(material, "material_type")
+                else "Unknown"
+            )
+            current_stock = (
+                inventory_item.quantity if hasattr(inventory_item, "quantity") else 0
+            )
+            min_stock_level = (
+                material.reorder_point if hasattr(material, "reorder_point") else 0
+            )
+            unit = material.unit if hasattr(material, "unit") else "PIECE"
 
             # Get supplier details
-            supplier_id = material.supplier_id if hasattr(material, 'supplier_id') else None
+            supplier_id = (
+                material.supplier_id if hasattr(material, "supplier_id") else None
+            )
             supplier_name = None
             if supplier_id and self.supplier_service:
                 supplier = self.supplier_service.get_by_id(supplier_id)
                 if supplier:
-                    supplier_name = supplier.name if hasattr(supplier, 'name') else None
+                    supplier_name = supplier.name if hasattr(supplier, "name") else None
 
             # Calculate usage rate and days until stockout
             usage_rate = self._calculate_usage_rate(material_id)
@@ -233,8 +268,10 @@ class PurchaseTimelineService(BaseService):
                 for purchase in pending_purchases:
                     items = self.repository.get_purchase_items(purchase.id)
                     for item in items:
-                        if (hasattr(item, 'material_id') and
-                                item.material_id == material_id):
+                        if (
+                            hasattr(item, "material_id")
+                            and item.material_id == material_id
+                        ):
                             pending_quantity += item.quantity
 
             # Calculate recommended order quantity
@@ -247,7 +284,9 @@ class PurchaseTimelineService(BaseService):
                     recommended_quantity = 0
             elif min_stock_level > 0 and current_stock < min_stock_level:
                 # Use reorder point if available
-                recommended_quantity = min_stock_level - (current_stock + pending_quantity)
+                recommended_quantity = min_stock_level - (
+                    current_stock + pending_quantity
+                )
                 if recommended_quantity < 0:
                     recommended_quantity = 0
 
@@ -257,7 +296,7 @@ class PurchaseTimelineService(BaseService):
 
             # Calculate estimated cost
             estimated_cost = None
-            if hasattr(material, 'cost') and material.cost:
+            if hasattr(material, "cost") and material.cost:
                 estimated_cost = material.cost * recommended_quantity
 
             # Get last purchase info
@@ -281,7 +320,9 @@ class PurchaseTimelineService(BaseService):
                 last_purchase_price=last_purchase_price,
                 days_until_stockout=days_until_stockout,
                 usage_rate=usage_rate,
-                priority=self._calculate_priority(days_until_stockout, min_stock_level, current_stock)
+                priority=self._calculate_priority(
+                    days_until_stockout, min_stock_level, current_stock
+                ),
             )
 
             plan_items.append(plan_item)
@@ -313,16 +354,13 @@ class PurchaseTimelineService(BaseService):
             items=plan_items,
             total_estimated_cost=total_estimated_cost,
             supplier_breakdown=supplier_breakdown,
-            recommended_purchases=recommended_purchases
+            recommended_purchases=recommended_purchases,
         )
 
         return plan
 
     def _get_purchases_in_range(
-            self,
-            start_date: date,
-            end_date: date,
-            supplier_id: Optional[int] = None
+        self, start_date: date, end_date: date, supplier_id: Optional[int] = None
     ) -> List[Purchase]:
         """
         Get purchases within a date range.
@@ -339,7 +377,7 @@ class PurchaseTimelineService(BaseService):
             "date_from": start_date.isoformat(),
             "date_to": end_date.isoformat(),
             "sort_by": "date",
-            "sort_dir": "asc"
+            "sort_dir": "asc",
         }
 
         if supplier_id:
@@ -348,11 +386,7 @@ class PurchaseTimelineService(BaseService):
         return self.repository.list(**filters)
 
     def _group_purchases_by_period(
-            self,
-            purchases: List[Purchase],
-            start_date: date,
-            end_date: date,
-            period: str
+        self, purchases: List[Purchase], start_date: date, end_date: date, period: str
     ) -> List[PurchaseTimelinePeriod]:
         """
         Group purchases by time period.
@@ -372,27 +406,31 @@ class PurchaseTimelineService(BaseService):
         # Initialize periods with empty purchase lists
         periods = []
         for period_name, period_start, period_end in period_ranges:
-            periods.append(PurchaseTimelinePeriod(
-                period_name=period_name,
-                start_date=period_start,
-                end_date=period_end,
-                items=[],
-                total_amount=0,
-                item_count=0
-            ))
+            periods.append(
+                PurchaseTimelinePeriod(
+                    period_name=period_name,
+                    start_date=period_start,
+                    end_date=period_end,
+                    items=[],
+                    total_amount=0,
+                    item_count=0,
+                )
+            )
 
         # Assign purchases to periods
         for purchase in purchases:
             # Skip if no date or not a datetime
-            if not hasattr(purchase, 'date') or not isinstance(purchase.date, datetime):
+            if not hasattr(purchase, "date") or not isinstance(purchase.date, datetime):
                 continue
 
             purchase_date = purchase.date.date()
 
             # Find the right period
             for period_data in periods:
-                if (purchase_date >= period_data.start_date and
-                        purchase_date <= period_data.end_date):
+                if (
+                    purchase_date >= period_data.start_date
+                    and purchase_date <= period_data.end_date
+                ):
                     # Create timeline item
                     timeline_item = self._create_timeline_item(purchase)
                     if timeline_item:
@@ -404,10 +442,7 @@ class PurchaseTimelineService(BaseService):
         return periods
 
     def _create_period_ranges(
-            self,
-            start_date: date,
-            end_date: date,
-            period: str
+        self, start_date: date, end_date: date, period: str
     ) -> List[Tuple[str, date, date]]:
         """
         Create date ranges for the specified period.
@@ -424,13 +459,13 @@ class PurchaseTimelineService(BaseService):
         current_date = start_date
 
         while current_date <= end_date:
-            if period == 'day':
-                period_name = current_date.strftime('%Y-%m-%d')
+            if period == "day":
+                period_name = current_date.strftime("%Y-%m-%d")
                 period_start = current_date
                 period_end = current_date
                 current_date = current_date + timedelta(days=1)
 
-            elif period == 'week':
+            elif period == "week":
                 # Get week start (Monday) and end (Sunday)
                 week_start = current_date - timedelta(days=current_date.weekday())
                 week_end = week_start + timedelta(days=6)
@@ -439,12 +474,12 @@ class PurchaseTimelineService(BaseService):
                 period_end = min(week_end, end_date)
                 current_date = week_end + timedelta(days=1)
 
-            elif period == 'month':
+            elif period == "month":
                 # Get month start and end
                 month_start = date(current_date.year, current_date.month, 1)
                 last_day = calendar.monthrange(current_date.year, current_date.month)[1]
                 month_end = date(current_date.year, current_date.month, last_day)
-                period_name = current_date.strftime('%B %Y')
+                period_name = current_date.strftime("%B %Y")
                 period_start = max(month_start, start_date)
                 period_end = min(month_end, end_date)
 
@@ -454,15 +489,18 @@ class PurchaseTimelineService(BaseService):
                 else:
                     current_date = date(current_date.year, current_date.month + 1, 1)
 
-            elif period == 'quarter':
+            elif period == "quarter":
                 # Get quarter start and end
                 quarter = (current_date.month - 1) // 3 + 1
                 quarter_start = date(current_date.year, (quarter - 1) * 3 + 1, 1)
                 if quarter == 4:
                     quarter_end = date(current_date.year, 12, 31)
                 else:
-                    quarter_end = date(current_date.year, quarter * 3,
-                                       calendar.monthrange(current_date.year, quarter * 3)[1])
+                    quarter_end = date(
+                        current_date.year,
+                        quarter * 3,
+                        calendar.monthrange(current_date.year, quarter * 3)[1],
+                    )
                 period_name = f"Q{quarter} {current_date.year}"
                 period_start = max(quarter_start, start_date)
                 period_end = min(quarter_end, end_date)
@@ -481,7 +519,9 @@ class PurchaseTimelineService(BaseService):
 
         return ranges
 
-    def _create_timeline_item(self, purchase: Purchase) -> Optional[PurchaseTimelineItem]:
+    def _create_timeline_item(
+        self, purchase: Purchase
+    ) -> Optional[PurchaseTimelineItem]:
         """
         Create a timeline item from a purchase.
 
@@ -491,35 +531,39 @@ class PurchaseTimelineService(BaseService):
         Returns:
             Timeline item or None if invalid purchase
         """
-        if not hasattr(purchase, 'id') or not hasattr(purchase, 'total'):
+        if not hasattr(purchase, "id") or not hasattr(purchase, "total"):
             return None
 
         # Get supplier
-        supplier = purchase.supplier if hasattr(purchase, 'supplier') else "Unknown Supplier"
+        supplier = (
+            purchase.supplier if hasattr(purchase, "supplier") else "Unknown Supplier"
+        )
 
         # Get delivery date
         delivery_date = None
-        if hasattr(purchase, 'delivery_date') and purchase.delivery_date:
+        if hasattr(purchase, "delivery_date") and purchase.delivery_date:
             if isinstance(purchase.delivery_date, datetime):
                 delivery_date = purchase.delivery_date.date()
             elif isinstance(purchase.delivery_date, date):
                 delivery_date = purchase.delivery_date
             elif isinstance(purchase.delivery_date, str):
                 try:
-                    delivery_date = datetime.fromisoformat(purchase.delivery_date).date()
+                    delivery_date = datetime.fromisoformat(
+                        purchase.delivery_date
+                    ).date()
                 except ValueError:
                     delivery_date = date.today()  # Fallback
         else:
             delivery_date = date.today()  # Fallback
 
         # Get status
-        status = purchase.status if hasattr(purchase, 'status') else "UNKNOWN"
+        status = purchase.status if hasattr(purchase, "status") else "UNKNOWN"
 
         # Get items summary
         items = {}
         purchase_items = self.repository.get_purchase_items(purchase.id)
         for item in purchase_items:
-            if hasattr(item, 'name') and hasattr(item, 'quantity'):
+            if hasattr(item, "name") and hasattr(item, "quantity"):
                 items[item.name] = item.quantity
 
         # Create timeline item
@@ -530,7 +574,7 @@ class PurchaseTimelineService(BaseService):
             delivery_date=delivery_date,
             status=status,
             items=items,
-            total=purchase.total
+            total=purchase.total,
         )
 
         return timeline_item
@@ -551,10 +595,10 @@ class PurchaseTimelineService(BaseService):
         return 0.1  # Default usage rate
 
     def _calculate_priority(
-            self,
-            days_until_stockout: Optional[int],
-            min_stock_level: float,
-            current_stock: float
+        self,
+        days_until_stockout: Optional[int],
+        min_stock_level: float,
+        current_stock: float,
     ) -> str:
         """
         Calculate priority level based on stock status.

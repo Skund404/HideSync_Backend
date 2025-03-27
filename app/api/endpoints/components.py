@@ -16,7 +16,7 @@ from app.api.deps import get_current_active_user
 from app.core.exceptions import (
     EntityNotFoundException,
     ValidationException,
-    BusinessRuleException
+    BusinessRuleException,
 )
 from app.db.session import get_db
 from app.schemas.compatibility import (
@@ -25,7 +25,7 @@ from app.schemas.compatibility import (
     ComponentUpdate,
     ComponentListResponse,
     ComponentMaterialCreate,
-    ComponentMaterialResponse
+    ComponentMaterialResponse,
 )
 from app.services.component_service import ComponentService
 from app.services.material_service import MaterialService
@@ -36,13 +36,13 @@ router = APIRouter()
 
 @router.get("/", response_model=ComponentListResponse)
 def list_components(
-        name: Optional[str] = Query(None, description="Filter by component name"),
-        component_type: Optional[str] = Query(None, description="Filter by component type"),
-        pattern_id: Optional[int] = Query(None, description="Filter by pattern ID"),
-        skip: int = Query(0, description="Number of records to skip"),
-        limit: int = Query(100, description="Maximum number of records to return"),
-        db: Session = Depends(get_db),
-        current_user=Depends(get_current_active_user)
+    name: Optional[str] = Query(None, description="Filter by component name"),
+    component_type: Optional[str] = Query(None, description="Filter by component type"),
+    pattern_id: Optional[int] = Query(None, description="Filter by pattern ID"),
+    skip: int = Query(0, description="Number of records to skip"),
+    limit: int = Query(100, description="Maximum number of records to return"),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_active_user),
 ) -> Any:
     """
     Get a list of components with optional filtering.
@@ -61,19 +61,14 @@ def list_components(
     components = component_service.list(skip=skip, limit=limit, **filters)
     total = component_service.count(**filters)
 
-    return {
-        "items": components,
-        "total": total,
-        "skip": skip,
-        "limit": limit
-    }
+    return {"items": components, "total": total, "skip": skip, "limit": limit}
 
 
 @router.post("/", response_model=ComponentResponse, status_code=status.HTTP_201_CREATED)
 def create_component(
-        component_data: ComponentCreate,
-        db: Session = Depends(get_db),
-        current_user=Depends(get_current_active_user)
+    component_data: ComponentCreate,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_active_user),
 ) -> Any:
     """
     Create a new component.
@@ -85,21 +80,17 @@ def create_component(
         return component
     except ValidationException as e:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=e.errors
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=e.errors
         )
     except EntityNotFoundException as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
 
 @router.get("/{component_id}", response_model=ComponentResponse)
 def get_component(
-        component_id: int = Path(..., description="The ID of the component to retrieve"),
-        db: Session = Depends(get_db),
-        current_user=Depends(get_current_active_user)
+    component_id: int = Path(..., description="The ID of the component to retrieve"),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_active_user),
 ) -> Any:
     """
     Get a component by ID.
@@ -110,7 +101,7 @@ def get_component(
     if not component:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Component with ID {component_id} not found"
+            detail=f"Component with ID {component_id} not found",
         )
 
     return component
@@ -118,10 +109,10 @@ def get_component(
 
 @router.put("/{component_id}", response_model=ComponentResponse)
 def update_component(
-        component_id: int = Path(..., description="The ID of the component to update"),
-        component_data: ComponentUpdate = Body(...),
-        db: Session = Depends(get_db),
-        current_user=Depends(get_current_active_user)
+    component_id: int = Path(..., description="The ID of the component to update"),
+    component_data: ComponentUpdate = Body(...),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_active_user),
 ) -> Any:
     """
     Update a component.
@@ -129,25 +120,26 @@ def update_component(
     component_service = ComponentService(db)
 
     try:
-        component = component_service.update_component(component_id, component_data.dict(exclude_unset=True))
+        component = component_service.update_component(
+            component_id, component_data.dict(exclude_unset=True)
+        )
         return component
     except EntityNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Component with ID {component_id} not found"
+            detail=f"Component with ID {component_id} not found",
         )
     except ValidationException as e:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=e.errors
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=e.errors
         )
 
 
 @router.delete("/{component_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_component(
-        component_id: int = Path(..., description="The ID of the component to delete"),
-        db: Session = Depends(get_db),
-        current_user=Depends(get_current_active_user)
+    component_id: int = Path(..., description="The ID of the component to delete"),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_active_user),
 ) -> None:
     """
     Delete a component.
@@ -159,27 +151,25 @@ def delete_component(
         if not result:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Component with ID {component_id} not found"
+                detail=f"Component with ID {component_id} not found",
             )
     except EntityNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Component with ID {component_id} not found"
+            detail=f"Component with ID {component_id} not found",
         )
     except BusinessRuleException as e:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
 
 # New endpoints for component management
 
+
 @router.get("/by-pattern/{pattern_id}", response_model=List[ComponentResponse])
 def get_components_by_pattern(
-        pattern_id: int = Path(..., description="The ID of the pattern"),
-        db: Session = Depends(get_db),
-        current_user=Depends(get_current_active_user)
+    pattern_id: int = Path(..., description="The ID of the pattern"),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_active_user),
 ) -> Any:
     """
     Get all components for a specific pattern.
@@ -195,7 +185,7 @@ def get_components_by_pattern(
     if not pattern:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Pattern with ID {pattern_id} not found"
+            detail=f"Pattern with ID {pattern_id} not found",
         )
 
     # Get components
@@ -210,11 +200,15 @@ def get_components_by_pattern(
     return detailed_components
 
 
-@router.post("/batch", response_model=List[ComponentResponse], status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/batch",
+    response_model=List[ComponentResponse],
+    status_code=status.HTTP_201_CREATED,
+)
 def batch_create_components(
-        components_data: List[ComponentCreate] = Body(...),
-        db: Session = Depends(get_db),
-        current_user=Depends(get_current_active_user)
+    components_data: List[ComponentCreate] = Body(...),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_active_user),
 ) -> Any:
     """
     Create multiple components in a single request.
@@ -248,22 +242,18 @@ def batch_create_components(
         return created_components
     except ValidationException as e:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=e.errors
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=e.errors
         )
     except EntityNotFoundException as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
 
 @router.post("/{component_id}/duplicate", response_model=ComponentResponse)
 def duplicate_component(
-        component_id: int = Path(..., description="The ID of the component to duplicate"),
-        override_data: Optional[ComponentUpdate] = Body(None),
-        db: Session = Depends(get_db),
-        current_user=Depends(get_current_active_user)
+    component_id: int = Path(..., description="The ID of the component to duplicate"),
+    override_data: Optional[ComponentUpdate] = Body(None),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_active_user),
 ) -> Any:
     """
     Duplicate a component.
@@ -279,34 +269,36 @@ def duplicate_component(
         if not original:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Component with ID {component_id} not found"
+                detail=f"Component with ID {component_id} not found",
             )
 
         # Duplicate the component
-        override_dict = override_data.dict(exclude_unset=True) if override_data else None
+        override_dict = (
+            override_data.dict(exclude_unset=True) if override_data else None
+        )
         duplicated = component_service.clone_component(component_id, override_dict)
 
         return duplicated
     except EntityNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Component with ID {component_id} not found"
+            detail=f"Component with ID {component_id} not found",
         )
     except ValidationException as e:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=e.errors
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=e.errors
         )
 
 
 # Material requirement endpoints
 
+
 @router.post("/{component_id}/materials", response_model=ComponentMaterialResponse)
 def add_material_requirement(
-        component_id: int = Path(..., description="The ID of the component"),
-        requirement_data: ComponentMaterialCreate = Body(...),
-        db: Session = Depends(get_db),
-        current_user=Depends(get_current_active_user)
+    component_id: int = Path(..., description="The ID of the component"),
+    requirement_data: ComponentMaterialCreate = Body(...),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_active_user),
 ) -> Any:
     """
     Add a material requirement to a component.
@@ -320,7 +312,7 @@ def add_material_requirement(
         if not component:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Component with ID {component_id} not found"
+                detail=f"Component with ID {component_id} not found",
             )
 
         # Check if material exists
@@ -328,7 +320,7 @@ def add_material_requirement(
         if not material:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Material with ID {requirement_data.material_id} not found"
+                detail=f"Material with ID {requirement_data.material_id} not found",
             )
 
         # Add requirement
@@ -338,22 +330,18 @@ def add_material_requirement(
 
         return requirement
     except EntityNotFoundException as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except ValidationException as e:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=e.errors
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=e.errors
         )
 
 
 @router.get("/{component_id}/materials", response_model=List[ComponentMaterialResponse])
 def get_material_requirements(
-        component_id: int = Path(..., description="The ID of the component"),
-        db: Session = Depends(get_db),
-        current_user=Depends(get_current_active_user)
+    component_id: int = Path(..., description="The ID of the component"),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_active_user),
 ) -> Any:
     """
     Get all material requirements for a component.
@@ -365,7 +353,7 @@ def get_material_requirements(
     if not component:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Component with ID {component_id} not found"
+            detail=f"Component with ID {component_id} not found",
         )
 
     # Get requirements

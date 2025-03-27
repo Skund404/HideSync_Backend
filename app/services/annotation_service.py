@@ -49,7 +49,10 @@ class AnnotationService(BaseService):
         self.repository = AnnotationRepository(db)
 
     def get_annotations(
-            self, skip: int = 0, limit: int = 100, search_params: Optional[AnnotationSearchParams] = None
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        search_params: Optional[AnnotationSearchParams] = None,
     ) -> List[AnnotationSchema]:
         """
         Get annotations with optional filtering and pagination.
@@ -98,11 +101,15 @@ class AnnotationService(BaseService):
         """
         annotation = self.repository.get_by_id(annotation_id)
         if not annotation:
-            raise EntityNotFoundException(f"Annotation with ID {annotation_id} not found")
+            raise EntityNotFoundException(
+                f"Annotation with ID {annotation_id} not found"
+            )
 
         return AnnotationSchema.from_orm(annotation)
 
-    def create_annotation(self, annotation_in: AnnotationCreate, user_id: int) -> AnnotationSchema:
+    def create_annotation(
+        self, annotation_in: AnnotationCreate, user_id: int
+    ) -> AnnotationSchema:
         """
         Create a new annotation.
 
@@ -132,7 +139,7 @@ class AnnotationService(BaseService):
         return AnnotationSchema.from_orm(annotation)
 
     def update_annotation(
-            self, annotation_id: int, annotation_in: AnnotationUpdate, user_id: int
+        self, annotation_id: int, annotation_in: AnnotationUpdate, user_id: int
     ) -> AnnotationSchema:
         """
         Update an annotation.
@@ -153,13 +160,17 @@ class AnnotationService(BaseService):
         # Get existing annotation
         annotation = self.repository.get_by_id(annotation_id)
         if not annotation:
-            raise EntityNotFoundException(f"Annotation with ID {annotation_id} not found")
+            raise EntityNotFoundException(
+                f"Annotation with ID {annotation_id} not found"
+            )
 
         # Check if user has permission to update the annotation
         if annotation.created_by != user_id:
             # Users can only edit their own annotations
             # (In a real system, you might check for admin permissions here)
-            raise PermissionDeniedException("You don't have permission to update this annotation")
+            raise PermissionDeniedException(
+                "You don't have permission to update this annotation"
+            )
 
         # Update annotation
         update_data = annotation_in.dict(exclude_unset=True)
@@ -186,20 +197,24 @@ class AnnotationService(BaseService):
         # Get existing annotation
         annotation = self.repository.get_by_id(annotation_id)
         if not annotation:
-            raise EntityNotFoundException(f"Annotation with ID {annotation_id} not found")
+            raise EntityNotFoundException(
+                f"Annotation with ID {annotation_id} not found"
+            )
 
         # Check if user has permission to delete the annotation
         if annotation.created_by != user_id:
             # Users can only delete their own annotations
             # (In a real system, you might check for admin permissions here)
-            raise PermissionDeniedException("You don't have permission to delete this annotation")
+            raise PermissionDeniedException(
+                "You don't have permission to delete this annotation"
+            )
 
         # Delete annotation
         self.repository.delete(annotation_id)
         return True
 
     def get_annotations_by_entity(
-            self, entity_type: str, entity_id: int, skip: int = 0, limit: int = 100
+        self, entity_type: str, entity_id: int, skip: int = 0, limit: int = 100
     ) -> List[AnnotationSchema]:
         """
         Get annotations for a specific entity.

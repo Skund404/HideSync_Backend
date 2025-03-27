@@ -150,22 +150,22 @@
   ],
   "storage_cells": [
     {
-      "storageId": 1,
+      "storage_id": 1,
       "position": { "x": 1, "y": 1, "z": 1 },
       "occupied": false
     },
     {
-      "storageId": 1,
+      "storage_id": 1,
       "position": { "x": 1, "y": 2, "z": 1 },
       "occupied": false
     },
     {
-      "storageId": 2,
+      "storage_id": 2,
       "position": { "x": 1, "y": 1, "z": 1 },
       "occupied": false
     },
     {
-      "storageId": 3,
+      "storage_id": 3,
       "position": { "x": 1, "y": 1, "z": 1 },
       "occupied": false
     }
@@ -392,6 +392,51 @@
       "version": "1.0"
     }
   ],
+  "components": [
+    {
+      "name": "Bifold Wallet Outer Shell",
+      "description": "Outer shell for bifold wallet",
+      "componentType": "PANEL",
+      "patternId": 1,
+      "attributes": {
+        "width": 180,
+        "height": 200
+      },
+      "isOptional": false
+    },
+    {
+      "name": "Bifold Wallet Card Slot",
+      "description": "Interior card slot pocket",
+      "componentType": "POCKET",
+      "patternId": 1,
+      "attributes": {
+        "width": 90,
+        "height": 60
+      },
+      "isOptional": false
+    },
+    {
+      "name": "Card Holder Base",
+      "description": "Main body of card holder",
+      "componentType": "PANEL",
+      "patternId": 3,
+      "attributes": {
+        "width": 100,
+        "height": 70
+      },
+      "isOptional": false
+    },
+    {
+      "name": "Money Clip",
+      "description": "Spring steel money clip",
+      "componentType": "HARDWARE",
+      "patternId": 3,
+      "attributes": {
+        "size": "standard"
+      },
+      "isOptional": false
+    }
+  ],
   "project_templates": [
     {
       "name": "Standard Bifold Template",
@@ -447,31 +492,35 @@
   "project_components": [
     {
       "project_id": 1,
+      "component_id": 1,
       "quantity": 1,
       "name": "Outer Shell",
       "description": "Outer shell for bifold wallet",
-      "componentType": "PANEL"
+      "component_type": "PANEL"
     },
     {
       "project_id": 1,
+      "component_id": 2,
       "quantity": 4,
       "name": "Card Slots",
       "description": "Interior card slots",
-      "componentType": "POCKET"
+      "component_type": "POCKET"
     },
     {
       "project_id": 2,
+      "component_id": 3,
       "quantity": 1,
       "name": "Card Holder Base",
       "description": "Main body of card holder",
-      "componentType": "PANEL"
+      "component_type": "PANEL"
     },
     {
       "project_id": 2,
+      "component_id": 4,
       "quantity": 1,
       "name": "Money Clip",
       "description": "Spring steel money clip",
-      "componentType": "HARDWARE"
+      "component_type": "HARDWARE"
     }
   ],
   "timeline_tasks": [
@@ -490,7 +539,7 @@
       "startDate": "2023-04-04T10:00:00",
       "endDate": "2023-04-04T17:00:00",
       "progress": 0,
-      "status": "PENDING",
+      "status": "PLANNING",
       "isCriticalPath": true,
       "dependencies": ["Cut leather pieces"]
     },
@@ -500,7 +549,7 @@
       "startDate": "2023-04-05T10:00:00",
       "endDate": "2023-04-05T17:00:00",
       "progress": 0,
-      "status": "PENDING",
+      "status": "PLANNING",
       "isCriticalPath": true,
       "dependencies": ["Skive edges"]
     },
@@ -516,7 +565,7 @@
   ],
   "sales": [
     {
-      "customerId": 1,
+      "customer_id": 1,
       "createdAt": "2023-03-25T14:30:00",
       "dueDate": "2026-04-15T17:00:00",
       "status": "IN_PRODUCTION",
@@ -529,7 +578,7 @@
       "notes": "Custom bifold wallet order"
     },
     {
-      "customerId": 2,
+      "customer_id": 2,
       "createdAt": "2023-04-01T11:15:00",
       "dueDate": "2026-04-20T17:00:00",
       "status": "CONFIRMED",
@@ -542,7 +591,7 @@
       "notes": "Card holder order"
     },
     {
-      "customerId": 3,
+      "customer_id": 3,
       "createdAt": "2023-03-15T09:00:00",
       "dueDate": "2026-04-30T17:00:00",
       "status": "CONFIRMED",

@@ -18,7 +18,7 @@ from app.schemas.refund import (
     RefundUpdate,
     RefundProcess,
     RefundCancel,
-    RefundResponse
+    RefundResponse,
 )
 from app.services.refund_service import RefundService
 from app.core.exceptions import (
@@ -237,7 +237,9 @@ def get_pending_refunds(
     db: Session = Depends(get_db),
     current_user: Any = Depends(get_current_active_user),
     skip: int = Query(0, ge=0, description="Number of records to skip"),
-    limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
+    limit: int = Query(
+        100, ge=1, le=1000, description="Maximum number of records to return"
+    ),
 ) -> List[RefundResponse]:
     """
     Get all pending refunds.

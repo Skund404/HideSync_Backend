@@ -42,21 +42,21 @@ class PurchaseTimelineItem(PurchaseTimelineItemBase):
     class Config:
         from_attributes = True
 
-    @validator('days_until_delivery', pre=True, always=True)
+    @validator("days_until_delivery", pre=True, always=True)
     def calculate_days_until_delivery(cls, v, values):
         """Calculate days until delivery."""
-        if 'delivery_date' in values:
+        if "delivery_date" in values:
             today = date.today()
-            delta = values['delivery_date'] - today
+            delta = values["delivery_date"] - today
             return delta.days
         return v
 
-    @validator('is_overdue', pre=True, always=True)
+    @validator("is_overdue", pre=True, always=True)
     def calculate_is_overdue(cls, v, values):
         """Calculate if delivery is overdue."""
-        if 'delivery_date' in values:
+        if "delivery_date" in values:
             today = date.today()
-            return values['delivery_date'] < today
+            return values["delivery_date"] < today
         return v
 
 

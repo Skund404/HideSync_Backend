@@ -397,6 +397,7 @@ class MaterialList(BaseModel):
     size: int = Field(..., description="Number of items per page")
     pages: int = Field(..., description="Total number of pages")
 
+
 class MaterialSearchParams(BaseModel):
     material_type: Optional[str] = None
     quality: Optional[str] = None

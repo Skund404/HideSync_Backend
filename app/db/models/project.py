@@ -240,7 +240,7 @@ class ProjectTemplate(AbstractBase, ValidationMixin, TimestampMixin):
     components = relationship(
         "ProjectTemplateComponent",
         back_populates="template",
-        cascade="all, delete-orphan"
+        cascade="all, delete-orphan",
     )
     projects = relationship("Project", back_populates="project_template")
 

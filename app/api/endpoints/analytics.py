@@ -15,7 +15,7 @@ from app.schemas.analytics import (
     SupplierPerformance,
     CustomerLifetimeValue,
     PricingCalculatorInputs,  # Import new input schema
-    PricingCalculatorResults  # Import new output schema
+    PricingCalculatorResults,  # Import new output schema
 )
 from app.services.dashboard_service import DashboardService
 from app.services.report_service import ReportService
@@ -192,9 +192,7 @@ def calculate_pricing(
 
         # --- Suggested Price Calculation ---
         suggested_price_denominator = (
-            1.0
-            - (inputs.targetMargin / 100.0)
-            - (inputs.platformFees / 100.0)
+            1.0 - (inputs.targetMargin / 100.0) - (inputs.platformFees / 100.0)
         )
         # Use a small epsilon to avoid floating point issues near 100%
         if suggested_price_denominator <= 1e-9:
@@ -272,12 +270,8 @@ def get_stock_level_analysis(
     # This structure assumes get_inventory_overview provides these keys.
     # Add error handling or default values if keys might be missing.
     return {
-        "timestamp": inventory_data.get(
-            "timestamp", datetime.now().isoformat()
-        ),
-        "materials_to_reorder": inventory_data.get(
-            "materials_to_reorder", 0
-        ),
+        "timestamp": inventory_data.get("timestamp", datetime.now().isoformat()),
+        "materials_to_reorder": inventory_data.get("materials_to_reorder", 0),
         "low_stock_materials": inventory_data.get("low_stock_materials", []),
         "material_counts": inventory_data.get("material_counts", {}),
         "material_stock_distribution": inventory_data.get(
@@ -361,9 +355,7 @@ def get_customer_lifetime_value(
             "total_customers": analytics.get("total_customers", 0),
             "active_customers": analytics.get("active_customers", 0),
             "new_customers_30d": analytics.get("new_customers_30d", 0),
-            "average_lifetime_value": analytics.get(
-                "average_lifetime_value", 0.0
-            ),
+            "average_lifetime_value": analytics.get("average_lifetime_value", 0.0),
         },
         "top_customers": analytics.get("top_customers", []),
         "customer_distribution": analytics.get("customer_distribution", {}),

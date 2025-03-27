@@ -187,7 +187,7 @@ class InventoryTransaction(AbstractBase, ValidationMixin, TimestampMixin):
     to_location = Column(String(100), nullable=True)
 
     # Audit information
-    performed_by = Column(String(100), nullable=True) # User ID or name
+    performed_by = Column(String(100), nullable=True)  # User ID or name
     notes = Column(Text, nullable=True)
     transaction_date = Column(DateTime, default=datetime.now)
 
@@ -216,4 +216,3 @@ class InventoryTransaction(AbstractBase, ValidationMixin, TimestampMixin):
     def __repr__(self) -> str:
         """Return string representation of the InventoryTransaction."""
         return f"<InventoryTransaction(id={self.id}, type='{self.transaction_type}', item_type='{self.item_type}', item_id={self.item_id}, quantity={self.quantity})>"
-

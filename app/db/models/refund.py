@@ -75,11 +75,11 @@ class Refund(AbstractBase, ValidationMixin, TimestampMixin):
         return amount
 
     def process_refund(
-            self,
-            transaction_id: str,
-            payment_method: str,
-            processor_id: Optional[int] = None,
-            notes: Optional[str] = None,
+        self,
+        transaction_id: str,
+        payment_method: str,
+        processor_id: Optional[int] = None,
+        notes: Optional[str] = None,
     ) -> None:
         """
         Mark the refund as processed with transaction details.
@@ -103,12 +103,14 @@ class Refund(AbstractBase, ValidationMixin, TimestampMixin):
 
         # Update sale status if available
         if (
-                self.sale
-                and hasattr(self.sale, "payment_status")
-                and hasattr(self.sale, "total_amount")
+            self.sale
+            and hasattr(self.sale, "payment_status")
+            and hasattr(self.sale, "total_amount")
         ):
             # If refund is complete (full refund), update sale payment status
-            if self.refund_amount >= self.sale.total_amount * 0.99:  # Allow small differences
+            if (
+                self.refund_amount >= self.sale.total_amount * 0.99
+            ):  # Allow small differences
                 self.sale.payment_status = PaymentStatus.REFUNDED
 
             # If partial refund, we could handle it differently

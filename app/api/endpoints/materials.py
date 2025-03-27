@@ -285,9 +285,15 @@ def list_leather_materials(
     limit: int = Query(
         100, ge=1, le=1000, description="Maximum number of records to return"
     ),
-    leather_type: Optional[LeatherType] = Query(None, description="Filter by leather type"),
-    min_thickness: Optional[float] = Query(None, ge=0, description="Minimum thickness in mm"),
-    max_thickness: Optional[float] = Query(None, ge=0, description="Maximum thickness in mm"),
+    leather_type: Optional[LeatherType] = Query(
+        None, description="Filter by leather type"
+    ),
+    min_thickness: Optional[float] = Query(
+        None, ge=0, description="Minimum thickness in mm"
+    ),
+    max_thickness: Optional[float] = Query(
+        None, ge=0, description="Maximum thickness in mm"
+    ),
     animal_source: Optional[str] = Query(None, description="Filter by animal source"),
     finish: Optional[LeatherFinish] = Query(None, description="Filter by finish type"),
     color: Optional[str] = Query(None, description="Filter by color"),
@@ -326,7 +332,11 @@ def list_leather_materials(
     )
 
 
-@router.post("/leather", response_model=LeatherMaterialResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/leather",
+    response_model=LeatherMaterialResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 def create_leather_material(
     *,
     db: Session = Depends(get_db),
@@ -353,7 +363,7 @@ def create_leather_material(
     except ValidationException as e:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={"message": str(e), "errors": e.details}
+            detail={"message": str(e), "errors": e.details},
         )
     except BusinessRuleException as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -398,7 +408,9 @@ def get_leather_material(
 def update_leather_material(
     *,
     db: Session = Depends(get_db),
-    material_id: int = Path(..., ge=1, description="The ID of the leather material to update"),
+    material_id: int = Path(
+        ..., ge=1, description="The ID of the leather material to update"
+    ),
     material_in: LeatherMaterialUpdate,
     current_user: Any = Depends(get_current_active_user),
 ) -> LeatherMaterialResponse:
@@ -430,7 +442,7 @@ def update_leather_material(
     except ValidationException as e:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={"message": str(e), "errors": e.details}
+            detail={"message": str(e), "errors": e.details},
         )
     except BusinessRuleException as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -440,9 +452,7 @@ def update_leather_material(
 def calculate_leather_area_value(
     *,
     db: Session = Depends(get_db),
-    material_id: int = Path(
-        ..., ge=1, description="The ID of the leather material"
-    ),
+    material_id: int = Path(..., ge=1, description="The ID of the leather material"),
     current_user: Any = Depends(get_current_active_user),
 ) -> Dict[str, Any]:
     """
@@ -481,8 +491,12 @@ def list_hardware_materials(
     limit: int = Query(
         100, ge=1, le=1000, description="Maximum number of records to return"
     ),
-    hardware_type: Optional[HardwareType] = Query(None, description="Filter by hardware type"),
-    hardware_material: Optional[HardwareMaterialEnum] = Query(None, description="Filter by hardware material"),
+    hardware_type: Optional[HardwareType] = Query(
+        None, description="Filter by hardware type"
+    ),
+    hardware_material: Optional[HardwareMaterialEnum] = Query(
+        None, description="Filter by hardware material"
+    ),
     finish: Optional[HardwareFinish] = Query(None, description="Filter by finish"),
     size: Optional[str] = Query(None, description="Filter by size"),
     color: Optional[str] = Query(None, description="Filter by color"),
@@ -516,7 +530,11 @@ def list_hardware_materials(
     )
 
 
-@router.post("/hardware", response_model=HardwareMaterialResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/hardware",
+    response_model=HardwareMaterialResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 def create_hardware_material(
     *,
     db: Session = Depends(get_db),
@@ -543,7 +561,7 @@ def create_hardware_material(
     except ValidationException as e:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={"message": str(e), "errors": e.details}
+            detail={"message": str(e), "errors": e.details},
         )
     except BusinessRuleException as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -588,7 +606,9 @@ def get_hardware_material(
 def update_hardware_material(
     *,
     db: Session = Depends(get_db),
-    material_id: int = Path(..., ge=1, description="The ID of the hardware material to update"),
+    material_id: int = Path(
+        ..., ge=1, description="The ID of the hardware material to update"
+    ),
     material_in: HardwareMaterialUpdate,
     current_user: Any = Depends(get_current_active_user),
 ) -> HardwareMaterialResponse:
@@ -620,13 +640,15 @@ def update_hardware_material(
     except ValidationException as e:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={"message": str(e), "errors": e.details}
+            detail={"message": str(e), "errors": e.details},
         )
     except BusinessRuleException as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.get("/hardware/by-type/{hardware_type}", response_model=List[HardwareMaterialResponse])
+@router.get(
+    "/hardware/by-type/{hardware_type}", response_model=List[HardwareMaterialResponse]
+)
 def get_hardware_by_type(
     *,
     db: Session = Depends(get_db),
@@ -654,7 +676,9 @@ def get_hardware_by_type(
 def get_compatible_hardware(
     *,
     db: Session = Depends(get_db),
-    project_id: int = Path(..., ge=1, description="Project ID to find compatible hardware for"),
+    project_id: int = Path(
+        ..., ge=1, description="Project ID to find compatible hardware for"
+    ),
     current_user: Any = Depends(get_current_active_user),
 ) -> List[Dict[str, Any]]:
     """
@@ -684,8 +708,12 @@ def list_supplies_materials(
     ),
     supplies_type: Optional[str] = Query(None, description="Filter by supplies type"),
     color: Optional[str] = Query(None, description="Filter by color"),
-    thread_thickness: Optional[str] = Query(None, description="Filter by thread thickness"),
-    material_composition: Optional[str] = Query(None, description="Filter by material composition"),
+    thread_thickness: Optional[str] = Query(
+        None, description="Filter by thread thickness"
+    ),
+    material_composition: Optional[str] = Query(
+        None, description="Filter by material composition"
+    ),
     min_volume: Optional[float] = Query(None, ge=0, description="Minimum volume"),
     max_volume: Optional[float] = Query(None, ge=0, description="Maximum volume"),
     min_length: Optional[float] = Query(None, ge=0, description="Minimum length"),
@@ -726,7 +754,11 @@ def list_supplies_materials(
     )
 
 
-@router.post("/supplies", response_model=SuppliesMaterialResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/supplies",
+    response_model=SuppliesMaterialResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 def create_supplies_material(
     *,
     db: Session = Depends(get_db),
@@ -753,7 +785,7 @@ def create_supplies_material(
     except ValidationException as e:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={"message": str(e), "errors": e.details}
+            detail={"message": str(e), "errors": e.details},
         )
     except BusinessRuleException as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -798,7 +830,9 @@ def get_supplies_material(
 def update_supplies_material(
     *,
     db: Session = Depends(get_db),
-    material_id: int = Path(..., ge=1, description="The ID of the supplies material to update"),
+    material_id: int = Path(
+        ..., ge=1, description="The ID of the supplies material to update"
+    ),
     material_in: SuppliesMaterialUpdate,
     current_user: Any = Depends(get_current_active_user),
 ) -> SuppliesMaterialResponse:
@@ -830,13 +864,15 @@ def update_supplies_material(
     except ValidationException as e:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={"message": str(e), "errors": e.details}
+            detail={"message": str(e), "errors": e.details},
         )
     except BusinessRuleException as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.get("/supplies/by-type/{supplies_type}", response_model=List[SuppliesMaterialResponse])
+@router.get(
+    "/supplies/by-type/{supplies_type}", response_model=List[SuppliesMaterialResponse]
+)
 def get_supplies_by_type(
     *,
     db: Session = Depends(get_db),
@@ -863,7 +899,9 @@ def get_consumable_usage_rate(
     *,
     db: Session = Depends(get_db),
     material_id: int = Path(..., ge=1, description="ID of the supplies material"),
-    time_period_days: int = Query(30, ge=1, le=365, description="Time period in days for usage calculation"),
+    time_period_days: int = Query(
+        30, ge=1, le=365, description="Time period in days for usage calculation"
+    ),
     current_user: Any = Depends(get_current_active_user),
 ) -> Dict[str, Any]:
     """

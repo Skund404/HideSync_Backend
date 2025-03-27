@@ -15,7 +15,7 @@ from app.db.models.enums import (
     MaterialType,
     HardwareType,
     HardwareMaterial as HardwareMaterialEnum,
-    HardwareFinish
+    HardwareFinish,
 )
 from app.services.material_service import MaterialService
 from app.core.exceptions import (
@@ -41,13 +41,13 @@ class HardwareMaterialService(MaterialService):
     """
 
     def __init__(
-            self,
-            session: Session,
-            repository=None,
-            security_context=None,
-            event_bus=None,
-            cache_service=None,
-            key_service=None,
+        self,
+        session: Session,
+        repository=None,
+        security_context=None,
+        event_bus=None,
+        cache_service=None,
+        key_service=None,
     ):
         """
         Initialize HardwareMaterialService with dependencies.
@@ -70,7 +70,9 @@ class HardwareMaterialService(MaterialService):
         )
 
     def create_hardware_material(
-            self, material_data: Union[Dict[str, Any], HardwareMaterialCreate], user_id: Optional[int] = None
+        self,
+        material_data: Union[Dict[str, Any], HardwareMaterialCreate],
+        user_id: Optional[int] = None,
     ) -> HardwareMaterial:
         """
         Create a new hardware material with specialized validation.
@@ -109,10 +111,10 @@ class HardwareMaterialService(MaterialService):
             return material
 
     def update_hardware_material(
-            self,
-            material_id: int,
-            material_data: Union[Dict[str, Any], HardwareMaterialUpdate],
-            user_id: Optional[int] = None,
+        self,
+        material_id: int,
+        material_data: Union[Dict[str, Any], HardwareMaterialUpdate],
+        user_id: Optional[int] = None,
     ) -> HardwareMaterial:
         """
         Update a hardware material with specialized validation.
@@ -145,7 +147,10 @@ class HardwareMaterialService(MaterialService):
                 raise BusinessRuleException(
                     f"Material with ID {material_id} is not a hardware material",
                     "INVALID_MATERIAL_TYPE",
-                    {"expected_type": MaterialType.HARDWARE.value, "actual_type": material.material_type}
+                    {
+                        "expected_type": MaterialType.HARDWARE.value,
+                        "actual_type": material.material_type,
+                    },
                 )
 
             # Store original for event creation
@@ -178,14 +183,14 @@ class HardwareMaterialService(MaterialService):
             return updated
 
     def get_hardware_materials(
-            self,
-            skip: int = 0,
-            limit: int = 100,
-            hardware_type: Optional[HardwareType] = None,
-            hardware_material: Optional[HardwareMaterialEnum] = None,
-            finish: Optional[HardwareFinish] = None,
-            size: Optional[str] = None,
-            color: Optional[str] = None,
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        hardware_type: Optional[HardwareType] = None,
+        hardware_material: Optional[HardwareMaterialEnum] = None,
+        finish: Optional[HardwareFinish] = None,
+        size: Optional[str] = None,
+        color: Optional[str] = None,
     ) -> List[HardwareMaterial]:
         """
         Get hardware materials with specialized filtering options.
@@ -247,15 +252,18 @@ class HardwareMaterialService(MaterialService):
             raise BusinessRuleException(
                 f"Material with ID {material_id} is not a hardware material",
                 "INVALID_MATERIAL_TYPE",
-                {"expected_type": MaterialType.HARDWARE.value, "actual_type": material.material_type}
+                {
+                    "expected_type": MaterialType.HARDWARE.value,
+                    "actual_type": material.material_type,
+                },
             )
 
         return material
 
     def get_hardware_by_type_and_size(
-            self,
-            hardware_type: HardwareType,
-            size: Optional[str] = None,
+        self,
+        hardware_type: HardwareType,
+        size: Optional[str] = None,
     ) -> List[HardwareMaterial]:
         """
         Find hardware materials by type and optional size.
@@ -277,10 +285,7 @@ class HardwareMaterialService(MaterialService):
 
         return self.repository.find_by_criteria(filters)
 
-    def get_compatible_hardware(
-            self,
-            project_id: int
-    ) -> List[Dict[str, Any]]:
+    def get_compatible_hardware(self, project_id: int) -> List[Dict[str, Any]]:
         """
         Get hardware materials compatible with a project.
 
@@ -302,20 +307,24 @@ class HardwareMaterialService(MaterialService):
         for material in hardware_materials:
             # In a real implementation, this would check project requirements
             # against hardware attributes to calculate a compatibility score
-            result.append({
-                "material_id": material.id,
-                "name": material.name,
-                "hardware_type": material.hardware_type,
-                "size": material.size,
-                "compatibility_score": 100,  # Placeholder score
-                "in_stock": material.quantity > 0,
-                "quantity_available": material.quantity,
-            })
+            result.append(
+                {
+                    "material_id": material.id,
+                    "name": material.name,
+                    "hardware_type": material.hardware_type,
+                    "size": material.size,
+                    "compatibility_score": 100,  # Placeholder score
+                    "in_stock": material.quantity > 0,
+                    "quantity_available": material.quantity,
+                }
+            )
 
         # Sort by compatibility score (descending)
         return sorted(result, key=lambda x: x["compatibility_score"], reverse=True)
 
-    def _validate_hardware_material(self, data: Dict[str, Any], is_update: bool = False) -> None:
+    def _validate_hardware_material(
+        self, data: Dict[str, Any], is_update: bool = False
+    ) -> None:
         """
         Validate hardware-specific fields and business rules.
 
@@ -333,14 +342,18 @@ class HardwareMaterialService(MaterialService):
             try:
                 HardwareType(data["hardware_type"])
             except ValueError:
-                errors["hardware_type"] = [f"Invalid hardware type: {data['hardware_type']}"]
+                errors["hardware_type"] = [
+                    f"Invalid hardware type: {data['hardware_type']}"
+                ]
 
         # Check hardware material is valid
         if "hardware_material" in data and data["hardware_material"] is not None:
             try:
                 HardwareMaterialEnum(data["hardware_material"])
             except ValueError:
-                errors["hardware_material"] = [f"Invalid hardware material: {data['hardware_material']}"]
+                errors["hardware_material"] = [
+                    f"Invalid hardware material: {data['hardware_material']}"
+                ]
 
         # Check finish is valid
         if "finish" in data and data["finish"] is not None:

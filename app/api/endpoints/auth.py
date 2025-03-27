@@ -22,6 +22,50 @@ from app.db.models.user import User
 router = APIRouter()
 
 
+@router.post("/login", response_model=schemas.Token)
+async def login_for_access_token(
+    db: Session = Depends(deps.get_db), form_data: OAuth2PasswordRequestForm = Depends()
+) -> Any:
+    """
+    OAuth2 compatible token login, get an access token for future requests.
+    """
+    user_service = UserService(db)
+    user = user_service.authenticate_user(
+        email=form_data.username,  # OAuth2 uses 'username' field for the identifier
+        password=form_data.password,
+    )
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    elif not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Inactive user"
+        )
+
+    # Generate access token with user ID (not email) as subject
+    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = security.create_access_token(
+        data={"sub": str(user.id)},  # Use ID, not email
+        expires_delta=access_token_expires,
+    )
+
+    # Always generate refresh token
+    refresh_token_expires = timedelta(days=30)  # 30 days for refresh token
+    refresh_token = security.create_refresh_token(
+        subject=str(user.id),
+        expires_delta=refresh_token_expires,
+    )
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "refresh_token": refresh_token  # Always include refresh token
+    }
+
+
 @router.post("/refresh", response_model=schemas.Token)
 def refresh_token(
     refresh_token_in: schemas.TokenRefresh = Body(...),

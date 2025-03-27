@@ -54,11 +54,16 @@ from app.repositories.recurring_project_repository import (
 from app.repositories.shipment_repository import ShipmentRepository
 from app.repositories.timeline_task_repository import TimelineTaskRepository
 from app.repositories.refund_repository import RefundRepository
+
 # New imports
 from app.repositories.communication_repository import CommunicationRepository
-from app.repositories.customer_communication_repository import CustomerCommunicationRepository
+from app.repositories.customer_communication_repository import (
+    CustomerCommunicationRepository,
+)
 from app.repositories.file_metadata_repository import FileMetadataRepository
-from app.repositories.inventory_transaction_repository import InventoryTransactionRepository
+from app.repositories.inventory_transaction_repository import (
+    InventoryTransactionRepository,
+)
 from app.repositories.password_reset_repository import PasswordResetRepository
 from app.repositories.role_repository import RoleRepository, PermissionRepository
 from app.repositories.supplier_history_repository import SupplierHistoryRepository
@@ -255,7 +260,9 @@ class RepositoryFactory:
         """Create a CommunicationRepository instance."""
         return CommunicationRepository(self.session, self.encryption_service)
 
-    def create_customer_communication_repository(self) -> CustomerCommunicationRepository:
+    def create_customer_communication_repository(
+        self,
+    ) -> CustomerCommunicationRepository:
         """Create a CustomerCommunicationRepository instance."""
         return CustomerCommunicationRepository(self.session, self.encryption_service)
 

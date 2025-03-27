@@ -141,12 +141,15 @@ class RefundService(BaseService[Refund]):
             # Validate sale existence
             sale_id = data.get("sale_id")
             if not sale_id:
-                raise ValidationException("Sale ID is required", {"sale_id": ["This field is required"]})
+                raise ValidationException(
+                    "Sale ID is required", {"sale_id": ["This field is required"]}
+                )
 
             if self.sale_service:
                 sale = self.sale_service.get_by_id(sale_id)
                 if not sale:
                     from app.core.exceptions import SaleNotFoundException
+
                     raise SaleNotFoundException(sale_id)
 
                 # Validate refund amount

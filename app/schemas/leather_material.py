@@ -80,7 +80,7 @@ class LeatherMaterialCreate(LeatherMaterialBase):
                 "reorder_point": 1,
                 "cost": 120.00,
                 "supplier_id": 1,
-                "storage_location": "Shelf A-12"
+                "storage_location": "Shelf A-12",
             }
         }
 
@@ -144,7 +144,7 @@ class LeatherMaterialUpdate(BaseModel):
                 "color": "Dark Brown",
                 "finish": "PULL_UP",
                 "quantity": 5.0,
-                "notes": "New inventory from recent order"
+                "notes": "New inventory from recent order",
             }
         }
 

@@ -20,9 +20,9 @@ __all__ = [
     "UserUpdate",
     "UserBase",
     "UserWithPermissions",
-    "UserPasswordReset", #Add this
-    "UserPasswordChange", #Add this
-    "UserPasswordResetConfirm", #Add this
+    "UserPasswordReset",  # Add this
+    "UserPasswordChange",  # Add this
+    "UserPasswordResetConfirm",  # Add this
     "UserListParams",
     # "PasswordReset",  # Remove this as it's in user.py
     # "PasswordChange",  # Remove this as it's in user.py
@@ -134,5 +134,5 @@ __all__ = [
     "PurchaseCreate",
     "PurchaseUpdate",
     "PurchaseResponse",
-    "PurchaseListResponse"
+    "PurchaseListResponse",
 ]

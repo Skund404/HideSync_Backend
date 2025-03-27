@@ -26,6 +26,7 @@ from sqlalchemy import (
     Float,
     UniqueConstraint,
 )
+
 # Assuming Mapped and mapped_column are needed if using newer SQLAlchemy syntax
 # If not, remove these imports.
 from sqlalchemy.orm import relationship, validates, Mapped, mapped_column
@@ -348,15 +349,16 @@ class DocumentationResource(AbstractBase, ValidationMixin, TimestampMixin):
             value = getattr(self, field, None)
             if isinstance(value, str):
                 import json
+
                 try:
                     result[field] = json.loads(value)
                 except json.JSONDecodeError:
                     # Handle potential invalid JSON string, default to empty list/dict
                     result[field] = [] if field != "media_attachments" else {}
             elif value is None:
-                 result[field] = [] if field != "media_attachments" else {}
+                result[field] = [] if field != "media_attachments" else {}
             else:
-                 result[field] = value # Already a list/dict
+                result[field] = value  # Already a list/dict
 
         # Add calculated properties
         result["word_count"] = self.word_count
@@ -505,7 +507,7 @@ class ContextualHelpMapping(AbstractBase, ValidationMixin, TimestampMixin):
             ValueError: If score is outside valid range
         """
         if not isinstance(score, int):
-             raise ValueError("Relevance score must be an integer")
+            raise ValueError("Relevance score must be an integer")
         if score < 1 or score > 100:
             raise ValueError("Relevance score must be between 1 and 100")
         return score
@@ -513,4 +515,3 @@ class ContextualHelpMapping(AbstractBase, ValidationMixin, TimestampMixin):
     def __repr__(self) -> str:
         """Return string representation of the ContextualHelpMapping."""
         return f"<ContextualHelpMapping(id='{self.id}', resource_id='{self.resource_id}', context_key='{self.context_key}')>"
-

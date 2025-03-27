@@ -29,11 +29,11 @@ class SupplierHistoryRepository(BaseRepository[SupplierHistory]):
         self.model = SupplierHistory
 
     def get_history_by_supplier(
-            self,
-            supplier_id: int,
-            order_by: str = "change_date",
-            order_dir: str = "desc",
-            limit: int = 50
+        self,
+        supplier_id: int,
+        order_by: str = "change_date",
+        order_dir: str = "desc",
+        limit: int = 50,
     ) -> List[SupplierHistory]:
         """
         Get history entries for a specific supplier.
@@ -47,7 +47,9 @@ class SupplierHistoryRepository(BaseRepository[SupplierHistory]):
         Returns:
             List of supplier history entries
         """
-        query = self.session.query(self.model).filter(self.model.supplier_id == supplier_id)
+        query = self.session.query(self.model).filter(
+            self.model.supplier_id == supplier_id
+        )
 
         # Apply ordering
         if order_dir.lower() == "desc":
@@ -63,7 +65,7 @@ class SupplierHistoryRepository(BaseRepository[SupplierHistory]):
         return [self._decrypt_sensitive_fields(entity) for entity in entities]
 
     def get_recent_history(
-            self, cutoff_date: datetime, limit: int = 1000
+        self, cutoff_date: datetime, limit: int = 1000
     ) -> List[SupplierHistory]:
         """
         Get history entries after a cutoff date.
@@ -87,7 +89,7 @@ class SupplierHistoryRepository(BaseRepository[SupplierHistory]):
         return [self._decrypt_sensitive_fields(entity) for entity in entities]
 
     def get_history_by_status(
-            self, status: str, limit: int = 100
+        self, status: str, limit: int = 100
     ) -> List[SupplierHistory]:
         """
         Get history entries with a specific new status.
@@ -110,9 +112,7 @@ class SupplierHistoryRepository(BaseRepository[SupplierHistory]):
         entities = query.all()
         return [self._decrypt_sensitive_fields(entity) for entity in entities]
 
-    def get_status_count_by_month(
-            self, months: int = 12
-    ) -> Dict[str, Dict[str, int]]:
+    def get_status_count_by_month(self, months: int = 12) -> Dict[str, Dict[str, int]]:
         """
         Get status change counts grouped by month.
 

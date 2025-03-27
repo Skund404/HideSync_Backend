@@ -16,6 +16,7 @@ from app.db.models.enums import ProjectType, ProjectStatus, ComponentType
 # Existing schemas can remain the same
 class TimelineTaskBase(BaseModel):
     """Base schema for timeline task data."""
+
     name: str = Field(..., description="Name of the task")
     start_date: datetime = Field(..., description="Start date and time for the task")
     end_date: datetime = Field(..., description="End date and time for the task")
@@ -36,6 +37,7 @@ class ProjectTemplateComponentBase(BaseModel):
     """
     Base schema for project template component data.
     """
+
     component_id: int = Field(..., description="ID of the component")
     quantity: int = Field(..., description="Quantity of this component needed", gt=0)
 
@@ -44,6 +46,7 @@ class ProjectTemplateComponentCreate(ProjectTemplateComponentBase):
     """
     Schema for adding a component to a project template.
     """
+
     pass
 
 
@@ -51,6 +54,7 @@ class ProjectTemplateComponentInDB(ProjectTemplateComponentBase):
     """
     Schema for project template component information as stored in the database.
     """
+
     id: int = Field(
         ..., description="Unique identifier for the template component relation"
     )
@@ -64,6 +68,7 @@ class ProjectTemplateComponentResponse(ProjectTemplateComponentInDB):
     """
     Schema for project template component responses in the API.
     """
+
     component_name: Optional[str] = Field(None, description="Name of the component")
     component_type: Optional[ComponentType] = Field(
         None, description="Type of the component"
@@ -77,13 +82,16 @@ class ProjectTemplateBase(BaseModel):
     """
     Base schema for project template data.
     """
+
     name: str = Field(
         ..., description="Name of the template", min_length=1, max_length=100
     )
     description: Optional[str] = Field(
         None, description="Detailed description of the template"
     )
-    project_type: ProjectType = Field(..., description="Type of projects this template is for")
+    project_type: ProjectType = Field(
+        ..., description="Type of projects this template is for"
+    )
     skill_level: Optional[str] = Field(
         None, description="Required skill level for this project"
     )
@@ -107,6 +115,7 @@ class ProjectTemplateCreate(ProjectTemplateBase):
     """
     Schema for creating a new project template.
     """
+
     components: Optional[List[ProjectTemplateComponentCreate]] = Field(
         None, description="Components for this template"
     )
@@ -116,6 +125,7 @@ class ProjectTemplateUpdate(BaseModel):
     """
     Schema for updating project template information.
     """
+
     name: Optional[str] = Field(
         None, description="Name of the template", min_length=1, max_length=100
     )
@@ -151,6 +161,7 @@ class ProjectTemplateInDB(ProjectTemplateBase):
     """
     Schema for project template information as stored in the database.
     """
+
     id: int = Field(..., description="Unique identifier for the template")
     created_at: datetime = Field(
         ..., description="Timestamp when the template was created"
@@ -167,6 +178,7 @@ class ProjectTemplateResponse(ProjectTemplateInDB):
     """
     Schema for project template responses in the API.
     """
+
     components: List[ProjectTemplateComponentResponse] = Field(
         ..., description="Components included in the template"
     )
@@ -182,6 +194,7 @@ class ProjectTemplateList(BaseModel):
     """
     Schema for paginated project template list responses.
     """
+
     items: List[ProjectTemplateResponse]
     total: int = Field(..., description="Total number of templates matching the query")
     page: int = Field(..., description="Current page number")

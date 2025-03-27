@@ -18,7 +18,7 @@ from app.schemas.shipment import (
     ShipmentUpdate,
     ShipmentShip,
     ShipmentResponse,
-    TrackingUpdate
+    TrackingUpdate,
 )
 from app.services.shipment_service import ShipmentService
 from app.core.exceptions import (
@@ -63,7 +63,9 @@ def create_shipment(
 def get_shipment(
     *,
     db: Session = Depends(get_db),
-    shipment_id: int = Path(..., ge=1, description="The ID of the shipment to retrieve"),
+    shipment_id: int = Path(
+        ..., ge=1, description="The ID of the shipment to retrieve"
+    ),
     current_user: Any = Depends(get_current_active_user),
 ) -> ShipmentResponse:
     """
@@ -121,7 +123,9 @@ def update_shipment(
     """
     shipment_service = ShipmentService(db)
     try:
-        return shipment_service.update(shipment_id, shipment_in.dict(exclude_unset=True))
+        return shipment_service.update(
+            shipment_id, shipment_in.dict(exclude_unset=True)
+        )
     except EntityNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -279,7 +283,9 @@ def get_pending_shipments(
     db: Session = Depends(get_db),
     current_user: Any = Depends(get_current_active_user),
     skip: int = Query(0, ge=0, description="Number of records to skip"),
-    limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
+    limit: int = Query(
+        100, ge=1, le=1000, description="Maximum number of records to return"
+    ),
 ) -> List[ShipmentResponse]:
     """
     Get all pending shipments.

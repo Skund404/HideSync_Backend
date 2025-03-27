@@ -30,11 +30,11 @@ class SupplierRatingRepository(BaseRepository[SupplierRating]):
         self.model = SupplierRating
 
     def get_ratings_by_supplier(
-            self,
-            supplier_id: int,
-            order_by: str = "rating_date",
-            order_dir: str = "desc",
-            limit: int = 50
+        self,
+        supplier_id: int,
+        order_by: str = "rating_date",
+        order_dir: str = "desc",
+        limit: int = 50,
     ) -> List[SupplierRating]:
         """
         Get rating entries for a specific supplier.
@@ -48,7 +48,9 @@ class SupplierRatingRepository(BaseRepository[SupplierRating]):
         Returns:
             List of supplier rating entries
         """
-        query = self.session.query(self.model).filter(self.model.supplier_id == supplier_id)
+        query = self.session.query(self.model).filter(
+            self.model.supplier_id == supplier_id
+        )
 
         # Apply ordering
         if order_dir.lower() == "desc":
@@ -64,7 +66,7 @@ class SupplierRatingRepository(BaseRepository[SupplierRating]):
         return [self._decrypt_sensitive_fields(entity) for entity in entities]
 
     def get_recent_ratings(
-            self, cutoff_date: datetime, limit: int = 1000
+        self, cutoff_date: datetime, limit: int = 1000
     ) -> List[SupplierRating]:
         """
         Get rating entries after a cutoff date.
@@ -116,10 +118,7 @@ class SupplierRatingRepository(BaseRepository[SupplierRating]):
             Dictionary with rating counts by value (1-5)
         """
         query = (
-            self.session.query(
-                self.model.new_rating,
-                func.count(self.model.id)
-            )
+            self.session.query(self.model.new_rating, func.count(self.model.id))
             .filter(self.model.supplier_id == supplier_id)
             .group_by(self.model.new_rating)
         )
@@ -132,7 +131,7 @@ class SupplierRatingRepository(BaseRepository[SupplierRating]):
         return result
 
     def get_top_rated_suppliers(
-            self, min_ratings: int = 3, limit: int = 5
+        self, min_ratings: int = 3, limit: int = 5
     ) -> List[Tuple[int, float]]:
         """
         Get top-rated suppliers with a minimum number of ratings.
@@ -147,8 +146,7 @@ class SupplierRatingRepository(BaseRepository[SupplierRating]):
         # Subquery to count ratings per supplier
         rating_counts = (
             self.session.query(
-                self.model.supplier_id,
-                func.count(self.model.id).label("rating_count")
+                self.model.supplier_id, func.count(self.model.id).label("rating_count")
             )
             .group_by(self.model.supplier_id)
             .having(func.count(self.model.id) >= min_ratings)
@@ -159,23 +157,20 @@ class SupplierRatingRepository(BaseRepository[SupplierRating]):
         query = (
             self.session.query(
                 self.model.supplier_id,
-                func.avg(self.model.new_rating).label("avg_rating")
+                func.avg(self.model.new_rating).label("avg_rating"),
             )
-            .join(
-                rating_counts,
-                self.model.supplier_id == rating_counts.c.supplier_id
-            )
+            .join(rating_counts, self.model.supplier_id == rating_counts.c.supplier_id)
             .group_by(self.model.supplier_id)
             .order_by(desc("avg_rating"))
             .limit(limit)
         )
 
         # Return list of (supplier_id, average_rating) tuples
-        return [(supplier_id, float(avg_rating)) for supplier_id, avg_rating in query.all()]
+        return [
+            (supplier_id, float(avg_rating)) for supplier_id, avg_rating in query.all()
+        ]
 
-    def get_rating_trends(
-            self, supplier_id: int, months: int = 12
-    ) -> Dict[str, float]:
+    def get_rating_trends(self, supplier_id: int, months: int = 12) -> Dict[str, float]:
         """
         Get average rating by month for a supplier.
 

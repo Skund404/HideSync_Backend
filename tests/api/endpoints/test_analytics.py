@@ -15,11 +15,14 @@ from app.services.user_service import UserService
 from app.core import security
 
 # Define a test database URL
-TEST_DATABASE_URL = "sqlite:///./test.db"  # Use an in-memory SQLite database for testing
+TEST_DATABASE_URL = (
+    "sqlite:///./test.db"  # Use an in-memory SQLite database for testing
+)
 
 # Create a test engine and session
 engine = create_engine(TEST_DATABASE_URL)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
 
 # Override the database dependency
 def override_get_db():
@@ -69,6 +72,7 @@ def test_app():
 
     # Drop the test database tables
     Base.metadata.drop_all(bind=engine)
+
 
 @pytest.fixture()
 def client(test_app):

@@ -43,38 +43,38 @@ def test_process_shopify_webhook():
                 "title": "Leather Wallet",
                 "quantity": 1,
                 "price": "99.99",
-                "sku": "LW-001"
+                "sku": "LW-001",
             },
             {
                 "id": 9876543211,
                 "title": "Leather Belt",
                 "quantity": 1,
                 "price": "99.99",
-                "sku": "LB-001"
-            }
+                "sku": "LB-001",
+            },
         ],
         "customer": {
             "id": 5555555555,
             "email": "customer@example.com",
             "first_name": "John",
-            "last_name": "Doe"
+            "last_name": "Doe",
         },
-        "created_at": datetime.now().isoformat()
+        "created_at": datetime.now().isoformat(),
     }
 
     # Create a signature using a test shared secret
     test_shared_secret = "shpss_1234567890abcdef1234567890abcdef"
     signature = hmac.new(
-        test_shared_secret.encode('utf-8'),
-        json.dumps(payload).encode('utf-8'),
-        hashlib.sha256
+        test_shared_secret.encode("utf-8"),
+        json.dumps(payload).encode("utf-8"),
+        hashlib.sha256,
     ).digest()
-    encoded_signature = base64.b64encode(signature).decode('utf-8')
+    encoded_signature = base64.b64encode(signature).decode("utf-8")
 
     # Headers for Shopify webhook
     headers = {
         "X-Shopify-Hmac-SHA256": encoded_signature,
-        "X-Shopify-Shop-Domain": "test-shop.myshopify.com"
+        "X-Shopify-Shop-Domain": "test-shop.myshopify.com",
     }
 
     # Mock the platform_integration_service.verify_webhook_signature to return True
@@ -82,9 +82,7 @@ def test_process_shopify_webhook():
 
     # Make request to webhook endpoint
     response = client.post(
-        "/api/webhooks/shopify/test-shop",
-        json=payload,
-        headers=headers
+        "/api/webhooks/shopify/test-shop", json=payload, headers=headers
     )
 
     # Check that response is as expected
@@ -106,46 +104,38 @@ def test_process_etsy_webhook():
                 "transaction_id": 9876543210,
                 "title": "Handcrafted Leather Journal",
                 "quantity": 1,
-                "price": {
-                    "amount": 4999,
-                    "divisor": 100,
-                    "currency_code": "USD"
-                },
+                "price": {"amount": 4999, "divisor": 100, "currency_code": "USD"},
                 "variations": [
                     {
                         "property_id": 555,
                         "value_id": 666,
                         "formatted_name": "Color",
-                        "formatted_value": "Brown"
+                        "formatted_value": "Brown",
                     }
-                ]
+                ],
             }
         ],
         "buyer": {
             "user_id": 5555555555,
             "email": "buyer@example.com",
-            "name": "Jane Smith"
-        }
+            "name": "Jane Smith",
+        },
     }
 
     # Create a signature using a test shared secret
     test_shared_secret = "etsy_api_secret_1234567890abcdef"
     signature = hmac.new(
-        test_shared_secret.encode('utf-8'),
-        json.dumps(payload).encode('utf-8'),
-        hashlib.sha256
+        test_shared_secret.encode("utf-8"),
+        json.dumps(payload).encode("utf-8"),
+        hashlib.sha256,
     ).hexdigest()
 
     # Headers for Etsy webhook
-    headers = {
-        "X-Etsy-Signature": signature
-    }
+    headers = {"X-Etsy-Signature": signature}
 
     # Make request to webhook endpoint
     response = client.post(
-        "/api/webhooks/etsy/test-shop",
-        json=payload,
-        headers=headers
+        "/api/webhooks/etsy/test-shop", json=payload, headers=headers
     )
 
     # Check that response is as expected
@@ -160,10 +150,7 @@ def test_webhook_no_integration():
     payload = {"test": "data"}
 
     # Make request to non-existent shop
-    response = client.post(
-        "/api/webhooks/shopify/non-existent-shop",
-        json=payload
-    )
+    response = client.post("/api/webhooks/shopify/non-existent-shop", json=payload)
 
     # Check that appropriate error is returned
     assert response.status_code == 200  # Still returns 200 as per implementation
@@ -179,7 +166,7 @@ def test_invalid_signature():
     # Invalid signature
     headers = {
         "X-Shopify-Hmac-SHA256": "invalid_signature",
-        "X-Shopify-Shop-Domain": "test-shop.myshopify.com"
+        "X-Shopify-Shop-Domain": "test-shop.myshopify.com",
     }
 
     # Mock the integration existence check to return True,
@@ -187,9 +174,7 @@ def test_invalid_signature():
 
     # Make request with invalid signature
     response = client.post(
-        "/api/webhooks/shopify/test-shop",
-        json=payload,
-        headers=headers
+        "/api/webhooks/shopify/test-shop", json=payload, headers=headers
     )
 
     # Check that appropriate error is returned
@@ -210,7 +195,7 @@ def test_test_webhook_endpoint():
     response = client.post(
         "/api/webhooks/test/shopify/test-shop",
         json={"event_type": "order.created", "payload": payload},
-        headers=headers
+        headers=headers,
     )
 
     # Check that test webhook processed correctly

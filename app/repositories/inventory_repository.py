@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_, func
 from datetime import datetime
 
-from app.db.models.inventory import Inventory, Product
+from app.db.models.inventory import Inventory
 from app.db.models.enums import InventoryStatus
 from app.repositories.base_repository import BaseRepository
 

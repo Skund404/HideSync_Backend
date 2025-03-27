@@ -49,7 +49,9 @@ class ShipmentRepository(BaseRepository[Shipment]):
             return self._decrypt_sensitive_fields(entity)
         return None
 
-    def get_shipments_by_status(self, status: str, skip: int = 0, limit: int = 100) -> List[Shipment]:
+    def get_shipments_by_status(
+        self, status: str, skip: int = 0, limit: int = 100
+    ) -> List[Shipment]:
         """
         Get shipments with a specific status.
 
@@ -65,7 +67,9 @@ class ShipmentRepository(BaseRepository[Shipment]):
         entities = query.offset(skip).limit(limit).all()
         return self._decrypt_sensitive_fields_in_list(entities)
 
-    def get_recent_shipments(self, days: int = 7, skip: int = 0, limit: int = 100) -> List[Shipment]:
+    def get_recent_shipments(
+        self, days: int = 7, skip: int = 0, limit: int = 100
+    ) -> List[Shipment]:
         """
         Get shipments created within the specified number of days.
 
@@ -78,14 +82,18 @@ class ShipmentRepository(BaseRepository[Shipment]):
             List of recent shipments
         """
         cutoff_date = datetime.now() - datetime.timedelta(days=days)
-        query = self.session.query(self.model).filter(
-            self.model.created_at >= cutoff_date
-        ).order_by(desc(self.model.created_at))
+        query = (
+            self.session.query(self.model)
+            .filter(self.model.created_at >= cutoff_date)
+            .order_by(desc(self.model.created_at))
+        )
 
         entities = query.offset(skip).limit(limit).all()
         return self._decrypt_sensitive_fields_in_list(entities)
 
-    def update_shipment_status(self, shipment_id: int, status: str) -> Optional[Shipment]:
+    def update_shipment_status(
+        self, shipment_id: int, status: str
+    ) -> Optional[Shipment]:
         """
         Update a shipment's status.
 
@@ -106,12 +114,12 @@ class ShipmentRepository(BaseRepository[Shipment]):
         return self._decrypt_sensitive_fields(shipment)
 
     def mark_shipped(
-            self,
-            shipment_id: int,
-            tracking_number: str,
-            method: str,
-            cost: float,
-            date: Optional[datetime] = None,
+        self,
+        shipment_id: int,
+        tracking_number: str,
+        method: str,
+        cost: float,
+        date: Optional[datetime] = None,
     ) -> Optional[Shipment]:
         """
         Mark a shipment as shipped with tracking details.
@@ -142,7 +150,7 @@ class ShipmentRepository(BaseRepository[Shipment]):
         return self._decrypt_sensitive_fields(shipment)
 
     def update_tracking(
-            self, shipment_id: int, tracking_number: str, shipping_provider: str
+        self, shipment_id: int, tracking_number: str, shipping_provider: str
     ) -> Optional[Shipment]:
         """
         Update tracking information for a shipment.

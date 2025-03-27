@@ -1626,18 +1626,20 @@ class UserRole(Enum):
     CUSTOMER = "customer"
     GUEST = "guest"
 
+
 class ToolStatus(enum.Enum):
     """Represents the possible statuses of a tool."""
-    IN_STOCK = "In Stock"           # Available for use
-    CHECKED_OUT = "Checked Out"     # Currently assigned or in use
-    IN_MAINTENANCE = "In Maintenance" # Undergoing repair/sharpening
-    RETIRED = "Retired"             # No longer in service
-    LOST = "Lost"                   # Missing or unaccounted for
 
+    IN_STOCK = "In Stock"  # Available for use
+    CHECKED_OUT = "Checked Out"  # Currently assigned or in use
+    IN_MAINTENANCE = "In Maintenance"  # Undergoing repair/sharpening
+    RETIRED = "Retired"  # No longer in service
+    LOST = "Lost"  # Missing or unaccounted for
 
 
 class FileType(enum.Enum):
     """Represents common file types for patterns or resources."""
+
     PDF = "pdf"
     SVG = "svg"
     DXF = "dxf"
@@ -1652,11 +1654,13 @@ class FileType(enum.Enum):
 
 class InventoryItemType(enum.Enum):
     """Distinguishes between different types of items in inventory."""
+
     MATERIAL = "material"
     TOOL = "tool"
-    PRODUCT = "product" # Finished goods
-    COMPONENT = "component" # If components are tracked separately
+    PRODUCT = "product"  # Finished goods
+    COMPONENT = "component"  # If components are tracked separately
     OTHER = "other"
+
 
 class InventoryTransactionType(Enum):
     """
@@ -1670,8 +1674,12 @@ class InventoryTransactionType(Enum):
     PROJECT_ALLOCATION = "project_allocation"  # Reserved for a project
     PROJECT_DEALLOCATION = "project_deallocation"  # Released from project reservation
     WASTAGE = "wastage"  # Stock out due to damage, scrap, etc.
-    ADJUSTMENT_INCREASE = "adjustment_increase"  # Stock in due to correction, count, etc.
-    ADJUSTMENT_DECREASE = "adjustment_decrease"  # Stock out due to correction, count, etc.
+    ADJUSTMENT_INCREASE = (
+        "adjustment_increase"  # Stock in due to correction, count, etc.
+    )
+    ADJUSTMENT_DECREASE = (
+        "adjustment_decrease"  # Stock out due to correction, count, etc.
+    )
     CUSTOMER_RETURN = "customer_return"  # Stock in from customer
     SUPPLIER_RETURN = "supplier_return"  # Stock out back to supplier
     TRANSFER_OUT = "transfer_out"  # Stock out from one location
@@ -1679,26 +1687,35 @@ class InventoryTransactionType(Enum):
     INITIAL_STOCK = "initial_stock"  # Stock in when first adding item
     CONVERSION_IN = "conversion_in"  # Stock in as result of converting another item
     CONVERSION_OUT = "conversion_out"  # Stock out when converting to another item
-    INTERNAL_USE = "internal_use"  # Stock out for non-production use (e.g., samples, testing)
-    CONSIGNMENT_RECEIPT = "consignment_receipt" # Stock in (consignment)
-    CONSIGNMENT_SALE = "consignment_sale" # Stock out (consignment)
-    CONSIGNMENT_RETURN = "consignment_return" # Stock out (returning unsold consignment)
-    FOUND = "found" # Stock in for previously lost items
-    LOST_THEFT = "lost_theft" # Stock out due to loss or theft
-    OTHER = "other" # Catch-all for less common types
+    INTERNAL_USE = (
+        "internal_use"  # Stock out for non-production use (e.g., samples, testing)
+    )
+    CONSIGNMENT_RECEIPT = "consignment_receipt"  # Stock in (consignment)
+    CONSIGNMENT_SALE = "consignment_sale"  # Stock out (consignment)
+    CONSIGNMENT_RETURN = (
+        "consignment_return"  # Stock out (returning unsold consignment)
+    )
+    FOUND = "found"  # Stock in for previously lost items
+    LOST_THEFT = "lost_theft"  # Stock out due to loss or theft
+    OTHER = "other"  # Catch-all for less common types
+
 
 class StorageLocationStatus(Enum):
     """Status for storage locations."""
+
     ACTIVE = "active"
     INACTIVE = "inactive"
     UNDER_MAINTENANCE = "under_maintenance"
     ARCHIVED = "archived"
 
+
 # Added alias for backward compatibility
 HardwareMaterial = HardwareMaterialEnum
 
+
 class TimelineTaskStatus(Enum):
     """Status values for timeline tasks within a project."""
+
     IN_PROGRESS = "in_progress"
     PENDING = "pending"
     PLANNING = "planning"
@@ -1708,8 +1725,10 @@ class TimelineTaskStatus(Enum):
     WAITING = "waiting"
     BLOCKED = "blocked"
 
+
 class PickingListItemStatus(Enum):
     """Status values for individual items in a picking list."""
+
     PENDING = "pending"
     COMPLETE = "complete"
     PARTIAL = "partial"

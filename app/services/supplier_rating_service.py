@@ -80,7 +80,9 @@ class SupplierRatingService(BaseService[SupplierRating]):
         """
         self.session = session
         self.supplier_repository = supplier_repository or SupplierRepository(session)
-        self.repository = supplier_rating_repository or SupplierRatingRepository(session)
+        self.repository = supplier_rating_repository or SupplierRatingRepository(
+            session
+        )
         self.security_context = security_context
         self.event_bus = event_bus
         self.cache_service = cache_service
@@ -114,13 +116,17 @@ class SupplierRatingService(BaseService[SupplierRating]):
             # Check if supplier exists
             supplier = self.supplier_repository.get_by_id(supplier_id)
             if not supplier:
-                raise EntityNotFoundException(f"Supplier with ID {supplier_id} not found")
+                raise EntityNotFoundException(
+                    f"Supplier with ID {supplier_id} not found"
+                )
 
             # Get previous rating for the event
             previous_rating = supplier.rating or 0
 
             # Get user ID from security context if available
-            user_id = self.security_context.current_user.id if self.security_context else None
+            user_id = (
+                self.security_context.current_user.id if self.security_context else None
+            )
 
             # Create rating record
             rating_data = {
@@ -157,7 +163,9 @@ class SupplierRatingService(BaseService[SupplierRating]):
 
             return rating_entry
 
-    def get_ratings_by_supplier(self, supplier_id: int, limit: int = 50) -> List[SupplierRating]:
+    def get_ratings_by_supplier(
+        self, supplier_id: int, limit: int = 50
+    ) -> List[SupplierRating]:
         """
         Get rating entries for a specific supplier.
 

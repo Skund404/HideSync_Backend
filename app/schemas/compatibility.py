@@ -39,7 +39,7 @@ from .user import (
     UserPasswordReset,
     UserPasswordResetConfirm,
     UserPasswordChange,
-    UserListParams
+    UserListParams,
 )
 
 # ===============================
@@ -118,6 +118,7 @@ class UserWithPermissions(User):
 
     permissions: Set[str] = set()
     role_name: Optional[str] = None
+
 
 # ===============================
 # CUSTOMER SCHEMAS
@@ -1351,6 +1352,7 @@ class RefundUpdate(BaseModel):
 # COMPONENT SCHEMAS
 # ===============================
 
+
 class ComponentBase(BaseModel):
     """Base component model with common fields."""
 
@@ -1443,6 +1445,7 @@ class ComponentListResponse(BaseModel):
 # PATTERN SCHEMAS
 # ===============================
 
+
 class PatternBase(BaseModel):
     """Base pattern model with common fields."""
 
@@ -1517,6 +1520,7 @@ class PatternListResponse(BaseModel):
 # PROJECT TEMPLATE SCHEMAS
 # ===============================
 
+
 class ProjectTemplateComponentBase(BaseModel):
     """Base project template component model."""
 
@@ -1580,9 +1584,11 @@ class ProjectTemplateResponse(ProjectTemplateBase):
     class Config:
         from_attributes = True
 
+
 # ===============================
 # PURCHASE SCHEMAS
 # ===============================
+
 
 class PurchaseItemBase(BaseModel):
     """Base schema for purchase item data."""
@@ -1596,11 +1602,13 @@ class PurchaseItemBase(BaseModel):
     unit: Optional[str] = None
     notes: Optional[str] = None
 
+
 class PurchaseItemCreate(PurchaseItemBase):
     """Schema for creating a purchase item."""
 
     class Config:
         from_attributes = True
+
 
 class PurchaseItemUpdate(BaseModel):
     """Schema for updating a purchase item."""
@@ -1614,6 +1622,7 @@ class PurchaseItemUpdate(BaseModel):
     unit: Optional[str] = None
     notes: Optional[str] = None
 
+
 class PurchaseItemResponse(PurchaseItemBase):
     """Schema for purchase item response."""
 
@@ -1625,11 +1634,13 @@ class PurchaseItemResponse(PurchaseItemBase):
     class Config:
         from_attributes = True
 
+
 class PurchaseItemListResponse(BaseModel):
     """Schema for list of purchase items response."""
 
     items: List[PurchaseItemResponse]
     total: int
+
 
 class PurchaseReceiveItemData(BaseModel):
     """Schema for receiving a purchase item."""
@@ -1638,6 +1649,7 @@ class PurchaseReceiveItemData(BaseModel):
     quantity_received: int
     notes: Optional[str] = None
 
+
 class PurchaseReceiveData(BaseModel):
     """Schema for receiving purchase items."""
 
@@ -1645,6 +1657,7 @@ class PurchaseReceiveData(BaseModel):
     notes: Optional[str] = None
     receipt_date: Optional[datetime] = Field(default_factory=datetime.now)
     receipt_number: Optional[str] = None
+
 
 class PurchaseBase(BaseModel):
     """Base schema for purchase data."""
@@ -1658,6 +1671,7 @@ class PurchaseBase(BaseModel):
     notes: Optional[str] = None
     invoice: Optional[str] = None
 
+
 class PurchaseCreate(PurchaseBase):
     """Schema for creating a purchase."""
 
@@ -1665,6 +1679,7 @@ class PurchaseCreate(PurchaseBase):
 
     class Config:
         from_attributes = True
+
 
 class PurchaseUpdate(BaseModel):
     """Schema for updating a purchase."""
@@ -1677,6 +1692,7 @@ class PurchaseUpdate(BaseModel):
     payment_status: Optional[str] = None
     notes: Optional[str] = None
     invoice: Optional[str] = None
+
 
 class PurchaseResponse(PurchaseBase):
     """Schema for purchase response."""
@@ -1692,6 +1708,7 @@ class PurchaseResponse(PurchaseBase):
     class Config:
         from_attributes = True
 
+
 class PurchaseListResponse(BaseModel):
     """Schema for list of purchases response."""
 
@@ -1699,5 +1716,3 @@ class PurchaseListResponse(BaseModel):
     total: int
     skip: int
     limit: int
-
-

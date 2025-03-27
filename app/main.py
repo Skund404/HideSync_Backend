@@ -16,6 +16,10 @@ from app.core.config import settings
 from app.core.metrics_middleware import MetricsMiddleware
 from app.core.events import setup_event_handlers
 
+# Configure logging first
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("fastapi")
+
 # Initialize FastAPI app
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -26,35 +30,52 @@ app = FastAPI(
     redoc_url=f"{settings.API_V1_STR}/redoc",
 )
 
-# Set up CORS
-if settings.BACKEND_CORS_ORIGINS:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=[str(origin) for origin in settings.BACKEND_CORS_ORIGINS],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+# Set up CORS - THIS MUST BE THE FIRST MIDDLEWARE
+# Debug the CORS origins setting
+origins = [str(origin) for origin in settings.BACKEND_CORS_ORIGINS]
+logger.info(f"Configured CORS origins: {origins}")
 
-# Add metrics middleware
-app.add_middleware(MetricsMiddleware)
+# If no origins are configured, allow localhost:3000 as fallback
+if not origins:
+    fallback_origins = ["http://localhost:3000", "http://192.168.178.37:3000"]
+    logger.warning(f"No CORS origins configured, using fallbacks: {fallback_origins}")
+    origins = fallback_origins
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("fastapi")
+# Add the CORS middleware FIRST
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=86400,  # 24 hours
+)
 
+# Log requests AFTER CORS middleware
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     logger.info(f"Incoming request: {request.method} {request.url}")
+    # For OPTIONS requests, log the headers
+    if request.method == "OPTIONS":
+        logger.debug(f"OPTIONS request headers: {dict(request.headers)}")
     response = await call_next(request)
     logger.info(f"Outgoing response: {response.status_code}")
     return response
 
-# Add security headers middleware
+# Add metrics middleware
+app.add_middleware(MetricsMiddleware)
+
+# Add security headers middleware (AFTER CORS)
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Middleware to add security headers to responses."""
 
     async def dispatch(self, request, call_next):
+        # Skip preflight OPTIONS requests for CORS
+        if request.method == "OPTIONS":
+            response = await call_next(request)
+            return response
+
         response = await call_next(request)
 
         # Add security headers
@@ -78,6 +99,7 @@ setup_event_handlers(app)
 # Include the API router
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
+
 @app.get("/")
 def root():
     """
@@ -92,8 +114,8 @@ def root():
         "docs": f"{settings.API_V1_STR}/docs",
     }
 
-@app.get("/health")
 
+@app.get("/health")
 def health_check():
     """
     Health check endpoint.

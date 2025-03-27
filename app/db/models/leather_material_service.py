@@ -36,13 +36,13 @@ class LeatherMaterialService(MaterialService):
     """
 
     def __init__(
-            self,
-            session: Session,
-            repository=None,
-            security_context=None,
-            event_bus=None,
-            cache_service=None,
-            key_service=None,
+        self,
+        session: Session,
+        repository=None,
+        security_context=None,
+        event_bus=None,
+        cache_service=None,
+        key_service=None,
     ):
         """
         Initialize LeatherMaterialService with dependencies.
@@ -65,7 +65,9 @@ class LeatherMaterialService(MaterialService):
         )
 
     def create_leather_material(
-            self, material_data: Union[Dict[str, Any], LeatherMaterialCreate], user_id: Optional[int] = None
+        self,
+        material_data: Union[Dict[str, Any], LeatherMaterialCreate],
+        user_id: Optional[int] = None,
     ) -> LeatherMaterial:
         """
         Create a new leather material with specialized validation.
@@ -104,10 +106,10 @@ class LeatherMaterialService(MaterialService):
             return material
 
     def update_leather_material(
-            self,
-            material_id: int,
-            material_data: Union[Dict[str, Any], LeatherMaterialUpdate],
-            user_id: Optional[int] = None,
+        self,
+        material_id: int,
+        material_data: Union[Dict[str, Any], LeatherMaterialUpdate],
+        user_id: Optional[int] = None,
     ) -> LeatherMaterial:
         """
         Update a leather material with specialized validation.
@@ -140,7 +142,10 @@ class LeatherMaterialService(MaterialService):
                 raise BusinessRuleException(
                     f"Material with ID {material_id} is not a leather material",
                     "INVALID_MATERIAL_TYPE",
-                    {"expected_type": MaterialType.LEATHER.value, "actual_type": material.material_type}
+                    {
+                        "expected_type": MaterialType.LEATHER.value,
+                        "actual_type": material.material_type,
+                    },
                 )
 
             # Store original for event creation
@@ -173,16 +178,16 @@ class LeatherMaterialService(MaterialService):
             return updated
 
     def get_leather_materials(
-            self,
-            skip: int = 0,
-            limit: int = 100,
-            leather_type: Optional[LeatherType] = None,
-            min_thickness: Optional[float] = None,
-            max_thickness: Optional[float] = None,
-            animal_source: Optional[str] = None,
-            finish: Optional[LeatherFinish] = None,
-            color: Optional[str] = None,
-            is_full_hide: Optional[bool] = None,
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        leather_type: Optional[LeatherType] = None,
+        min_thickness: Optional[float] = None,
+        max_thickness: Optional[float] = None,
+        animal_source: Optional[str] = None,
+        finish: Optional[LeatherFinish] = None,
+        color: Optional[str] = None,
+        is_full_hide: Optional[bool] = None,
     ) -> List[LeatherMaterial]:
         """
         Get leather materials with specialized filtering options.
@@ -265,17 +270,20 @@ class LeatherMaterialService(MaterialService):
             raise BusinessRuleException(
                 f"Material with ID {material_id} is not a leather material",
                 "INVALID_MATERIAL_TYPE",
-                {"expected_type": MaterialType.LEATHER.value, "actual_type": material.material_type}
+                {
+                    "expected_type": MaterialType.LEATHER.value,
+                    "actual_type": material.material_type,
+                },
             )
 
         return material
 
     def get_leather_material_by_attributes(
-            self,
-            thickness: Optional[float] = None,
-            color: Optional[str] = None,
-            leather_type: Optional[LeatherType] = None,
-            animal_source: Optional[str] = None,
+        self,
+        thickness: Optional[float] = None,
+        color: Optional[str] = None,
+        leather_type: Optional[LeatherType] = None,
+        animal_source: Optional[str] = None,
     ) -> List[LeatherMaterial]:
         """
         Find leather materials by specific attributes.
@@ -326,14 +334,14 @@ class LeatherMaterialService(MaterialService):
             raise BusinessRuleException(
                 f"Cannot calculate area value - material {material_id} has no valid area",
                 "MISSING_AREA",
-                {"material_id": material_id}
+                {"material_id": material_id},
             )
 
         if not material.cost_price:
             raise BusinessRuleException(
                 f"Cannot calculate area value - material {material_id} has no cost price",
                 "MISSING_COST",
-                {"material_id": material_id}
+                {"material_id": material_id},
             )
 
         value_per_unit_area = material.cost_price / material.area
@@ -350,7 +358,9 @@ class LeatherMaterialService(MaterialService):
             "unit": material.unit.value if material.unit else None,
         }
 
-    def _validate_leather_material(self, data: Dict[str, Any], is_update: bool = False) -> None:
+    def _validate_leather_material(
+        self, data: Dict[str, Any], is_update: bool = False
+    ) -> None:
         """
         Validate leather-specific fields and business rules.
 
@@ -368,7 +378,9 @@ class LeatherMaterialService(MaterialService):
             try:
                 LeatherType(data["leather_type"])
             except ValueError:
-                errors["leather_type"] = [f"Invalid leather type: {data['leather_type']}"]
+                errors["leather_type"] = [
+                    f"Invalid leather type: {data['leather_type']}"
+                ]
 
         # Check finish is valid
         if "finish" in data and data["finish"] is not None:

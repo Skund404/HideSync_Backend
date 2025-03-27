@@ -153,15 +153,19 @@ class AnnotationRepository(BaseRepository[Annotation]):
         Returns:
             Count of annotations
         """
-        return self.db.query(func.count(self.model.id)).filter(
-            and_(
-                self.model.entity_type == entity_type,
-                self.model.entity_id == entity_id
+        return (
+            self.db.query(func.count(self.model.id))
+            .filter(
+                and_(
+                    self.model.entity_type == entity_type,
+                    self.model.entity_id == entity_id,
+                )
             )
-        ).scalar()
+            .scalar()
+        )
 
     def get_recent_annotations(
-            self, user_id: Optional[int] = None, limit: int = 10
+        self, user_id: Optional[int] = None, limit: int = 10
     ) -> List[Annotation]:
         """
         Get recent annotations, optionally filtered by user.

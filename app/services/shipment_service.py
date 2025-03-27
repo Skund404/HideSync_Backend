@@ -164,12 +164,15 @@ class ShipmentService(BaseService[Shipment]):
             # Validate sale existence
             sale_id = data.get("sale_id")
             if not sale_id:
-                raise ValidationException("Sale ID is required", {"sale_id": ["This field is required"]})
+                raise ValidationException(
+                    "Sale ID is required", {"sale_id": ["This field is required"]}
+                )
 
             if self.sale_service:
                 sale = self.sale_service.get_by_id(sale_id)
                 if not sale:
                     from app.core.exceptions import SaleNotFoundException
+
                     raise SaleNotFoundException(sale_id)
 
                 # Check if sale already has a shipment
@@ -261,7 +264,9 @@ class ShipmentService(BaseService[Shipment]):
             # Get shipment
             shipment = self.get_by_id(shipment_id)
             if not shipment:
-                raise EntityNotFoundException(f"Shipment with ID {shipment_id} not found")
+                raise EntityNotFoundException(
+                    f"Shipment with ID {shipment_id} not found"
+                )
 
             # Validate shipment is pending
             if shipment.status != "PENDING":
@@ -338,7 +343,9 @@ class ShipmentService(BaseService[Shipment]):
             # Get shipment
             shipment = self.get_by_id(shipment_id)
             if not shipment:
-                raise EntityNotFoundException(f"Shipment with ID {shipment_id} not found")
+                raise EntityNotFoundException(
+                    f"Shipment with ID {shipment_id} not found"
+                )
 
             # Store previous status for event
             previous_status = shipment.status
@@ -403,7 +410,9 @@ class ShipmentService(BaseService[Shipment]):
             # Get shipment
             shipment = self.get_by_id(shipment_id)
             if not shipment:
-                raise EntityNotFoundException(f"Shipment with ID {shipment_id} not found")
+                raise EntityNotFoundException(
+                    f"Shipment with ID {shipment_id} not found"
+                )
 
             # Update tracking information
             updated_shipment = self.repository.update_tracking(

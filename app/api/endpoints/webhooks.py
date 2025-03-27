@@ -19,14 +19,10 @@ from app.api.deps import get_db, get_current_active_user
 from app.core.exceptions import (
     ValidationException,
     BusinessRuleException,
-    EntityNotFoundException
+    EntityNotFoundException,
 )
 from app.db.session import get_db
-from app.schemas.webhook import (
-    WebhookPayload,
-    OrderWebhookPayload,
-    WebhookResponse
-)
+from app.schemas.webhook import WebhookPayload, OrderWebhookPayload, WebhookResponse
 from app.services.platform_integration_service import PlatformIntegrationService
 
 # Create logger
@@ -37,14 +33,14 @@ router = APIRouter()
 
 @router.post("/{platform}/{shop_identifier}", response_model=WebhookResponse)
 async def process_webhook(
-        platform: str = Path(..., description="Platform identifier (shopify, etsy, etc.)"),
-        shop_identifier: str = Path(..., description="Shop identifier or subdomain"),
-        payload: Dict[str, Any] = Body(...),
-        x_shopify_hmac_sha256: Optional[str] = Header(None),
-        x_shopify_shop_domain: Optional[str] = Header(None),
-        x_etsy_signature: Optional[str] = Header(None),
-        x_webhook_signature: Optional[str] = Header(None),
-        db: Session = Depends(get_db)
+    platform: str = Path(..., description="Platform identifier (shopify, etsy, etc.)"),
+    shop_identifier: str = Path(..., description="Shop identifier or subdomain"),
+    payload: Dict[str, Any] = Body(...),
+    x_shopify_hmac_sha256: Optional[str] = Header(None),
+    x_shopify_shop_domain: Optional[str] = Header(None),
+    x_etsy_signature: Optional[str] = Header(None),
+    x_webhook_signature: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
 ) -> Any:
     """
     Process webhooks from external platforms.
@@ -87,7 +83,7 @@ async def process_webhook(
             return WebhookResponse(
                 success=False,
                 message=f"No integration found for {platform}/{shop_identifier}",
-                details={"error": "integration_not_found"}
+                details={"error": "integration_not_found"},
             )
 
         # Verify webhook signature based on platform
@@ -98,11 +94,13 @@ async def process_webhook(
 
             # Additional validation for Shopify
             if shop_domain and shop_domain != shop_identifier:
-                logger.warning(f"Shop domain mismatch: {shop_domain} != {shop_identifier}")
+                logger.warning(
+                    f"Shop domain mismatch: {shop_domain} != {shop_identifier}"
+                )
                 return WebhookResponse(
                     success=False,
                     message="Shop domain mismatch",
-                    details={"error": "domain_mismatch"}
+                    details={"error": "domain_mismatch"},
                 )
 
         elif platform == "etsy":
@@ -113,18 +111,17 @@ async def process_webhook(
         # Verify signature if the platform requires it
         if signature:
             is_valid = integration_service.verify_webhook_signature(
-                integration.id,
-                platform,
-                signature,
-                payload
+                integration.id, platform, signature, payload
             )
 
             if not is_valid:
-                logger.warning(f"Invalid webhook signature for {platform}/{shop_identifier}")
+                logger.warning(
+                    f"Invalid webhook signature for {platform}/{shop_identifier}"
+                )
                 return WebhookResponse(
                     success=False,
                     message="Invalid webhook signature",
-                    details={"error": "invalid_signature"}
+                    details={"error": "invalid_signature"},
                 )
 
         # Process webhook based on platform and event type
@@ -132,10 +129,7 @@ async def process_webhook(
 
         # Process webhook
         result = integration_service.process_webhook(
-            integration.id,
-            platform,
-            event_type,
-            payload
+            integration.id, platform, event_type, payload
         )
 
         # Record the webhook event
@@ -144,13 +138,11 @@ async def process_webhook(
             event_type,
             "success" if result.get("success") else "error",
             result.get("items_processed", 0),
-            result.get("message", "")
+            result.get("message", ""),
         )
 
         return WebhookResponse(
-            success=True,
-            message=f"Webhook processed: {event_type}",
-            details=result
+            success=True, message=f"Webhook processed: {event_type}", details=result
         )
 
     except ValidationException as e:
@@ -158,32 +150,32 @@ async def process_webhook(
         return WebhookResponse(
             success=False,
             message=f"Validation error: {str(e)}",
-            details={"error": "validation_error", "validation_errors": e.errors}
+            details={"error": "validation_error", "validation_errors": e.errors},
         )
     except BusinessRuleException as e:
         logger.error(f"Business rule error processing webhook: {str(e)}")
         return WebhookResponse(
             success=False,
             message=f"Business rule error: {str(e)}",
-            details={"error": "business_rule_error", "code": e.code}
+            details={"error": "business_rule_error", "code": e.code},
         )
     except Exception as e:
         logger.exception(f"Error processing webhook: {str(e)}")
         return WebhookResponse(
             success=False,
             message=f"Error processing webhook: {str(e)}",
-            details={"error": "internal_error"}
+            details={"error": "internal_error"},
         )
 
 
 @router.post("/test/{platform}/{shop_identifier}", response_model=WebhookResponse)
 async def test_webhook(
-        platform: str = Path(..., description="Platform identifier (shopify, etsy, etc.)"),
-        shop_identifier: str = Path(..., description="Shop identifier or subdomain"),
-        event_type: str = Body(..., embed=True),
-        payload: Dict[str, Any] = Body({}, embed=True),
-        db: Session = Depends(get_db),
-        current_user=Depends(get_current_active_user)
+    platform: str = Path(..., description="Platform identifier (shopify, etsy, etc.)"),
+    shop_identifier: str = Path(..., description="Shop identifier or subdomain"),
+    event_type: str = Body(..., embed=True),
+    payload: Dict[str, Any] = Body({}, embed=True),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_active_user),
 ) -> Any:
     """
     Test webhook processing without external platform.
@@ -219,7 +211,7 @@ async def test_webhook(
             return WebhookResponse(
                 success=False,
                 message=f"No integration found for {platform}/{shop_identifier}",
-                details={"error": "integration_not_found"}
+                details={"error": "integration_not_found"},
             )
 
         # Add event_type to payload if not present
@@ -232,11 +224,7 @@ async def test_webhook(
 
         # Process test webhook
         result = integration_service.process_webhook(
-            integration.id,
-            platform,
-            event_type,
-            payload,
-            is_test=True
+            integration.id, platform, event_type, payload, is_test=True
         )
 
         # Record the test event
@@ -245,13 +233,13 @@ async def test_webhook(
             f"test_{event_type}",
             "success" if result.get("success") else "error",
             result.get("items_processed", 0),
-            result.get("message", "")
+            result.get("message", ""),
         )
 
         return WebhookResponse(
             success=True,
             message=f"Test webhook processed: {event_type}",
-            details=result
+            details=result,
         )
 
     except Exception as e:
@@ -259,5 +247,5 @@ async def test_webhook(
         return WebhookResponse(
             success=False,
             message=f"Error processing test webhook: {str(e)}",
-            details={"error": "internal_error"}
+            details={"error": "internal_error"},
         )

@@ -8,13 +8,13 @@ and metadata for project creation.
 """
 
 from typing import Dict, Any, ClassVar, Set
-import json # Import json for handling tags
+import json  # Import json for handling tags
 
 from sqlalchemy import (
     Column,
     String,
     Text,
-    Enum, # Import Enum
+    Enum,  # Import Enum
     Integer,
     Boolean,
     JSON,
@@ -23,8 +23,9 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship, validates
 
 from app.db.models.base import AbstractBase, ValidationMixin, TimestampMixin
+
 # Import the necessary Enums
-from app.db.models.enums import ProjectType, SkillLevel, FileType # <<< ADD FileType
+from app.db.models.enums import ProjectType, SkillLevel, FileType  # <<< ADD FileType
 
 
 class Pattern(AbstractBase, ValidationMixin, TimestampMixin):
@@ -39,29 +40,35 @@ class Pattern(AbstractBase, ValidationMixin, TimestampMixin):
     __validated_fields__: ClassVar[Set[str]] = {"name", "file_path"}
 
     # Basic information
-    name = Column(String(255), nullable=False, index=True) # Added index=True
+    name = Column(String(255), nullable=False, index=True)  # Added index=True
     description = Column(Text)
-    skill_level = Column(Enum(SkillLevel), default=SkillLevel.BEGINNER) # Added default
+    skill_level = Column(Enum(SkillLevel), default=SkillLevel.BEGINNER)  # Added default
 
     # File information
     # --- CHANGE HERE: Use the new FileType Enum ---
     file_type = Column(Enum(FileType), default=FileType.PDF)
     # --- End Change ---
-    file_path = Column(String(512), nullable=False) # Increased length, made non-nullable
-    thumbnail = Column(String(512)) # Increased length
+    file_path = Column(
+        String(512), nullable=False
+    )  # Increased length, made non-nullable
+    thumbnail = Column(String(512))  # Increased length
 
     # Categorization
-    tags = Column(JSON, nullable=True) # Use JSON type if supported
+    tags = Column(JSON, nullable=True)  # Use JSON type if supported
     is_favorite = Column(Boolean, default=False)
-    project_type = Column(Enum(ProjectType), nullable=True) # Allow null if not always applicable
+    project_type = Column(
+        Enum(ProjectType), nullable=True
+    )  # Allow null if not always applicable
 
     # Metadata
-    estimated_time = Column(Float) # Changed to Float for more precision (e.g., 1.5 hours)
-    estimated_difficulty = Column(Integer) # 1-10 scale (or 1-5?)
+    estimated_time = Column(
+        Float
+    )  # Changed to Float for more precision (e.g., 1.5 hours)
+    estimated_difficulty = Column(Integer)  # 1-10 scale (or 1-5?)
     author_name = Column(String(100))
     is_public = Column(Boolean, default=False)
     version = Column(String(20))
-    notes = Column(Text) # Added notes field
+    notes = Column(Text)  # Added notes field
 
     # Relationships
     components = relationship(
@@ -104,22 +111,33 @@ class Pattern(AbstractBase, ValidationMixin, TimestampMixin):
     def to_dict(self) -> Dict[str, Any]:
         """Convert Pattern instance to a dictionary."""
         # Assuming AbstractBase or TimestampMixin provides a base to_dict()
-        result = super().to_dict() if hasattr(super(), 'to_dict') else {}
+        result = super().to_dict() if hasattr(super(), "to_dict") else {}
 
         # Manually add fields if base to_dict is missing or incomplete
         for field in [
-            "id", "name", "description", "file_path", "thumbnail",
-            "tags", "is_favorite", "estimated_time", "estimated_difficulty",
-            "author_name", "is_public", "version", "notes",
-            "created_at", "updated_at" # From TimestampMixin
+            "id",
+            "name",
+            "description",
+            "file_path",
+            "thumbnail",
+            "tags",
+            "is_favorite",
+            "estimated_time",
+            "estimated_difficulty",
+            "author_name",
+            "is_public",
+            "version",
+            "notes",
+            "created_at",
+            "updated_at",  # From TimestampMixin
         ]:
-             if field not in result and hasattr(self, field):
-                 value = getattr(self, field)
-                 # Handle datetime serialization if needed
-                 if isinstance(value, datetime):
-                     result[field] = value.isoformat()
-                 else:
-                     result[field] = value
+            if field not in result and hasattr(self, field):
+                value = getattr(self, field)
+                # Handle datetime serialization if needed
+                if isinstance(value, datetime):
+                    result[field] = value.isoformat()
+                else:
+                    result[field] = value
 
         # Convert enum values to strings
         if self.skill_level:
@@ -138,7 +156,7 @@ class Pattern(AbstractBase, ValidationMixin, TimestampMixin):
                 result["tags"] = json.loads(result["tags"])
             except json.JSONDecodeError:
                 logger.warning(f"Could not decode JSON tags for Pattern ID {self.id}")
-                result["tags"] = [] # Fallback to empty list
+                result["tags"] = []  # Fallback to empty list
 
         # Add component count (optional)
         result["component_count"] = len(self.components) if self.components else 0
@@ -151,4 +169,3 @@ class Pattern(AbstractBase, ValidationMixin, TimestampMixin):
             f"<Pattern(id={getattr(self, 'id', None)}, name='{self.name}', "
             f"file_type={self.file_type.name if self.file_type else None})>"
         )
-

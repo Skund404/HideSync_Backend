@@ -37,17 +37,19 @@ router = APIRouter()
 
 @router.get("/", response_model=List[Annotation])
 def list_annotations(
-        *,
-        db: Session = Depends(get_db),
-        current_user: Any = Depends(get_current_active_user),
-        skip: int = Query(0, ge=0, description="Number of records to skip"),
-        limit: int = Query(
-            100, ge=1, le=1000, description="Maximum number of records to return"
-        ),
-        entity_type: Optional[str] = Query(None, description="Filter by entity type"),
-        entity_id: Optional[int] = Query(None, ge=1, description="Filter by entity ID"),
-        created_by: Optional[int] = Query(None, ge=1, description="Filter by creator user ID"),
-        search: Optional[str] = Query(None, description="Search by content"),
+    *,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_active_user),
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(
+        100, ge=1, le=1000, description="Maximum number of records to return"
+    ),
+    entity_type: Optional[str] = Query(None, description="Filter by entity type"),
+    entity_id: Optional[int] = Query(None, ge=1, description="Filter by entity ID"),
+    created_by: Optional[int] = Query(
+        None, ge=1, description="Filter by creator user ID"
+    ),
+    search: Optional[str] = Query(None, description="Search by content"),
 ) -> List[Annotation]:
     """
     Retrieve annotations with optional filtering and pagination.
@@ -69,7 +71,7 @@ def list_annotations(
         entity_type=entity_type,
         entity_id=entity_id,
         created_by=created_by,
-        search=search
+        search=search,
     )
 
     annotation_service = AnnotationService(db)
@@ -80,10 +82,10 @@ def list_annotations(
 
 @router.post("/", response_model=Annotation, status_code=status.HTTP_201_CREATED)
 def create_annotation(
-        *,
-        db: Session = Depends(get_db),
-        annotation_in: AnnotationCreate,
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    db: Session = Depends(get_db),
+    annotation_in: AnnotationCreate,
+    current_user: Any = Depends(get_current_active_user),
 ) -> Annotation:
     """
     Create a new annotation.
@@ -110,10 +112,12 @@ def create_annotation(
 
 @router.get("/{annotation_id}", response_model=Annotation)
 def get_annotation(
-        *,
-        db: Session = Depends(get_db),
-        annotation_id: int = Path(..., ge=1, description="The ID of the annotation to retrieve"),
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    db: Session = Depends(get_db),
+    annotation_id: int = Path(
+        ..., ge=1, description="The ID of the annotation to retrieve"
+    ),
+    current_user: Any = Depends(get_current_active_user),
 ) -> Annotation:
     """
     Get detailed information about a specific annotation.
@@ -141,11 +145,13 @@ def get_annotation(
 
 @router.patch("/{annotation_id}", response_model=Annotation)
 def update_annotation(
-        *,
-        db: Session = Depends(get_db),
-        annotation_id: int = Path(..., ge=1, description="The ID of the annotation to update"),
-        annotation_in: AnnotationUpdate,
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    db: Session = Depends(get_db),
+    annotation_id: int = Path(
+        ..., ge=1, description="The ID of the annotation to update"
+    ),
+    annotation_in: AnnotationUpdate,
+    current_user: Any = Depends(get_current_active_user),
 ) -> Annotation:
     """
     Update an annotation.
@@ -178,10 +184,12 @@ def update_annotation(
 
 @router.delete("/{annotation_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_annotation(
-        *,
-        db: Session = Depends(get_db),
-        annotation_id: int = Path(..., ge=1, description="The ID of the annotation to delete"),
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    db: Session = Depends(get_db),
+    annotation_id: int = Path(
+        ..., ge=1, description="The ID of the annotation to delete"
+    ),
+    current_user: Any = Depends(get_current_active_user),
 ) -> None:
     """
     Delete an annotation.
@@ -208,13 +216,17 @@ def delete_annotation(
 
 @router.get("/entity/{entity_type}/{entity_id}", response_model=List[Annotation])
 def get_annotations_by_entity(
-        *,
-        db: Session = Depends(get_db),
-        entity_type: str = Path(..., description="Entity type (pattern, project, material, etc.)"),
-        entity_id: int = Path(..., ge=1, description="ID of the entity"),
-        current_user: Any = Depends(get_current_active_user),
-        skip: int = Query(0, ge=0, description="Number of records to skip"),
-        limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
+    *,
+    db: Session = Depends(get_db),
+    entity_type: str = Path(
+        ..., description="Entity type (pattern, project, material, etc.)"
+    ),
+    entity_id: int = Path(..., ge=1, description="ID of the entity"),
+    current_user: Any = Depends(get_current_active_user),
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(
+        100, ge=1, le=1000, description="Maximum number of records to return"
+    ),
 ) -> List[Annotation]:
     """
     Get annotations for a specific entity.
@@ -236,15 +248,25 @@ def get_annotations_by_entity(
     )
 
 
-@router.post("/entity/{entity_type}/{entity_id}", response_model=Annotation, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/entity/{entity_type}/{entity_id}",
+    response_model=Annotation,
+    status_code=status.HTTP_201_CREATED,
+)
 def create_entity_annotation(
-        *,
-        db: Session = Depends(get_db),
-        entity_type: str = Path(..., description="Entity type (pattern, project, material, etc.)"),
-        entity_id: int = Path(..., ge=1, description="ID of the entity"),
-        content: str = Body(..., embed=True, description="Annotation content"),
-        visibility: str = Body("private", embed=True, description="Annotation visibility (private, team, public)"),
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    db: Session = Depends(get_db),
+    entity_type: str = Path(
+        ..., description="Entity type (pattern, project, material, etc.)"
+    ),
+    entity_id: int = Path(..., ge=1, description="ID of the entity"),
+    content: str = Body(..., embed=True, description="Annotation content"),
+    visibility: str = Body(
+        "private",
+        embed=True,
+        description="Annotation visibility (private, team, public)",
+    ),
+    current_user: Any = Depends(get_current_active_user),
 ) -> Annotation:
     """
     Create a new annotation for a specific entity.
@@ -270,7 +292,7 @@ def create_entity_annotation(
         entity_type=entity_type,
         entity_id=entity_id,
         content=content,
-        visibility=visibility
+        visibility=visibility,
     )
 
     try:

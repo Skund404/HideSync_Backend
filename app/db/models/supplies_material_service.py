@@ -36,13 +36,13 @@ class SuppliesMaterialService(MaterialService):
     """
 
     def __init__(
-            self,
-            session: Session,
-            repository=None,
-            security_context=None,
-            event_bus=None,
-            cache_service=None,
-            key_service=None,
+        self,
+        session: Session,
+        repository=None,
+        security_context=None,
+        event_bus=None,
+        cache_service=None,
+        key_service=None,
     ):
         """
         Initialize SuppliesMaterialService with dependencies.
@@ -65,7 +65,9 @@ class SuppliesMaterialService(MaterialService):
         )
 
     def create_supplies_material(
-            self, material_data: Union[Dict[str, Any], SuppliesMaterialCreate], user_id: Optional[int] = None
+        self,
+        material_data: Union[Dict[str, Any], SuppliesMaterialCreate],
+        user_id: Optional[int] = None,
     ) -> SuppliesMaterial:
         """
         Create a new supplies material with specialized validation.
@@ -104,10 +106,10 @@ class SuppliesMaterialService(MaterialService):
             return material
 
     def update_supplies_material(
-            self,
-            material_id: int,
-            material_data: Union[Dict[str, Any], SuppliesMaterialUpdate],
-            user_id: Optional[int] = None,
+        self,
+        material_id: int,
+        material_data: Union[Dict[str, Any], SuppliesMaterialUpdate],
+        user_id: Optional[int] = None,
     ) -> SuppliesMaterial:
         """
         Update a supplies material with specialized validation.
@@ -140,7 +142,10 @@ class SuppliesMaterialService(MaterialService):
                 raise BusinessRuleException(
                     f"Material with ID {material_id} is not a supplies material",
                     "INVALID_MATERIAL_TYPE",
-                    {"expected_type": MaterialType.SUPPLIES.value, "actual_type": material.material_type}
+                    {
+                        "expected_type": MaterialType.SUPPLIES.value,
+                        "actual_type": material.material_type,
+                    },
                 )
 
             # Store original for event creation
@@ -173,17 +178,17 @@ class SuppliesMaterialService(MaterialService):
             return updated
 
     def get_supplies_materials(
-            self,
-            skip: int = 0,
-            limit: int = 100,
-            supplies_type: Optional[str] = None,
-            color: Optional[str] = None,
-            thread_thickness: Optional[str] = None,
-            material_composition: Optional[str] = None,
-            min_volume: Optional[float] = None,
-            max_volume: Optional[float] = None,
-            min_length: Optional[float] = None,
-            max_length: Optional[float] = None,
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        supplies_type: Optional[str] = None,
+        color: Optional[str] = None,
+        thread_thickness: Optional[str] = None,
+        material_composition: Optional[str] = None,
+        min_volume: Optional[float] = None,
+        max_volume: Optional[float] = None,
+        min_length: Optional[float] = None,
+        max_length: Optional[float] = None,
     ) -> List[SuppliesMaterial]:
         """
         Get supplies materials with specialized filtering options.
@@ -225,17 +230,25 @@ class SuppliesMaterialService(MaterialService):
         filtered_materials = []
         for material in materials:
             # Volume filters
-            if min_volume is not None and (material.volume is None or material.volume < min_volume):
+            if min_volume is not None and (
+                material.volume is None or material.volume < min_volume
+            ):
                 continue
 
-            if max_volume is not None and (material.volume is not None and material.volume > max_volume):
+            if max_volume is not None and (
+                material.volume is not None and material.volume > max_volume
+            ):
                 continue
 
             # Length filters
-            if min_length is not None and (material.length is None or material.length < min_length):
+            if min_length is not None and (
+                material.length is None or material.length < min_length
+            ):
                 continue
 
-            if max_length is not None and (material.length is not None and material.length > max_length):
+            if max_length is not None and (
+                material.length is not None and material.length > max_length
+            ):
                 continue
 
             filtered_materials.append(material)
@@ -266,7 +279,10 @@ class SuppliesMaterialService(MaterialService):
             raise BusinessRuleException(
                 f"Material with ID {material_id} is not a supplies material",
                 "INVALID_MATERIAL_TYPE",
-                {"expected_type": MaterialType.SUPPLIES.value, "actual_type": material.material_type}
+                {
+                    "expected_type": MaterialType.SUPPLIES.value,
+                    "actual_type": material.material_type,
+                },
             )
 
         return material
@@ -289,9 +305,7 @@ class SuppliesMaterialService(MaterialService):
         return self.repository.find_by_criteria(filters)
 
     def get_consumable_usage_rate(
-            self,
-            material_id: int,
-            time_period_days: int = 30
+        self, material_id: int, time_period_days: int = 30
     ) -> Dict[str, Any]:
         """
         Calculate the usage rate of a consumable supplies material.
@@ -325,13 +339,17 @@ class SuppliesMaterialService(MaterialService):
             "current_quantity": material.quantity,
             "total_used_30d": 5.0,  # Placeholder
             "usage_rate_per_day": 0.167,  # Placeholder
-            "estimated_days_remaining": 30 if material.quantity > 0 else 0,  # Placeholder
+            "estimated_days_remaining": (
+                30 if material.quantity > 0 else 0
+            ),  # Placeholder
             "reorder_recommendation": material.quantity < material.reorder_point,
         }
 
         return usage_metrics
 
-    def _validate_supplies_material(self, data: Dict[str, Any], is_update: bool = False) -> None:
+    def _validate_supplies_material(
+        self, data: Dict[str, Any], is_update: bool = False
+    ) -> None:
         """
         Validate supplies-specific fields and business rules.
 

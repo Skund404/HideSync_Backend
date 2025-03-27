@@ -36,4 +36,3 @@ user_role = Table(
     ),
     Column("created_at", DateTime, default=datetime.utcnow),
 )
-
