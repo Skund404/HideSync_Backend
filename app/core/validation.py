@@ -61,31 +61,27 @@ class ValidationResult:
 def validate_input(validator: Callable) -> Callable:
     """
     Decorator to validate service inputs.
-
-    Args:
-        validator: Function that performs validation and returns ValidationResult
-
-    Returns:
-        Decorated function that performs validation before execution
     """
-
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         def wrapper(self, *args, **kwargs):
-            # Get validation result
-            result = validator(*args, **kwargs)
+            # Only validate the first argument if present
+            if args:
+                result = validator(args[0])
+            else:
+                # No arguments to validate
+                result = ValidationResult()
+                result.add_error("input", "No data provided for validation")
 
             # Raise exception if validation failed
             if not result.is_valid:
                 raise ValidationException("Input validation failed", result.to_dict())
 
-            # Call original function if validation passed
+            # Call original function with all arguments
             return func(self, *args, **kwargs)
 
         return wrapper
-
     return decorator
-
 
 def validate_entity(
     entity_class: Type, exclude_fields: Optional[List[str]] = None

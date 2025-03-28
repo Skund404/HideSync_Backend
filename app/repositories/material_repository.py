@@ -54,6 +54,53 @@ class MaterialRepository(BaseRepository[Material]):
         entities = query.offset(skip).limit(limit).all()
         return [self._decrypt_sensitive_fields(entity) for entity in entities]
 
+    def find_materials_by_criteria(
+            self,
+            material_type: Optional[str] = None,
+            quality: Optional[str] = None,
+            in_stock: Optional[bool] = None,
+            skip: int = 0,
+            limit: int = 100
+    ) -> List[Material]:
+        """
+        Find materials by various criteria.
+
+        Args:
+            material_type: Optional filter by material type
+            quality: Optional filter by material quality
+            in_stock: Optional filter by stock availability
+            skip: Number of records to skip (for pagination)
+            limit: Maximum number of records to return
+
+        Returns:
+            List[Material]: List of materials matching criteria
+        """
+        query = self.session.query(self.model)
+
+        # Apply filtering conditions
+        if material_type:
+            query = query.filter(self.model.materialType == material_type)
+
+        if quality:
+            query = query.filter(self.model.quality == quality)
+
+        if in_stock is not None:
+            if in_stock:
+                query = query.filter(self.model.status == InventoryStatus.IN_STOCK)
+            else:
+                query = query.filter(
+                    self.model.status.in_([
+                        InventoryStatus.OUT_OF_STOCK,
+                        InventoryStatus.LOW_STOCK
+                    ])
+                )
+
+        # Apply pagination
+        entities = query.order_by(self.model.name).offset(skip).limit(limit).all()
+
+        # Decrypt sensitive fields if applicable
+        return [self._decrypt_sensitive_fields(entity) for entity in entities]
+
     def get_materials_by_status(
         self, status: InventoryStatus, skip: int = 0, limit: int = 100
     ) -> List[Material]:

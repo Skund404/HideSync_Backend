@@ -146,16 +146,16 @@ class SupplierService(BaseService[Supplier]):
     """
 
     def __init__(
-        self,
-        session: Session,
-        repository=None,
-        security_context=None,
-        event_bus=None,
-        cache_service=None,
-        purchase_service=None,
-        material_service=None,
-        supplier_history_repository=None,
-        supplier_rating_repository=None,
+            self,
+            session: Session,
+            repository=None,
+            security_context=None,
+            event_bus=None,
+            cache_service=None,
+            purchase_service=None,
+            material_service=None,
+            supplier_history_repository=None,
+            supplier_rating_repository=None,
     ):
         """
         Initialize SupplierService with dependencies.
@@ -171,30 +171,32 @@ class SupplierService(BaseService[Supplier]):
             supplier_history_repository: Optional repository for supplier history (status changes)
             supplier_rating_repository: Optional repository for supplier ratings
         """
-        self.session = session
+        # Initialize the base service first
+        super().__init__(
+            session=session,
+            repository_class=None,  # We'll set repository directly
+            security_context=security_context,
+            event_bus=event_bus,
+            cache_service=cache_service,
+        )
+
+        # Set our specific repository
         self.repository = repository or SupplierRepository(session)
-        self.security_context = security_context
-        self.event_bus = event_bus
-        self.cache_service = cache_service
+
+        # Set additional service-specific dependencies
         self.purchase_service = purchase_service
         self.material_service = material_service
         self.supplier_history_repository = supplier_history_repository
         self.supplier_rating_repository = supplier_rating_repository
 
     @validate_input(validate_supplier)
-    def create_supplier(self, data: Dict[str, Any]) -> Supplier:
+    def create_supplier(self, data: Dict[str, Any], user_id: Optional[int] = None) -> Supplier:
         """
         Create a new supplier.
 
         Args:
             data: Supplier data containing name, contact info, and other details
-
-        Returns:
-            Created supplier entity
-
-        Raises:
-            ValidationException: If validation fails
-            DuplicateEntityException: If a supplier with same name/email already exists
+            user_id: Optional ID of the user creating the supplier (for auditing)
         """
         with self.transaction():
             # Check for duplicate name
@@ -205,37 +207,15 @@ class SupplierService(BaseService[Supplier]):
                     {"field": "name", "value": data.get("name")},
                 )
 
-            # Check for duplicate email if provided
-            if data.get("email") and self._supplier_exists_by_email(
-                data.get("email", "")
-            ):
-                raise DuplicateEntityException(
-                    f"Supplier with email '{data.get('email')}' already exists",
-                    "SUPPLIER_002",
-                    {"field": "email", "value": data.get("email")},
-                )
-
-            # Set default values if not provided
-            if "status" not in data:
-                data["status"] = SupplierStatus.ACTIVE.value
-
-            if "created_at" not in data:
-                data["created_at"] = datetime.now()
-
-            # Set default rating if not provided
-            if "rating" not in data:
-                data["rating"] = 3  # Default middle rating
+            # Remove any fields not in the model
+            if "created_by" in data:
+                data.pop("created_by")
 
             # Create supplier
             supplier = self.repository.create(data)
 
-            # Publish event if event bus exists
-            if self.event_bus:
-                user_id = (
-                    self.security_context.current_user.id
-                    if self.security_context
-                    else None
-                )
+            # Use user_id for events or logging
+            if self.event_bus and user_id:
                 self.event_bus.publish(
                     SupplierCreated(
                         supplier_id=supplier.id,
@@ -675,6 +655,38 @@ class SupplierService(BaseService[Supplier]):
 
         return self.repository.search(**search_params)
 
+    # In app/services/supplier_service.py
+
+    # In app/services/supplier_service.py
+
+    def get_suppliers(self, skip: int = 0, limit: int = 100, search_params=None):
+        """
+        Get suppliers with optional filtering and pagination.
+        """
+        # Log input parameters
+        print(f"Getting suppliers with skip={skip}, limit={limit}, search_params={search_params}")
+
+        # Get all suppliers in database first (for debugging)
+        all_suppliers_query = self.repository.session.query(self.repository.model).all()
+        print(f"Total suppliers in database (direct query): {len(all_suppliers_query)}")
+
+        # For simple queries, use the repository's method
+        if hasattr(self.repository, 'get_all_suppliers'):
+            suppliers = self.repository.get_all_suppliers(skip=skip, limit=limit)
+        else:
+            # Fall back to list method if get_all_suppliers doesn't exist
+            suppliers = self.repository.list(skip=skip, limit=limit)
+
+        print(f"Suppliers returned after filtering: {len(suppliers)}")
+
+        # Log each supplier for debugging
+        for supplier in suppliers:
+            print(f"Supplier ID: {supplier.id}, Name: {supplier.name if hasattr(supplier, 'name') else 'Unknown'}")
+
+        return suppliers
+
+        return suppliers
+
     def get_suppliers_by_category(self, category: str) -> List[Supplier]:
         """
         Get all suppliers in a specific category.
@@ -809,7 +821,8 @@ class SupplierService(BaseService[Supplier]):
         Returns:
             True if supplier exists, False otherwise
         """
-        return len(self.repository.list(name=name)) > 0
+        # Add a specific method to the repository for this common operation
+        return self.repository.exists_by_name(name)
 
     def _supplier_exists_by_email(self, email: str) -> bool:
         """

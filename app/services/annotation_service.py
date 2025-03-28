@@ -6,7 +6,7 @@ This module provides service methods for managing annotations,
 implementing business logic for creating, retrieving, updating,
 and deleting annotations.
 """
-
+import logging
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from sqlalchemy.orm import Session
@@ -28,6 +28,7 @@ from app.core.exceptions import (
 from app.repositories.annotation_repository import AnnotationRepository
 from app.services.base_service import BaseService
 
+logger = logging.getLogger(__name__)
 
 class AnnotationService(BaseService):
     """
@@ -44,9 +45,15 @@ class AnnotationService(BaseService):
         Args:
             db: Database session
         """
-        super().__init__()
-        self.db = db
-        self.repository = AnnotationRepository(db)
+        # --- MODIFICATION START ---
+        # Pass the session and the specific repository class to the parent
+        super().__init__(session=db, repository_class=AnnotationRepository)
+        # --- MODIFICATION END ---
+
+        # Any AnnotationService-specific initialization can go here
+        # e.g., self.some_other_service = SomeOtherService(db)
+        logger.info("AnnotationService initialized.") # Add logging if desired
+
 
     def get_annotations(
         self,

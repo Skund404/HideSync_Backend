@@ -42,111 +42,96 @@ from app.core.exceptions import EntityNotFoundException, BusinessRuleException
 router = APIRouter()
 
 
+def list(self, **filters) -> List[Supplier]:
+    """
+    List suppliers with optional filtering.
+    """
+    query = self.session.query(self.model)
+
+    # Apply specific filters if present
+    if "name" in filters and filters["name"]:
+        query = query.filter(self.model.name == filters["name"])
+
+    if "status" in filters and filters["status"]:
+        query = query.filter(self.model.status == filters["status"])
+
+    if "category" in filters and filters["category"]:
+        query = query.filter(self.model.category == filters["category"])
+
+    # Apply pagination
+    skip = filters.get("skip", 0)
+    limit = filters.get("limit", 100)
+
+    # Execute query - NO order_by since it's not supported
+    # Apply pagination through list slicing if needed
+    entities = query.all()
+
+    # Apply pagination after fetch (not ideal but works)
+    if skip or limit:
+        entities = entities[skip:skip + limit]
+
+    # Decrypt sensitive fields
+    return [self._decrypt_sensitive_fields(entity) for entity in entities]
+
+
 @router.get("/", response_model=List[Supplier])
 def list_suppliers(
-    *,
-    db: Session = Depends(get_db),
-    current_user: Any = Depends(get_current_active_user),
-    skip: int = Query(0, ge=0, description="Number of records to skip"),
-    limit: int = Query(
-        100, ge=1, le=1000, description="Maximum number of records to return"
-    ),
-    status: Optional[str] = Query(None, description="Filter by supplier status"),
-    category: Optional[str] = Query(None, description="Filter by supplier category"),
-    material_category: Optional[str] = Query(
-        None, description="Filter by material category"
-    ),
-    search: Optional[str] = Query(None, description="Search term for name or contact"),
+        *,
+        db: Session = Depends(get_db),
+        current_user: Any = Depends(get_current_active_user),
+        page: int = Query(1, ge=1, description="Page number"),
+        pageSize: int = Query(10, ge=1, le=100, description="Items per page")
 ) -> List[Supplier]:
     """
-    Retrieve suppliers with optional filtering and pagination.
-
-    Args:
-        db: Database session
-        current_user: Currently authenticated user
-        skip: Number of records to skip for pagination
-        limit: Maximum number of records to return
-        status: Optional filter by supplier status
-        category: Optional filter by supplier category
-        material_category: Optional filter by material category
-        search: Optional search term for name or contact
-
-    Returns:
-        List of supplier records
+    Retrieve suppliers with pagination.
     """
-    search_params = SupplierSearchParams(
-        status=status,
-        category=category,
-        material_category=material_category,
-        search=search,
-    )
+    # Convert page/pageSize to skip/limit
+    skip = (page - 1) * pageSize
+    limit = pageSize
 
     supplier_service = SupplierService(db)
-    return supplier_service.get_suppliers(
-        skip=skip, limit=limit, search_params=search_params
-    )
-
+    return supplier_service.get_suppliers(skip=skip, limit=limit)
 
 @router.post("/", response_model=Supplier, status_code=status.HTTP_201_CREATED)
 def create_supplier(
-    *,
-    db: Session = Depends(get_db),
-    supplier_in: SupplierCreate,
-    current_user: Any = Depends(get_current_active_user),
+        *,
+        db: Session = Depends(get_db),
+        supplier_in: SupplierCreate,
+        current_user: Any = Depends(get_current_active_user),
 ) -> Supplier:
     """
     Create a new supplier.
-
-    Args:
-        db: Database session
-        supplier_in: Supplier data for creation
-        current_user: Currently authenticated user
-
-    Returns:
-        Created supplier information
-
-    Raises:
-        HTTPException: If supplier creation fails due to business rules
     """
     supplier_service = SupplierService(db)
     try:
-        return supplier_service.create_supplier(supplier_in, current_user.id)
+        # Convert Pydantic model to dict
+        supplier_data = supplier_in.dict(exclude_unset=True)
+
+        # Call service with user_id separately
+        return supplier_service.create_supplier(supplier_data, current_user.id)
     except BusinessRuleException as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.get("/{supplier_id}", response_model=SupplierDetailResponse)
-def get_supplier(
-    *,
-    db: Session = Depends(get_db),
-    supplier_id: int = Path(
-        ..., ge=1, description="The ID of the supplier to retrieve"
-    ),
-    current_user: Any = Depends(get_current_active_user),
-) -> SupplierDetailResponse:
+@router.post("/", response_model=Supplier, status_code=status.HTTP_201_CREATED)
+def create_supplier(
+        *,
+        db: Session = Depends(get_db),
+        supplier_in: SupplierCreate,
+        current_user: Any = Depends(get_current_active_user),
+) -> Supplier:
     """
-    Get detailed information about a specific supplier.
-
-    Args:
-        db: Database session
-        supplier_id: ID of the supplier to retrieve
-        current_user: Currently authenticated user
-
-    Returns:
-        Supplier information with details including materials and ratings
-
-    Raises:
-        HTTPException: If the supplier doesn't exist
+    Create a new supplier.
     """
     supplier_service = SupplierService(db)
     try:
-        return supplier_service.get_supplier_with_details(supplier_id)
-    except EntityNotFoundException:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Supplier with ID {supplier_id} not found",
-        )
+        supplier_data = supplier_in.dict(exclude_unset=True)
+        # Do NOT add created_by if the Supplier model doesn't have this field
+        # supplier_data["created_by"] = current_user.id
 
+        return supplier_service.create_supplier(supplier_data)
+    except BusinessRuleException as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 @router.put("/{supplier_id}", response_model=Supplier)
 def update_supplier(

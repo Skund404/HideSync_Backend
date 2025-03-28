@@ -45,6 +45,8 @@ class Settings(BaseSettings):
     # CORS - Fixed type annotation to handle both URLs and strings
     BACKEND_CORS_ORIGINS: List[Union[AnyHttpUrl, str]] = []
 
+    MIN_PASSWORD_LENGTH: int = 4
+
     # Restored validator with improved JSON parsing
     @validator("BACKEND_CORS_ORIGINS", pre=True)
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:

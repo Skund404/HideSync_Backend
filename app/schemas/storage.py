@@ -384,3 +384,42 @@ class StorageMoveList(BaseModel):
     page: int = Field(..., description="Current page number")
     size: int = Field(..., description="Number of items per page")
     pages: int = Field(..., description="Total number of pages")
+
+
+class StorageOccupancyReport(BaseModel):
+    """
+    Schema for storage occupancy report.
+    """
+    total_locations: int = Field(..., description="Total number of storage locations")
+    total_capacity: float = Field(..., description="Total storage capacity")
+    total_utilized: float = Field(..., description="Total utilized storage")
+    utilization_percentage: float = Field(..., description="Overall storage utilization percentage")
+    overall_usage_percentage: float = Field(..., description="Overall usage percentage")
+
+    by_section: Dict[str, Dict[str, Union[float, int]]] = Field(
+        ..., description="Storage utilization grouped by section"
+    )
+    by_type: Dict[str, Dict[str, Union[float, int]]] = Field(
+        ..., description="Storage utilization grouped by location type"
+    )
+
+    locations_by_type: Dict[str, Dict[str, Union[float, int]]] = Field(
+        ..., description="Detailed locations grouped by type"
+    )
+    locations_by_section: Dict[str, Dict[str, Union[float, int]]] = Field(
+        ..., description="Detailed locations grouped by section"
+    )
+
+    locations_at_capacity: int = Field(..., description="Number of locations at full capacity")
+    locations_nearly_empty: int = Field(..., description="Number of locations nearly empty")
+
+    most_utilized_locations: List[Dict[str, Union[str, float]]] = Field(
+        ..., description="List of most utilized locations"
+    )
+    least_utilized_locations: List[Dict[str, Union[str, float]]] = Field(
+        ..., description="List of least utilized locations"
+    )
+
+    recommendations: Optional[List[str]] = Field(
+        None, description="Storage optimization recommendations"
+    )

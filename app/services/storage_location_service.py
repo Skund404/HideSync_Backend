@@ -172,17 +172,17 @@ class StorageLocationService(BaseService[StorageLocation]):
     """
 
     def __init__(
-        self,
-        session: Session,
-        location_repository=None,
-        cell_repository=None,
-        assignment_repository=None,
-        move_repository=None,
-        security_context=None,
-        event_bus=None,
-        cache_service=None,
-        material_service=None,
-        inventory_service=None,
+            self,
+            session: Session,
+            location_repository=None,
+            cell_repository=None,
+            assignment_repository=None,
+            move_repository=None,
+            security_context=None,
+            event_bus=None,
+            cache_service=None,
+            material_service=None,
+            inventory_service=None,
     ):
         """
         Initialize StorageLocationService with dependencies.
@@ -199,18 +199,234 @@ class StorageLocationService(BaseService[StorageLocation]):
             material_service: Optional material service for material operations
             inventory_service: Optional inventory service for inventory operations
         """
-        self.session = session
+        # Initialize the base service first
+        super().__init__(
+            session=session,
+            repository_class=None,  # We'll set repository directly
+            security_context=security_context,
+            event_bus=event_bus,
+            cache_service=cache_service,
+        )
+
+        # Set our specific repositories
         self.repository = location_repository or StorageLocationRepository(session)
         self.cell_repository = cell_repository or StorageCellRepository(session)
-        self.assignment_repository = (
-            assignment_repository or StorageAssignmentRepository(session)
-        )
+        self.assignment_repository = assignment_repository or StorageAssignmentRepository(session)
         self.move_repository = move_repository or StorageMoveRepository(session)
-        self.security_context = security_context
-        self.event_bus = event_bus
-        self.cache_service = cache_service
+
+        # Set additional service-specific dependencies
         self.material_service = material_service
         self.inventory_service = inventory_service
+
+    def get_storage_locations(self, skip: int = 0, limit: int = 100, search_params=None):
+        """
+        Retrieve storage locations with pagination and filtering.
+        Ensures a consistent return format even with empty results.
+
+        Args:
+            skip: Number of records to skip
+            limit: Maximum number of records to return
+            search_params: Optional search parameters
+
+        Returns:
+            List of storage locations matching the criteria (never None)
+        """
+        filters = {}
+
+        if search_params:
+            if hasattr(search_params, 'type') and search_params.type:
+                filters["type"] = search_params.type
+            if hasattr(search_params, 'section') and search_params.section:
+                filters["section"] = search_params.section
+            if hasattr(search_params, 'status') and search_params.status:
+                filters["status"] = search_params.status
+            if hasattr(search_params, 'search') and search_params.search:
+                # If repository has a search method, use it
+                if hasattr(self.repository, 'search_storage_locations'):
+                    locations = self.repository.search_storage_locations(
+                        query=search_params.search,
+                        skip=skip,
+                        limit=limit
+                    )
+                    # Ensure we always return a list, even if repository returns None
+                    return locations if isinstance(locations, list) else []
+                # Otherwise include it in the filters
+                filters["search"] = search_params.search
+
+        # Get locations with filters
+        locations = self.repository.list(skip=skip, limit=limit, **filters)
+
+        # Ensure we always return a list, even if repository returns None
+        return locations if isinstance(locations, list) else []
+
+    # Updated get_storage_occupancy_report method with consistent return structure
+
+    def get_storage_occupancy_report(self, section=None, location_type=None):
+        """
+        Get a storage occupancy report with consistent structure.
+
+        Args:
+            section: Optional filter by section
+            location_type: Optional filter by location type
+
+        Returns:
+            Storage occupancy report with guaranteed structure
+        """
+        # Get storage locations with filters
+        filters = {}
+        if section:
+            filters["section"] = section
+        if location_type:
+            filters["type"] = location_type
+
+        locations = self.repository.list(**filters)
+
+        # Ensure locations is a list (even if repository returns None)
+        locations = locations if isinstance(locations, list) else []
+
+        # Calculate occupancy metrics
+        total_capacity = sum(getattr(location, 'capacity', 0) or 0 for location in locations)
+        total_utilized = sum(getattr(location, 'utilized', 0) or 0 for location in locations)
+
+        # Overall usage percentage
+        overall_usage_percentage = round(
+            (total_utilized / total_capacity * 100) if total_capacity > 0 else 0, 1
+        )
+
+        # Group by section
+        sections = {}
+        for location in locations:
+            section_name = getattr(location, 'section', None) or "Uncategorized"
+            if section_name not in sections:
+                sections[section_name] = {
+                    "capacity": 0,
+                    "utilized": 0,
+                    "locations": 0,
+                    "percentage": 0
+                }
+
+            sections[section_name]["capacity"] += getattr(location, 'capacity', 0) or 0
+            sections[section_name]["utilized"] += getattr(location, 'utilized', 0) or 0
+            sections[section_name]["locations"] += 1
+
+        # Group by type
+        types = {}
+        for location in locations:
+            location_type = None
+            if hasattr(location, 'type'):
+                if hasattr(location.type, 'value'):
+                    location_type = location.type.value
+                else:
+                    location_type = str(location.type)
+
+            location_type = location_type or "Unknown"
+
+            if location_type not in types:
+                types[location_type] = {
+                    "capacity": 0,
+                    "utilized": 0,
+                    "locations": 0,
+                    "percentage": 0
+                }
+
+            types[location_type]["capacity"] += getattr(location, 'capacity', 0) or 0
+            types[location_type]["utilized"] += getattr(location, 'utilized', 0) or 0
+            types[location_type]["locations"] += 1
+
+        # Calculate percentages
+        for section_data in sections.values():
+            section_data["percentage"] = round(
+                section_data["utilized"] / section_data["capacity"] * 100
+                if section_data["capacity"] > 0 else 0, 1
+            )
+
+        for type_data in types.values():
+            type_data["percentage"] = round(
+                type_data["utilized"] / type_data["capacity"] * 100
+                if type_data["capacity"] > 0 else 0, 1
+            )
+
+        # Count locations at capacity and nearly empty
+        locations_at_capacity = [
+            loc for loc in locations
+            if getattr(loc, 'capacity', None) and getattr(loc, 'utilized', None) and
+               (loc.utilized / loc.capacity) >= 0.9
+        ]
+
+        locations_nearly_empty = [
+            loc for loc in locations
+            if getattr(loc, 'capacity', None) and getattr(loc, 'utilized', None) and
+               (loc.utilized / loc.capacity) <= 0.1
+        ]
+
+        # Sort locations by utilization percentage
+        sorted_locations = sorted(
+            locations,
+            key=lambda loc: (loc.utilized or 0) / (loc.capacity or 1),
+            reverse=True
+        )
+
+        # Most and least utilized locations
+        most_utilized_locations = [
+            {
+                "id": loc.id,
+                "name": getattr(loc, 'name', 'Unnamed'),
+                "utilization_percentage": round(
+                    (loc.utilized or 0) / (loc.capacity or 1) * 100, 1
+                )
+            } for loc in sorted_locations[:5]
+        ]
+
+        least_utilized_locations = [
+            {
+                "id": loc.id,
+                "name": getattr(loc, 'name', 'Unnamed'),
+                "utilization_percentage": round(
+                    (loc.utilized or 0) / (loc.capacity or 1) * 100, 1
+                )
+            } for loc in sorted_locations[-5:]
+        ]
+
+        # Generate recommendations
+        recommendations = []
+        if locations_at_capacity and len(locations_at_capacity) > len(locations) * 0.3:
+            recommendations.append("Consider expanding storage capacity")
+
+        if locations_nearly_empty and len(locations_nearly_empty) > len(locations) * 0.3:
+            recommendations.append("Optimize storage allocation and consolidate items")
+
+        return {
+            "total_locations": len(locations),
+            "total_capacity": total_capacity,
+            "total_utilized": total_utilized,
+            "utilization_percentage": round(
+                (total_utilized / total_capacity * 100) if total_capacity > 0 else 0, 1
+            ),
+            "overall_usage_percentage": overall_usage_percentage,
+            "by_section": sections,
+            "by_type": types,
+            "locations_by_section": {
+                section: {
+                    "capacity": data["capacity"],
+                    "utilized": data["utilized"],
+                    "locations": data["locations"],
+                    "utilization_percentage": data["percentage"]
+                } for section, data in sections.items()
+            },
+            "locations_by_type": {
+                location_type: {
+                    "capacity": data["capacity"],
+                    "utilized": data["utilized"],
+                    "locations": data["locations"],
+                    "utilization_percentage": data["percentage"]
+                } for location_type, data in types.items()
+            },
+            "locations_at_capacity": len(locations_at_capacity),
+            "locations_nearly_empty": len(locations_nearly_empty),
+            "most_utilized_locations": most_utilized_locations,
+            "least_utilized_locations": least_utilized_locations,
+            "recommendations": recommendations
+        }
 
     @validate_input(validate_storage_location)
     def create_storage_location(self, data: Dict[str, Any]) -> StorageLocation:

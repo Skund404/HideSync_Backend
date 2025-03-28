@@ -8,7 +8,8 @@ serialization, and documentation.
 
 from typing import Optional, List
 from datetime import datetime
-from pydantic import BaseModel, Field, validator
+# Import necessary components from Pydantic v2
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 
 class AnnotationBase(BaseModel):
@@ -33,8 +34,10 @@ class AnnotationCreate(AnnotationBase):
         None, description="List of tags for the annotation"
     )
 
-    @validator("visibility")
-    def validate_visibility(cls, v):
+    # Updated validator syntax for Pydantic v2
+    @field_validator("visibility")
+    @classmethod
+    def validate_visibility(cls, v: str) -> str:
         allowed_values = ["private", "team", "public"]
         if v not in allowed_values:
             raise ValueError(f"Visibility must be one of {allowed_values}")
@@ -48,18 +51,21 @@ class AnnotationUpdate(BaseModel):
     visibility: Optional[str] = Field(None, description="Updated annotation visibility")
     tags: Optional[List[str]] = Field(None, description="Updated list of tags")
 
-    @validator("visibility")
-    def validate_visibility(cls, v):
+    # Updated validator syntax for Pydantic v2
+    @field_validator("visibility")
+    @classmethod
+    def validate_visibility_optional(cls, v: Optional[str]) -> Optional[str]:
         if v is not None:
             allowed_values = ["private", "team", "public"]
             if v not in allowed_values:
                 raise ValueError(f"Visibility must be one of {allowed_values}")
         return v
 
-    class Config:
-        """Configuration for the schema."""
-
-        validate_assignment = True
+    # Pydantic v2 config (validate_assignment is True by default if needed)
+    model_config = ConfigDict(
+        validate_assignment=True,
+        # Add other settings if needed, e.g., extra='ignore'
+    )
 
 
 class AnnotationInDBBase(AnnotationBase):
@@ -71,15 +77,16 @@ class AnnotationInDBBase(AnnotationBase):
     updated_at: Optional[datetime] = None
     tags: Optional[List[str]] = None
 
-    class Config:
-        """Configuration for the schema."""
-
-        orm_mode = True
+    # Pydantic v2 config to enable reading from ORM attributes
+    model_config = ConfigDict(
+        from_attributes=True,
+    )
 
 
 class Annotation(AnnotationInDBBase):
     """Schema for annotation responses."""
 
+    # Inherits model_config from AnnotationInDBBase
     pass
 
 
@@ -89,6 +96,8 @@ class AnnotationSearchParams(BaseModel):
     entity_type: Optional[str] = None
     entity_id: Optional[int] = None
     created_by: Optional[int] = None
-    search: Optional[str] = None
+    search: Optional[str] = None # Renamed from content_search for consistency? Check usage
     visibility: Optional[str] = None
     tags: Optional[List[str]] = None
+
+    # No ORM mode needed here as it's for input parameters

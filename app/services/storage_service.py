@@ -768,92 +768,50 @@ class FileStorageService:
         return self.move_material_between_locations(move_dict)
 
     def get_storage_occupancy_report(self, section=None, location_type=None):
-        """
-        Get a storage occupancy report.
+        # ... existing code ...
 
-        Args:
-            section: Optional filter by section
-            location_type: Optional filter by location type
+        # Add new fields
+        most_utilized_locations = sorted(
+            locations,
+            key=lambda loc: (loc.utilized or 0) / (loc.capacity or 1) if loc.capacity else 0,
+            reverse=True
+        )[:5]  # Top 5 most utilized locations
 
-        Returns:
-            Storage occupancy report
-        """
-        # Get storage locations with filters
-        filters = {}
-        if section:
-            filters["section"] = section
-        if location_type:
-            filters["type"] = location_type
+        least_utilized_locations = sorted(
+            locations,
+            key=lambda loc: (loc.utilized or 0) / (loc.capacity or 1) if loc.capacity else 0
+        )[:5]  # Top 5 least utilized locations
 
-        locations = self.repository.list(**filters)
+        recommendations = []
+        if locations_at_capacity > len(locations) * 0.3:
+            recommendations.append("Consider expanding storage capacity")
 
-        # Calculate occupancy metrics
-        total_capacity = sum(location.capacity or 0 for location in locations)
-        total_utilized = sum(location.utilized or 0 for location in locations)
+        if locations_nearly_empty > len(locations) * 0.3:
+            recommendations.append("Optimize storage allocation")
 
-        # Group by section
-        sections = {}
-        for location in locations:
-            if location.section not in sections:
-                sections[location.section] = {
-                    "capacity": 0,
-                    "utilized": 0,
-                    "locations": 0
-                }
-
-            sections[location.section]["capacity"] += location.capacity or 0
-            sections[location.section]["utilized"] += location.utilized or 0
-            sections[location.section]["locations"] += 1
-
-        # Group by type
-        types = {}
-        for location in locations:
-            location_type = location.type
-            if location_type not in types:
-                types[location_type] = {
-                    "capacity": 0,
-                    "utilized": 0,
-                    "locations": 0
-                }
-
-            types[location_type]["capacity"] += location.capacity or 0
-            types[location_type]["utilized"] += location.utilized or 0
-            types[location_type]["locations"] += 1
-
-        # Calculate percentages
-        for section_data in sections.values():
-            section_data["percentage"] = (
-                section_data["utilized"] / section_data["capacity"] * 100
-                if section_data["capacity"] > 0 else 0
-            )
-
-        for type_data in types.values():
-            type_data["percentage"] = (
-                type_data["utilized"] / type_data["capacity"] * 100
-                if type_data["capacity"] > 0 else 0
-            )
-
-        # Create report
         return {
-            "total_locations": len(locations),
-            "total_capacity": total_capacity,
-            "total_utilized": total_utilized,
-            "utilization_percentage": (
+            # ... existing fields ...
+            "overall_usage_percentage": (
                 total_utilized / total_capacity * 100
                 if total_capacity > 0 else 0
             ),
-            "by_section": sections,
-            "by_type": types,
-            "locations_at_capacity": len([
-                loc for loc in locations
-                if loc.capacity and loc.utilized and
-                   (loc.utilized / loc.capacity) >= 0.9
-            ]),
-            "locations_nearly_empty": len([
-                loc for loc in locations
-                if loc.capacity and loc.utilized and
-                   (loc.utilized / loc.capacity) <= 0.1
-            ])
+            "locations_by_type": types,
+            "locations_by_section": sections,
+            "most_utilized_locations": [
+                {
+                    "id": loc.id,
+                    "name": loc.name,
+                    "utilization_percentage": (loc.utilized or 0) / (loc.capacity or 1) * 100
+                } for loc in most_utilized_locations
+            ],
+            "least_utilized_locations": [
+                {
+                    "id": loc.id,
+                    "name": loc.name,
+                    "utilization_percentage": (loc.utilized or 0) / (loc.capacity or 1) * 100
+                } for loc in least_utilized_locations
+            ],
+            "recommendations": recommendations
         }
 
     def _get_storage_path(self, file_id: str, extension: str) -> Path:
