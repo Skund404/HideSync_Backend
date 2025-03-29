@@ -6,9 +6,6 @@ This file imports all necessary model classes and enums into the
 `app.db.models` namespace. This ensures that SQLAlchemy's metadata
 is populated with all table definitions when `Base.metadata.create_all()`
 is called.
-
-It relies on the structure derived from the project's model files
-as per the provided JSON summary and user corrections.
 """
 
 # Import the Base for declarative models
@@ -117,6 +114,11 @@ from app.db.models.picking_list import PickingList, PickingListItem
 from app.db.models.platform_integration import PlatformIntegration, SyncEvent
 from app.db.models.communication import CustomerCommunication
 
+# Import Media & Asset Management Models
+from app.db.models.media_asset import MediaAsset
+from app.db.models.tag import Tag
+from app.db.models.association_media import MediaAssetTag
+
 # Import Documentation & Utility Models
 from app.db.models.documentation import (
     DocumentationCategory,
@@ -182,6 +184,10 @@ __all__ = [
     "PlatformIntegration",
     "SyncEvent",
     "CustomerCommunication",
+    # Media & Asset Management Models
+    "MediaAsset",
+    "Tag",
+    "MediaAssetTag",
     # Documentation & Utility Models
     "DocumentationCategory",
     "DocumentationResource",
@@ -227,7 +233,3 @@ __all__ = [
     "DocumentationType",
     "DocumentationStatus",
 ]
-
-# Note: The alias for HardwareMaterialModel remains to avoid conflict with the
-# HardwareMaterial enum. ProjectTemplate and ProjectTemplateComponent no longer
-# need aliases as they are correctly sourced from project.py.

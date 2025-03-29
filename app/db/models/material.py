@@ -169,15 +169,19 @@ class Material(AbstractBase, ValidationMixin, CostingMixin, TimestampMixin):
         return quantity
 
     @validates("reorder_point")
-    def validate_reorder_point(self, key: str, value: float) -> float:
+    def validate_reorder_point(self, key: str, value: Optional[float]) -> Optional[float]:
         """Validate reorder point (cannot be negative)."""
+        if value is None:
+            return value
         if value < 0:
             raise ValueError("Reorder point cannot be negative")
         return value
 
     @validates("price")
-    def validate_price(self, key: str, value: float) -> float:
+    def validate_price(self, key: str, value: Optional[float]) -> Optional[float]:
         """Validate selling price (cannot be negative)."""
+        if value is None:
+            return value
         if value < 0:
             raise ValueError("Selling price cannot be negative")
         return value

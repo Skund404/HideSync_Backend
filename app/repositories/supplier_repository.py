@@ -1,353 +1,306 @@
 # File: app/repositories/supplier_repository.py
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Generator
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, and_, desc
-from datetime import datetime
-# Add this import at the top of supplier_repository.py
-from sqlalchemy import func
+from sqlalchemy import or_, and_, func, text
+import logging
+
 from app.db.models.supplier import Supplier
 from app.db.models.enums import SupplierStatus
 from app.repositories.base_repository import BaseRepository
-import time
+from app.core.exceptions import DatabaseException
+
+logger = logging.getLogger(__name__)
 
 
 class SupplierRepository(BaseRepository[Supplier]):
     """
-    Repository for Supplier entity operations.
-
-    Handles data access for suppliers, providing methods for
-    searching, filtering, and retrieving supplier information.
+    Repository for Supplier entity operations with memory-efficient implementations.
     """
 
     def __init__(self, session: Session, encryption_service=None):
-        """
-        Initialize the SupplierRepository.
-
-        Args:
-            session (Session): SQLAlchemy database session
-            encryption_service (Optional): Service for handling field encryption/decryption
-        """
+        """Initialize the repository with session and optional encryption service."""
         super().__init__(session, encryption_service)
         self.model = Supplier
 
-    def get_suppliers_by_status(
-        self, status: SupplierStatus, skip: int = 0, limit: int = 100
-    ) -> List[Supplier]:
-        """
-        Get suppliers by their status.
+    # Replace the list method in app/repositories/supplier_repository.py
 
-        Args:
-            status (SupplierStatus): The supplier status to filter by
-            skip (int): Number of records to skip (for pagination)
-            limit (int): Maximum number of records to return
-
-        Returns:
-            List[Supplier]: List of suppliers with the specified status
-        """
-        query = self.session.query(self.model).filter(self.model.status == status)
-
-        entities = query.offset(skip).limit(limit).all()
-        return [self._decrypt_sensitive_fields(entity) for entity in entities]
-
-    # In supplier_repository.py
     def list(self, **filters) -> List[Supplier]:
         """
-        List suppliers with optional filtering.
+        List suppliers with optional filtering using the proven diagnostics approach.
 
         Args:
-            **filters: Filters to apply including:
-                - skip: Number of records to skip
-                - limit: Maximum number of records to return
+            **filters: Optional filters including:
+                - name: Filter by supplier name
                 - status: Filter by supplier status
                 - category: Filter by supplier category
-                - search: Search term for name/contact/email
+                - skip: Number of records to skip (pagination)
+                - limit: Page size (pagination)
 
         Returns:
-            List of suppliers matching the filters
+            List[Supplier]: List of suppliers matching the criteria
+
+        Raises:
+            DatabaseException: If a database error occurs
         """
-        query = self.session.query(self.model)
+        try:
+            # Extract pagination parameters
+            skip = filters.get("skip", 0)
+            limit = filters.get("limit", 100)
 
-        # Apply status filter
-        if "status" in filters and filters["status"]:
-            query = query.filter(self.model.status == filters["status"])
+            # Use the exact approach from the working diagnostics script
+            try:
+                from app.db.session import EncryptionManager, use_sqlcipher
+                from app.core.config import settings
+                import os
 
-        # Apply category filter
-        if "category" in filters and filters["category"]:
-            query = query.filter(self.model.category == filters["category"])
+                if not use_sqlcipher:
+                    logger.warning("SQLCipher not enabled, using standard SQLAlchemy approach")
+                    return self._list_with_sqlalchemy(skip, limit, filters)
 
-        # Apply material_category filter (if present in model)
-        if "material_category" in filters and filters["material_category"]:
-            # This assumes material_categories is a JSON array and contains the specified category
-            query = query.filter(self.model.material_categories.contains(filters["material_category"]))
+                # Get the database path
+                db_path = os.path.abspath(settings.DATABASE_PATH)
+                logger.info(f"Using database path: {db_path}")
 
-        # Apply search term
-        if "search" in filters and filters["search"]:
-            search_term = f"%{filters['search']}%"
-            query = query.filter(
-                or_(
-                    self.model.name.ilike(search_term),
-                    self.model.contact_name.ilike(search_term),  # Fixed column name
-                    self.model.email.ilike(search_term)
-                )
+                # Get SQLCipher module from EncryptionManager
+                sqlcipher = EncryptionManager.get_sqlcipher_module()
+
+                # Connect exactly like in the diagnostics script
+                conn = sqlcipher.connect(db_path)
+                cursor = conn.cursor()
+
+                # Configure encryption using EXACTLY the same approach as diagnostics
+                key_pragma_value = EncryptionManager.format_key_for_pragma()
+                logger.debug(f"Using key format: {key_pragma_value}")
+
+                cursor.execute(f"PRAGMA key = {key_pragma_value};")
+                cursor.execute("PRAGMA cipher_page_size = 4096;")
+                cursor.execute("PRAGMA kdf_iter = 256000;")
+                cursor.execute("PRAGMA cipher_hmac_algorithm = HMAC_SHA512;")
+                cursor.execute("PRAGMA cipher_kdf_algorithm = PBKDF2_HMAC_SHA512;")
+
+                # Verify table exists (diagnostic step)
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='suppliers';")
+                if not cursor.fetchone():
+                    logger.error("Table 'suppliers' not found in database")
+                    raise DatabaseException(
+                        message="Table 'suppliers' not found in database",
+                        entity_type="Supplier"
+                    )
+
+                # Build query with parameterized values for safety
+                sql = "SELECT * FROM suppliers WHERE 1=1"
+                params = []
+
+                # Add filter conditions
+                if "name" in filters and filters["name"]:
+                    sql += " AND name = ?"
+                    params.append(filters["name"])
+
+                if "status" in filters and filters["status"]:
+                    sql += " AND status = ?"
+                    params.append(str(filters["status"]))
+
+                if "category" in filters and filters["category"]:
+                    sql += " AND category = ?"
+                    params.append(filters["category"])
+
+                # Add pagination
+                sql += " LIMIT ? OFFSET ?"
+                params.append(limit)
+                params.append(skip)
+
+                logger.info(f"Executing query: {sql} with params: {params}")
+
+                # Execute the query
+                cursor.execute(sql, params)
+
+                # Get column names and fetch results
+                column_names = [column[0] for column in cursor.description]
+                rows = cursor.fetchall()
+
+                # Convert to model instances
+                entities = []
+                for row in rows:
+                    supplier = Supplier()
+                    for i, column in enumerate(column_names):
+                        if hasattr(supplier, column):
+                            setattr(supplier, column, row[i])
+                    entities.append(supplier)
+
+                conn.close()
+                logger.info(f"Successfully retrieved {len(entities)} suppliers")
+
+                # Process any sensitive fields
+                return [self._decrypt_sensitive_fields(entity) for entity in entities]
+
+            except ImportError as e:
+                logger.error(f"Import error: {e}")
+                return self._list_with_sqlalchemy(skip, limit, filters)
+
+        except Exception as e:
+            logger.error(f"Error in supplier list: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            raise DatabaseException(
+                message=f"Error retrieving suppliers: {str(e)}",
+                entity_type="Supplier"
             )
 
-        # Apply pagination
-        skip = filters.get("skip", 0)
-        limit = filters.get("limit", 100)
-
-        # Order by id to ensure consistent results
-        query = query.order_by(self.model.id)
-
-        # Execute query
-        entities = query.offset(skip).limit(limit).all()
-
-        # Decrypt sensitive fields if needed
-        return [self._decrypt_sensitive_fields(entity) for entity in entities]
-
-    def get_suppliers_by_category(
-        self, category: str, skip: int = 0, limit: int = 100
-    ) -> List[Supplier]:
-        """
-        Get suppliers by their category.
-
-        Args:
-            category (str): The supplier category to filter by
-            skip (int): Number of records to skip (for pagination)
-            limit (int): Maximum number of records to return
-
-        Returns:
-            List[Supplier]: List of suppliers in the specified category
-        """
-        query = self.session.query(self.model).filter(self.model.category == category)
-
-        entities = query.offset(skip).limit(limit).all()
-        return [self._decrypt_sensitive_fields(entity) for entity in entities]
-
-    def get_preferred_suppliers(
-        self, skip: int = 0, limit: int = 100
-    ) -> List[Supplier]:
-        """
-        Get preferred suppliers.
-
-        Args:
-            skip (int): Number of records to skip (for pagination)
-            limit (int): Maximum number of records to return
-
-        Returns:
-            List[Supplier]: List of preferred suppliers
-        """
-        query = self.session.query(self.model).filter(
-            self.model.status == SupplierStatus.PREFERRED
-        )
-
-        entities = query.offset(skip).limit(limit).all()
-        return [self._decrypt_sensitive_fields(entity) for entity in entities]
-
-    def create(self, data: Dict[str, Any]) -> Supplier:
-        """
-        Create a new supplier with timestamp-based ID.
-        """
-        # Set timestamps
-        now = datetime.now()
-        data['created_at'] = now
-        data['updated_at'] = now
-
-        # Generate a timestamp-based ID
-        if 'id' not in data:
-            # Use current time in milliseconds as ID
-            data['id'] = int(time.time() * 1000)
-
-        # Create entity
-        encrypted_data = self._encrypt_sensitive_fields(data)
-        entity = self.model(**encrypted_data)
-
+    def _list_with_sqlalchemy(self, skip: int, limit: int, filters: Dict[str, Any]) -> List[Supplier]:
+        """SQLAlchemy fallback implementation."""
         try:
-            # Add to session and commit
-            self.session.add(entity)
-            self.session.commit()
+            # Start building the query
+            query = self.session.query(self.model)
+
+            # Apply specific filters if present
+            if "name" in filters and filters["name"]:
+                query = query.filter(self.model.name == filters["name"])
+
+            if "status" in filters and filters["status"]:
+                query = query.filter(self.model.status == filters["status"])
+
+            if "category" in filters and filters["category"]:
+                query = query.filter(self.model.category == filters["category"])
+
+            # Apply pagination at database level
+            entities = query.offset(skip).limit(limit).all()
+            return [self._decrypt_sensitive_fields(entity) for entity in entities]
+
         except Exception as e:
-            print(f"Error during supplier creation: {e}")
-            # Try direct SQL insert as fallback
-            # (This would require more work in a real implementation)
-
-        # Return the entity
-        return self._decrypt_sensitive_fields(entity)
-
-    def get_all_suppliers(self, skip: int = 0, limit: int = 100) -> List[Supplier]:
+            logger.error(f"Error in SQLAlchemy list method: {e}")
+            raise DatabaseException(
+                message=f"Error retrieving suppliers with SQLAlchemy: {str(e)}",
+                entity_type="Supplier"
+            )
+    def stream_all(self, batch_size=50, **filters) -> Generator[Supplier, None, None]:
         """
-        Get all suppliers with pagination.
+        Stream all suppliers in memory-efficient batches.
+
+        Use this method when you need to process a large number of suppliers
+        without loading all of them into memory at once.
 
         Args:
-            skip: Number of records to skip
+            batch_size: Number of records to fetch per batch
+            **filters: Optional filters (same as list method)
+
+        Yields:
+            Supplier instances, one at a time
+        """
+        offset = 0
+        while True:
+            batch = self.list(skip=offset, limit=batch_size, **filters)
+            if not batch:
+                break
+
+            for supplier in batch:
+                yield supplier
+
+            offset += batch_size
+
+    def count(self, **filters) -> int:
+        """
+        Count suppliers with the given filters.
+
+        This uses a COUNT query which is memory-efficient even for large tables.
+
+        Args:
+            **filters: Optional filters (same as list method)
+
+        Returns:
+            int: Number of suppliers matching the criteria
+        """
+        try:
+            query = self.session.query(func.count(self.model.id))
+
+            # Apply filters
+            if "name" in filters and filters["name"]:
+                query = query.filter(self.model.name == filters["name"])
+
+            if "status" in filters and filters["status"]:
+                query = query.filter(self.model.status == filters["status"])
+
+            if "category" in filters and filters["category"]:
+                query = query.filter(self.model.category == filters["category"])
+
+            return query.scalar() or 0
+
+        except Exception as e:
+            logger.error(f"Error in supplier count: {e}")
+            raise DatabaseException(
+                message=f"Error counting suppliers: {str(e)}",
+                entity_type="Supplier"
+            )
+
+    def search_suppliers(self, query_str: str, skip: int = 0, limit: int = 100) -> List[Supplier]:
+        """
+        Search for suppliers by name, contact, or email.
+
+        Args:
+            query_str: The search query string
+            skip: Number of records to skip (pagination)
             limit: Maximum number of records to return
 
         Returns:
-            List of suppliers
+            List of matching suppliers
         """
-        query = self.session.query(self.model)
-
-        # Fetch all entities
-        entities = query.all()
-
-        # Apply pagination after fetch (not ideal but works with SQLCipherQuery)
-        if skip or limit:
-            entities = entities[skip:skip + limit]
-
-        # Decrypt sensitive fields
-        return [self._decrypt_sensitive_fields(entity) for entity in entities]
-
-    def exists_by_name(self, name: str) -> bool:
-        """
-        Check if a supplier with the exact name exists.
-
-        Args:
-            name: Name to check
-
-        Returns:
-            True if a supplier with this name exists, False otherwise
-        """
-        query = self.session.query(self.model).filter(self.model.name == name)
-        # Just check if any record exists - more efficient than fetching all records
-        return query.first() is not None
-
-    def get_active_suppliers(self, skip: int = 0, limit: int = 100) -> List[Supplier]:
-        """
-        Get active suppliers.
-
-        Args:
-            skip (int): Number of records to skip (for pagination)
-            limit (int): Maximum number of records to return
-
-        Returns:
-            List[Supplier]: List of active suppliers
-        """
-        query = self.session.query(self.model).filter(
-            or_(
-                self.model.status == SupplierStatus.ACTIVE,
-                self.model.status == SupplierStatus.PREFERRED,
-                self.model.status == SupplierStatus.STRATEGIC,
+        try:
+            search_query = self.session.query(self.model).filter(
+                or_(
+                    self.model.name.ilike(f"%{query_str}%"),
+                    self.model.contact_name.ilike(f"%{query_str}%"),
+                    self.model.email.ilike(f"%{query_str}%")
+                )
             )
-        )
 
-        entities = query.offset(skip).limit(limit).all()
-        return [self._decrypt_sensitive_fields(entity) for entity in entities]
+            # Apply pagination at database level
+            entities = search_query.offset(skip).limit(limit).all()
+            return [self._decrypt_sensitive_fields(entity) for entity in entities]
 
-    def get_suppliers_by_material_category(
-        self, material_category: str, skip: int = 0, limit: int = 100
-    ) -> List[Supplier]:
-        """
-        Get suppliers that provide a specific material category.
-
-        Args:
-            material_category (str): Material category to filter by
-            skip (int): Number of records to skip (for pagination)
-            limit (int): Maximum number of records to return
-
-        Returns:
-            List[Supplier]: List of suppliers providing the specified material category
-        """
-        # This assumes materialCategories is stored as a JSON array or similar
-        query = self.session.query(self.model).filter(
-            self.model.materialCategories.contains(material_category)
-        )
-
-        entities = query.offset(skip).limit(limit).all()
-        return [self._decrypt_sensitive_fields(entity) for entity in entities]
-
-    def get_suppliers_by_rating(
-        self, min_rating: int, skip: int = 0, limit: int = 100
-    ) -> List[Supplier]:
-        """
-        Get suppliers with a rating at or above the specified minimum.
-
-        Args:
-            min_rating (int): Minimum rating to filter by
-            skip (int): Number of records to skip (for pagination)
-            limit (int): Maximum number of records to return
-
-        Returns:
-            List[Supplier]: List of suppliers with ratings at or above the minimum
-        """
-        query = self.session.query(self.model).filter(self.model.rating >= min_rating)
-
-        entities = query.offset(skip).limit(limit).all()
-        return [self._decrypt_sensitive_fields(entity) for entity in entities]
-
-    def update_supplier_status(
-        self, supplier_id: int, status: SupplierStatus
-    ) -> Optional[Supplier]:
-        """
-        Update a supplier's status.
-
-        Args:
-            supplier_id (int): ID of the supplier
-            status (SupplierStatus): New status to set
-
-        Returns:
-            Optional[Supplier]: Updated supplier if found, None otherwise
-        """
-        supplier = self.get_by_id(supplier_id)
-        if not supplier:
-            return None
-
-        supplier.status = status
-
-        self.session.commit()
-        self.session.refresh(supplier)
-        return self._decrypt_sensitive_fields(supplier)
-
-    def update_supplier_rating(
-        self, supplier_id: int, rating: int
-    ) -> Optional[Supplier]:
-        """
-        Update a supplier's rating.
-
-        Args:
-            supplier_id (int): ID of the supplier
-            rating (int): New rating value
-
-        Returns:
-            Optional[Supplier]: Updated supplier if found, None otherwise
-        """
-        supplier = self.get_by_id(supplier_id)
-        if not supplier:
-            return None
-
-        supplier.rating = max(min(rating, 5), 1)  # Ensure rating is between 1 and 5
-
-        self.session.commit()
-        self.session.refresh(supplier)
-        return self._decrypt_sensitive_fields(supplier)
-
-    def search_suppliers(
-            self, query: str, skip: int = 0, limit: int = 100
-    ) -> List[Supplier]:
-        """
-        Search for suppliers by name, contact name, or email.
-        """
-        search_query = self.session.query(self.model).filter(
-            or_(
-                self.model.name.ilike(f"%{query}%"),
-                self.model.contact_name.ilike(f"%{query}%"),  # Fixed column name
-                self.model.email.ilike(f"%{query}%"),
+        except MemoryError as e:
+            logger.error(f"Memory error in supplier search: {e}")
+            # Construct a direct SQL search with pagination
+            return self._search_suppliers_direct_sql(query_str, skip, limit)
+        except Exception as e:
+            logger.error(f"Error in supplier search: {e}")
+            raise DatabaseException(
+                message=f"Error searching suppliers: {str(e)}",
+                entity_type="Supplier"
             )
-        )
 
-        entities = search_query.offset(skip).limit(limit).all()
-        return [self._decrypt_sensitive_fields(entity) for entity in entities]
+    def _search_suppliers_direct_sql(self, query_str: str, skip: int, limit: int) -> List[Supplier]:
+        """Fallback search implementation using direct SQL."""
+        try:
+            # Build a simple search SQL query with pagination
+            sql = """
+            SELECT * FROM suppliers 
+            WHERE name LIKE :query OR contact_name LIKE :query OR email LIKE :query
+            LIMIT :limit OFFSET :skip
+            """
+            params = {
+                "query": f"%{query_str}%",
+                "limit": limit,
+                "skip": skip
+            }
 
-    def get_supplier_by_email(self, email: str) -> Optional[Supplier]:
-        """
-        Get a supplier by email address.
+            # Execute the query
+            result = self.session.execute(text(sql), params)
 
-        Args:
-            email (str): Email address to search for
+            # Convert to model instances
+            entities = []
+            for row in result:
+                supplier = Supplier()
+                for key, value in row._mapping.items():
+                    if hasattr(supplier, key):
+                        setattr(supplier, key, value)
+                entities.append(supplier)
 
-        Returns:
-            Optional[Supplier]: The supplier if found, None otherwise
-        """
-        entity = (
-            self.session.query(self.model).filter(self.model.email == email).first()
-        )
-        return self._decrypt_sensitive_fields(entity) if entity else None
+            return [self._decrypt_sensitive_fields(entity) for entity in entities]
+
+        except Exception as e:
+            logger.error(f"Error in direct SQL supplier search: {e}")
+            raise DatabaseException(
+                message=f"Error searching suppliers with direct SQL: {str(e)}",
+                entity_type="Supplier",
+                query=sql
+            )

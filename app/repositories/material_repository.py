@@ -77,10 +77,30 @@ class MaterialRepository(BaseRepository[Material]):
         """
         query = self.session.query(self.model)
 
+        # Add debugging here before filtering
+        print(f"DEBUG: Filtering materials by type: {material_type}")
+
         # Apply filtering conditions
         if material_type:
-            query = query.filter(self.model.materialType == material_type)
+            # Handle case-insensitive matching for material type
+            if material_type.upper() == "LEATHER":
+                query = query.filter(self.model.materialType == MaterialType.LEATHER)
+            elif material_type.upper() == "HARDWARE":
+                query = query.filter(self.model.materialType == MaterialType.HARDWARE)
+            elif material_type.upper() == "SUPPLIES":
+                query = query.filter(self.model.materialType == MaterialType.SUPPLIES)
+            elif material_type.upper() == "THREAD":
+                query = query.filter(self.model.materialType == MaterialType.THREAD)
+            elif material_type.upper() == "FABRIC":
+                query = query.filter(self.model.materialType == MaterialType.FABRIC)
+            else:
+                # Use direct filtering for other cases
+                query = query.filter(self.model.materialType == material_type)
 
+            # Print SQL query for debugging
+            print(f"DEBUG: SQL Query: {query}")
+
+        # Rest of the method remains the same...
         if quality:
             query = query.filter(self.model.quality == quality)
 
@@ -97,6 +117,10 @@ class MaterialRepository(BaseRepository[Material]):
 
         # Apply pagination
         entities = query.order_by(self.model.name).offset(skip).limit(limit).all()
+
+        # Add debugging after fetching
+        print(
+            f"DEBUG: Found {len(entities)} materials, sample types: {[e.materialType for e in entities[:3] if hasattr(e, 'materialType')]}")
 
         # Decrypt sensitive fields if applicable
         return [self._decrypt_sensitive_fields(entity) for entity in entities]

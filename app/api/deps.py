@@ -4,8 +4,9 @@ FastAPI dependencies for HideSync.
 This module provides dependency functions for FastAPI routes.
 """
 
-from typing import Generator, Optional
+from typing import Generator, Optional, Any, Dict, List, Union
 from datetime import datetime
+from enum import Enum
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -146,3 +147,101 @@ def get_current_active_superuser(
         )
 
     return current_user
+
+
+# New functions for serialization
+
+def serialize_model(model: Any) -> Dict[str, Any]:
+    """
+    Serialize a model object to a dict, handling enums and timestamps.
+
+    Args:
+        model: SQLAlchemy model instance
+
+    Returns:
+        Dict: Serialized model data
+    """
+    if hasattr(model, "__dict__"):
+        result = {}
+        for key, value in model.__dict__.items():
+            if key.startswith("_"):
+                continue
+
+            # Convert enum values
+            if isinstance(value, Enum):
+                result[key] = value.value
+            # Ensure timestamps exist
+            elif key in ("created_at", "updated_at") and value is None:
+                result[key] = datetime.utcnow()
+            # Recursively serialize nested objects
+            elif hasattr(value, "__dict__") and not isinstance(value, (str, int, float, bool)):
+                result[key] = serialize_model(value)
+            else:
+                result[key] = value
+        return result
+    return model
+
+
+def serialize_response(data: Any) -> Any:
+    """
+    Process API response data to handle enums and missing timestamps.
+
+    Args:
+        data: Response data to process
+
+    Returns:
+        Processed data with enum values and timestamps
+    """
+    if isinstance(data, list):
+        return [serialize_response(item) for item in data]
+    elif hasattr(data, "__dict__"):
+        return serialize_model(data)
+    elif isinstance(data, dict):
+        return {k: serialize_response(v) for k, v in data.items()}
+    elif isinstance(data, Enum):
+        return data.value
+    return data
+
+
+def serialize_for_response(data: Any) -> Any:
+    """
+    Convert data to be suitable for FastAPI response validation.
+    Handles enum values, timestamps, and nested structures.
+    """
+    # Handle lists
+    if isinstance(data, list):
+        return [serialize_for_response(item) for item in data]
+
+    # Handle dictionaries
+    if isinstance(data, dict):
+        return {k: serialize_for_response(v) for k, v in data.items()}
+
+    # Handle enum values
+    if isinstance(data, Enum):
+        return data.value
+
+    # Handle tuples that might be enum values
+    if isinstance(data, tuple) and len(data) == 1:
+        value = data[0]
+        if isinstance(value, str):
+            return value
+
+    # Return regular values unchanged
+    return data
+
+def process_response(depends_on: Any = None):
+    """
+    Dependency to process the response data before returning.
+
+    Usage:
+    @router.get("/", response_model=List[Material], dependencies=[Depends(process_response)])
+
+    Args:
+        depends_on: Optional dependency to ensure execution order
+
+    Returns:
+        None
+    """
+    # This is just a marker dependency
+    # The actual processing happens in a middleware or response handler
+    return None

@@ -10,6 +10,10 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 import logging
+import json
+from datetime import datetime
+from enum import Enum
+from typing import Any, Dict
 
 from app.api.api import api_router
 from app.core.config import settings
@@ -52,6 +56,7 @@ app.add_middleware(
     max_age=86400,  # 24 hours
 )
 
+
 # Log requests AFTER CORS middleware
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
@@ -63,8 +68,10 @@ async def log_requests(request: Request, call_next):
     logger.info(f"Outgoing response: {response.status_code}")
     return response
 
+
 # Add metrics middleware
 app.add_middleware(MetricsMiddleware)
+
 
 # Add security headers middleware (AFTER CORS)
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -91,7 +98,13 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
         return response
 
+
 app.add_middleware(SecurityHeadersMiddleware)
+
+
+
+
+
 
 # Set up event handlers
 setup_event_handlers(app)

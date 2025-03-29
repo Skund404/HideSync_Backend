@@ -22,6 +22,47 @@ from app.db.models.enums import (
     MeasurementUnit,
 )
 
+from pydantic import root_validator
+
+
+class EnumCompatMixin:
+    """Mixin to handle enum compatibility issues in response models."""
+
+    # This validator will fix enum issues with responses
+    @root_validator(pre=True)
+    def fix_enum_fields(cls, values):
+        """Process the input values to fix common enum serialization issues."""
+        # Create a new dict to avoid modifying the input
+        fixed_values = dict(values)
+
+        # Fields to check for enum-like values
+        enum_fields = ['status', 'unit', 'material_type', 'quality']
+
+        for field in enum_fields:
+            if field in fixed_values:
+                value = fixed_values[field]
+
+                # Skip None values
+                if value is None:
+                    continue
+
+                # Handle tuples (most common issue)
+                if isinstance(value, tuple) and len(value) == 1:
+                    fixed_values[field] = value[0]
+
+                # Handle objects with value attribute (Enum objects)
+                elif hasattr(value, 'value'):
+                    fixed_values[field] = value.value
+
+        # Ensure timestamps exist
+        if 'created_at' in fixed_values and fixed_values['created_at'] is None:
+            fixed_values['created_at'] = datetime.utcnow()
+
+        if 'updated_at' in fixed_values and fixed_values['updated_at'] is None:
+            fixed_values['updated_at'] = datetime.utcnow()
+
+        return fixed_values
+
 
 class MaterialBase(BaseModel):
     """
@@ -308,12 +349,8 @@ class SuppliesMaterialInDB(SuppliesMaterialBase, MaterialInDB):
         from_attributes = True
 
 
-class MaterialResponse(MaterialInDB):
-    """
-    Schema for material responses in the API.
-
-    Includes additional calculated fields.
-    """
+class MaterialResponse(MaterialInDB, EnumCompatMixin):
+    """Schema for material responses in the API."""
 
     inventory_value: Optional[float] = Field(
         None, description="Total value of inventory (quantity × cost)"
@@ -329,10 +366,8 @@ class MaterialResponse(MaterialInDB):
         from_attributes = True
 
 
-class LeatherMaterialResponse(LeatherMaterialInDB):
-    """
-    Schema for leather material responses in the API.
-    """
+class LeatherMaterialResponse(LeatherMaterialInDB, EnumCompatMixin):
+    """Schema for leather material responses in the API."""
 
     inventory_value: Optional[float] = Field(
         None, description="Total value of inventory (quantity × cost)"
@@ -348,10 +383,8 @@ class LeatherMaterialResponse(LeatherMaterialInDB):
         from_attributes = True
 
 
-class HardwareMaterialResponse(HardwareMaterialInDB):
-    """
-    Schema for hardware material responses in the API.
-    """
+class HardwareMaterialResponse(HardwareMaterialInDB, EnumCompatMixin):
+    """Schema for hardware material responses in the API."""
 
     inventory_value: Optional[float] = Field(
         None, description="Total value of inventory (quantity × cost)"
@@ -367,10 +400,8 @@ class HardwareMaterialResponse(HardwareMaterialInDB):
         from_attributes = True
 
 
-class SuppliesMaterialResponse(SuppliesMaterialInDB):
-    """
-    Schema for supplies material responses in the API.
-    """
+class SuppliesMaterialResponse(SuppliesMaterialInDB, EnumCompatMixin):
+    """Schema for supplies material responses in the API."""
 
     inventory_value: Optional[float] = Field(
         None, description="Total value of inventory (quantity × cost)"

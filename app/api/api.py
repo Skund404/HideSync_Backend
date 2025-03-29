@@ -20,6 +20,8 @@ from app.api.endpoints import (
     platform_integrations,
     documentation,
     storage,
+    media_assets,
+    tags,
 )
 from app.core.config import settings
 
@@ -42,3 +44,9 @@ api_router.include_router(
     documentation.router, prefix="/documentation", tags=["Documentation"]
 )
 api_router.include_router(storage.router, prefix="/storage", tags=["Storage"])
+
+# Media asset management
+api_router.include_router(
+    media_assets.router, prefix="/media-assets", tags=["Media Assets"]
+)
+api_router.include_router(tags.router, prefix="/tags", tags=["Tags"])

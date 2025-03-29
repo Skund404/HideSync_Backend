@@ -70,6 +70,11 @@ from app.repositories.supplier_history_repository import SupplierHistoryReposito
 from app.repositories.supplier_rating_repository import SupplierRatingRepository
 from app.repositories.user_repository import UserRepository
 
+# Media Asset Management Repositories
+from app.repositories.media_asset_repository import MediaAssetRepository
+from app.repositories.tag_repository import TagRepository
+from app.repositories.media_asset_tag_repository import MediaAssetTagRepository
+
 
 class RepositoryFactory:
     """
@@ -187,25 +192,25 @@ class RepositoryFactory:
 
     # Documentation repositories
     def create_documentation_resource_repository(
-        self,
+            self,
     ) -> DocumentationResourceRepository:
         """Create a DocumentationResourceRepository instance."""
         return DocumentationResourceRepository(self.session, self.encryption_service)
 
     def create_documentation_category_repository(
-        self,
+            self,
     ) -> DocumentationCategoryRepository:
         """Create a DocumentationCategoryRepository instance."""
         return DocumentationCategoryRepository(self.session, self.encryption_service)
 
     def create_application_context_repository(
-        self,
+            self,
     ) -> ApplicationContextRepository:
         """Create an ApplicationContextRepository instance."""
         return ApplicationContextRepository(self.session, self.encryption_service)
 
     def create_contextual_help_mapping_repository(
-        self,
+            self,
     ) -> ContextualHelpMappingRepository:
         """Create a ContextualHelpMappingRepository instance."""
         return ContextualHelpMappingRepository(self.session, self.encryption_service)
@@ -261,7 +266,7 @@ class RepositoryFactory:
         return CommunicationRepository(self.session, self.encryption_service)
 
     def create_customer_communication_repository(
-        self,
+            self,
     ) -> CustomerCommunicationRepository:
         """Create a CustomerCommunicationRepository instance."""
         return CustomerCommunicationRepository(self.session, self.encryption_service)
@@ -304,3 +309,16 @@ class RepositoryFactory:
     def create_user_repository(self) -> UserRepository:
         """Create a UserRepository instance."""
         return UserRepository(self.session, self.encryption_service)
+
+    # Media Asset Management repositories
+    def create_media_asset_repository(self) -> MediaAssetRepository:
+        """Create a MediaAssetRepository instance."""
+        return MediaAssetRepository(self.session, self.encryption_service)
+
+    def create_tag_repository(self) -> TagRepository:
+        """Create a TagRepository instance."""
+        return TagRepository(self.session, self.encryption_service)
+
+    def create_media_asset_tag_repository(self) -> MediaAssetTagRepository:
+        """Create a MediaAssetTagRepository instance."""
+        return MediaAssetTagRepository(self.session, self.encryption_service)

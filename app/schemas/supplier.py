@@ -11,6 +11,7 @@ from typing import Dict, List, Optional, Union, Any
 from pydantic import BaseModel, EmailStr, Field, validator
 
 from app.db.models.enums import SupplierStatus
+from app.core.validation import validate_phone
 
 
 class SupplierBase(BaseModel):
@@ -54,15 +55,11 @@ class SupplierCreate(SupplierBase):
     Schema for creating a new supplier.
     """
 
-    @validator("phone")
-    def validate_phone(cls, v):
-        """Validate phone number format."""
-        if v is not None:
-            # Remove non-digit characters for standardization
-            digits_only = "".join(filter(str.isdigit, v))
-            if len(digits_only) < 10:
-                raise ValueError("Phone number must have at least 10 digits")
-        return v
+    @validator('phone', pre=True, always=True)
+    def validate_phone_number(cls, v):
+        if v is None:
+            return v
+        return validate_phone(v)
 
 
 class SupplierUpdate(BaseModel):
@@ -119,18 +116,35 @@ class SupplierInDB(SupplierBase):
     """
 
     id: int = Field(..., description="Unique identifier for the supplier")
-    created_at: datetime = Field(
-        ..., description="Timestamp when the supplier was created"
+    # Make datetime fields optional to handle NULL values in database
+    created_at: Optional[datetime] = Field(
+        None, description="Timestamp when the supplier was created"
     )
-    updated_at: datetime = Field(
-        ..., description="Timestamp when the supplier was last updated"
+    updated_at: Optional[datetime] = Field(
+        None, description="Timestamp when the supplier was last updated"
     )
     last_order_date: Optional[str] = Field(
         None, description="Date of the most recent order"
     )
 
+    # Add validator to handle NULL timestamps
+    @validator('created_at', 'updated_at', pre=True)
+    def set_datetime_defaults(cls, value):
+        # If value is None, return the current datetime
+        if value is None:
+            return datetime.now()
+        return value
+
     class Config:
         from_attributes = True
+        # Add configuration for allowing model population from ORM objects
+        # Works with Pydantic v1 and v2
+        try:
+            # Pydantic v2
+            model_config = {"from_attributes": True}
+        except Exception:
+            # Pydantic v1
+            orm_mode = True
 
 
 class SupplierRatingBase(BaseModel):
@@ -174,12 +188,29 @@ class SupplierRatingInDB(SupplierRatingBase):
     """
 
     id: int = Field(..., description="Unique identifier for the rating")
-    created_at: datetime = Field(
-        ..., description="Timestamp when the rating was created"
+    # Make datetime field optional to handle NULL values
+    created_at: Optional[datetime] = Field(
+        None, description="Timestamp when the rating was created"
     )
+
+    # Add validator for NULL timestamp
+    @validator('created_at', pre=True)
+    def set_datetime_defaults(cls, value):
+        # If value is None, return the current datetime
+        if value is None:
+            return datetime.now()
+        return value
 
     class Config:
         from_attributes = True
+        # Add configuration for allowing model population from ORM objects
+        # Works with Pydantic v1 and v2
+        try:
+            # Pydantic v2
+            model_config = {"from_attributes": True}
+        except Exception:
+            # Pydantic v1
+            orm_mode = True
 
 
 class SupplierHistoryBase(BaseModel):
@@ -211,12 +242,29 @@ class SupplierHistoryInDB(SupplierHistoryBase):
     """
 
     id: int = Field(..., description="Unique identifier for the history entry")
-    created_at: datetime = Field(
-        ..., description="Timestamp when the entry was created"
+    # Make datetime field optional to handle NULL values
+    created_at: Optional[datetime] = Field(
+        None, description="Timestamp when the entry was created"
     )
+
+    # Add validator for NULL timestamp
+    @validator('created_at', pre=True)
+    def set_datetime_defaults(cls, value):
+        # If value is None, return the current datetime
+        if value is None:
+            return datetime.now()
+        return value
 
     class Config:
         from_attributes = True
+        # Add configuration for allowing model population from ORM objects
+        # Works with Pydantic v1 and v2
+        try:
+            # Pydantic v2
+            model_config = {"from_attributes": True}
+        except Exception:
+            # Pydantic v1
+            orm_mode = True
 
 
 class SupplierResponse(SupplierInDB):
@@ -244,6 +292,14 @@ class SupplierResponse(SupplierInDB):
 
     class Config:
         from_attributes = True
+        # Add configuration for allowing model population from ORM objects
+        # Works with Pydantic v1 and v2
+        try:
+            # Pydantic v2
+            model_config = {"from_attributes": True}
+        except Exception:
+            # Pydantic v1
+            orm_mode = True
 
 
 class SupplierDetailResponse(SupplierResponse):
@@ -265,6 +321,14 @@ class SupplierDetailResponse(SupplierResponse):
 
     class Config:
         from_attributes = True
+        # Add configuration for allowing model population from ORM objects
+        # Works with Pydantic v1 and v2
+        try:
+            # Pydantic v2
+            model_config = {"from_attributes": True}
+        except Exception:
+            # Pydantic v1
+            orm_mode = True
 
 
 class SupplierList(BaseModel):

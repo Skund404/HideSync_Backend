@@ -659,33 +659,72 @@ class SupplierService(BaseService[Supplier]):
 
     # In app/services/supplier_service.py
 
-    def get_suppliers(self, skip: int = 0, limit: int = 100, search_params=None):
+    # Add this method to your SupplierService class in app/services/supplier_service.py
+
+    def get_suppliers(self, skip: int = 0, limit: int = 100, **filters) -> List[Any]:
         """
-        Get suppliers with optional filtering and pagination.
+        Get a list of suppliers with pagination.
+
+        This version ensures proper handling of NULL datetime fields.
+
+        Args:
+            skip: Number of suppliers to skip (pagination offset)
+            limit: Maximum number of suppliers to return
+            **filters: Additional filters to apply
+
+        Returns:
+            List of supplier objects with properly formatted fields
         """
-        # Log input parameters
-        print(f"Getting suppliers with skip={skip}, limit={limit}, search_params={search_params}")
+        try:
+            # Get suppliers from repository
+            suppliers = self.repository.list(skip=skip, limit=limit, **filters)
 
-        # Get all suppliers in database first (for debugging)
-        all_suppliers_query = self.repository.session.query(self.repository.model).all()
-        print(f"Total suppliers in database (direct query): {len(all_suppliers_query)}")
+            # Process each supplier to ensure datetime fields are properly formatted
+            processed_suppliers = []
+            for supplier in suppliers:
+                # Convert to dict to make field manipulation easier
+                supplier_dict = supplier.__dict__ if hasattr(supplier, '__dict__') else supplier
 
-        # For simple queries, use the repository's method
-        if hasattr(self.repository, 'get_all_suppliers'):
-            suppliers = self.repository.get_all_suppliers(skip=skip, limit=limit)
-        else:
-            # Fall back to list method if get_all_suppliers doesn't exist
-            suppliers = self.repository.list(skip=skip, limit=limit)
+                # Ensure created_at and updated_at are either valid datetime objects or None
+                if 'created_at' in supplier_dict and supplier_dict['created_at'] is not None:
+                    # If it's a string, try to parse it to datetime
+                    if isinstance(supplier_dict['created_at'], str):
+                        try:
+                            from datetime import datetime
+                            supplier_dict['created_at'] = datetime.fromisoformat(supplier_dict['created_at'])
+                        except ValueError:
+                            supplier_dict['created_at'] = None
 
-        print(f"Suppliers returned after filtering: {len(suppliers)}")
+                if 'updated_at' in supplier_dict and supplier_dict['updated_at'] is not None:
+                    # If it's a string, try to parse it to datetime
+                    if isinstance(supplier_dict['updated_at'], str):
+                        try:
+                            from datetime import datetime
+                            supplier_dict['updated_at'] = datetime.fromisoformat(supplier_dict['updated_at'])
+                        except ValueError:
+                            supplier_dict['updated_at'] = None
 
-        # Log each supplier for debugging
-        for supplier in suppliers:
-            print(f"Supplier ID: {supplier.id}, Name: {supplier.name if hasattr(supplier, 'name') else 'Unknown'}")
+                # If using SQLAlchemy models, recreate the model instance
+                if hasattr(supplier, '__class__'):
+                    from app.db.models.supplier import Supplier
+                    processed_supplier = Supplier()
+                    for key, value in supplier_dict.items():
+                        # Skip SQLAlchemy internal attributes
+                        if not key.startswith('_'):
+                            setattr(processed_supplier, key, value)
+                    processed_suppliers.append(processed_supplier)
+                else:
+                    # Otherwise just use the dict
+                    processed_suppliers.append(supplier_dict)
 
-        return suppliers
+            logger.info(f"Retrieved and processed {len(processed_suppliers)} suppliers")
+            return processed_suppliers
 
-        return suppliers
+        except Exception as e:
+            logger.error(f"Error getting suppliers: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            raise
 
     def get_suppliers_by_category(self, category: str) -> List[Supplier]:
         """

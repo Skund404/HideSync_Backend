@@ -343,3 +343,83 @@ class PermissionDeniedException(SecurityException):
     def __init__(self, message: str = "Permission denied"):
         # Decide on a specific code if needed, or use the parent's default
         super().__init__(message, f"{self.CODE_PREFIX}004", {}) # Example code
+
+
+class FileStorageException(StorageException):
+    """
+    Exception raised for file storage-specific errors.
+
+    Used for errors related to file uploads, downloads, and management
+    including permissions, quotas, invalid file types, and service errors.
+    """
+
+    def __init__(
+            self,
+            message: str,
+            file_path: Optional[str] = None,
+            operation: Optional[str] = None,
+            details: Optional[Dict[str, Any]] = None
+    ):
+        """
+        Initialize a file storage exception.
+
+        Args:
+            message: Human-readable error message
+            file_path: Path of the file that caused the error
+            operation: Operation being performed (upload, download, delete, etc.)
+            details: Additional details about the error
+        """
+        error_details = details or {}
+        if file_path:
+            error_details["file_path"] = file_path
+        if operation:
+            error_details["operation"] = operation
+
+        super().__init__(
+            message=message,
+            details=error_details
+        )
+
+
+class DatabaseException(HideSyncException):
+    """
+    Exception raised for database-related errors.
+
+    Used for database connection failures, query errors,
+    constraint violations, and other database-related issues.
+    """
+
+    CODE_PREFIX = "DATABASE_"
+
+    def __init__(
+            self,
+            message: str,
+            query: Optional[str] = None,
+            entity_type: Optional[str] = None,
+            error_code: Optional[str] = None,
+            details: Optional[Dict[str, Any]] = None
+    ):
+        """
+        Initialize a database exception.
+
+        Args:
+            message: Human-readable error message
+            query: The SQL query that caused the error (sanitized if needed)
+            entity_type: Type of entity involved in the operation
+            error_code: Specific database error code
+            details: Additional details about the error
+        """
+        error_details = details or {}
+        if query:
+            # Sanitize query to remove sensitive information if needed
+            error_details["query"] = query
+        if entity_type:
+            error_details["entity_type"] = entity_type
+
+        code = error_code or f"{self.CODE_PREFIX}001"
+
+        super().__init__(
+            message=message,
+            code=code,
+            details=error_details
+        )

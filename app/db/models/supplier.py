@@ -20,13 +20,14 @@ from sqlalchemy import (
     ForeignKey,
     DateTime,
     JSON,
-    Boolean,
+    Boolean, Index,
 )
 from sqlalchemy.orm import relationship, validates
 from sqlalchemy.ext.hybrid import hybrid_property
 
 from app.db.models.base import AbstractBase, ValidationMixin, TimestampMixin
 from app.db.models.enums import SupplierStatus
+from app.core.validation import validate_phone
 
 
 class Supplier(AbstractBase, ValidationMixin, TimestampMixin):
@@ -57,19 +58,32 @@ class Supplier(AbstractBase, ValidationMixin, TimestampMixin):
 
     __tablename__ = "suppliers"
     __validated_fields__: ClassVar[Set[str]] = {"name", "email", "phone"}
-
+    __table_args__ = (
+        Index('idx_supplier_name', 'name'),
+        Index('idx_supplier_category', 'category'),
+        Index('idx_supplier_status', 'status'),
+        # Add other indexes as needed
+    )
     # Basic information
     name = Column(String(255), nullable=False)
     category = Column(String(50))  # LEATHER/HARDWARE/SUPPLIES/MIXED
     contact_name = Column(String(100))
     email = Column(String(255))
-    phone = Column(String(50))
+    phone = Column(
+        String(20),  # Adjust length as needed
+        nullable=True,  # Or False if phone is required
+        info={'validator': validate_phone}
+    )
     address = Column(String(500))
     website = Column(String(255))
 
     # Performance metrics
     rating = Column(Integer)  # 1-5 scale
-    status = Column(Enum(SupplierStatus), default=SupplierStatus.ACTIVE)
+    status = Column(
+        Enum(SupplierStatus, name='supplier_status_enum'),
+        nullable=False,
+        default=SupplierStatus.ACTIVE
+    )
     notes = Column(Text)
 
     # Categorization

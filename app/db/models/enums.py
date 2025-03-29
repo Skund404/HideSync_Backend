@@ -8,7 +8,8 @@ covering various aspects of the business from sales to project management.
 
 import enum
 from enum import Enum, auto
-from typing import Dict, Any, List
+from typing import Union
+
 
 
 # Sales and Order Management Enums
@@ -1316,32 +1317,81 @@ class InventoryAdjustmentType(Enum):
 
 
 # Supplier-related Enums
-class SupplierStatus(Enum):
-    """Enumeration of supplier status values."""
+class SupplierStatus(str, Enum):
+    """
+    Comprehensive enum for supplier statuses with flexible categorization
 
+    Categories:
+    1. Activity Status
+    2. Relationship Status
+    3. Operational Status
+    4. Compliance Status
+    """
+    # Activity Status
     ACTIVE = "active"
-    PREFERRED = "preferred"
-    STRATEGIC = "strategic"
+    INACTIVE = "inactive"
+
+    # Relationship Status
     PRIMARY = "primary"
     SECONDARY = "secondary"
     BACKUP = "backup"
     OCCASIONAL = "occasional"
+
+    # Operational Status
+    PREFERRED = "preferred"
+    STRATEGIC = "strategic"
+
+    # Compliance and Evaluation Statuses
     NEW = "new"
     PROBATIONARY = "probationary"
-    INACTIVE = "inactive"
     PENDING = "pending"
     PENDING_APPROVAL = "pending_approval"
     PENDING_REVIEW = "pending_review"
     UNDER_EVALUATION = "under_evaluation"
+
+    # Advanced Statuses
     APPROVED = "approved"
     QUALIFIED = "qualified"
+
+    # Risk and Compliance Statuses
     BLACKLISTED = "blacklisted"
     BANNED = "banned"
     DISPUTED = "disputed"
     SUSPENDED = "suspended"
     TERMINATED = "terminated"
-    # Legacy statuses for backward compatibility
     ON_HOLD = "on_hold"
+
+
+def normalize_supplier_status(status: Union[str, SupplierStatus]) -> SupplierStatus:
+    """
+    Normalize supplier status to enum, handling various input formats
+
+    Args:
+        status: Input status (string or SupplierStatus enum)
+
+    Returns:
+        Normalized SupplierStatus enum
+
+    Raises:
+        ValueError if status cannot be normalized
+    """
+    if isinstance(status, SupplierStatus):
+        return status
+
+    # Convert to lowercase and try matching
+    try:
+        return SupplierStatus(status.lower())
+    except ValueError:
+        # Try case-insensitive matching with some flexibility
+        status_lower = status.lower()
+        for enum_status in SupplierStatus:
+            if enum_status.value == status_lower:
+                return enum_status
+
+        # If no match found, raise a descriptive error
+        raise ValueError(f"Invalid supplier status: {status}. "
+                         f"Must be one of{[s.value for s in SupplierStatus]}")
+
 
 
 # Storage-related Enums
@@ -1594,7 +1644,7 @@ class CommunicationType(Enum):
     OTHER = "other"
 
 
-class MaterialStatus(Enum):
+class MaterialStatus(str, Enum):
     IN_STOCK = ("in_stock",)
     LOW_STOCK = ("low_stock",)
     OUT_OF_STOCK = ("out_of_stock",)

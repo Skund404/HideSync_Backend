@@ -74,6 +74,8 @@ def list(self, **filters) -> List[Supplier]:
     return [self._decrypt_sensitive_fields(entity) for entity in entities]
 
 
+# Replace the list_suppliers endpoint in app/api/endpoints/suppliers.py
+
 @router.get("/", response_model=List[Supplier])
 def list_suppliers(
         *,
@@ -84,13 +86,52 @@ def list_suppliers(
 ) -> List[Supplier]:
     """
     Retrieve suppliers with pagination.
-    """
-    # Convert page/pageSize to skip/limit
-    skip = (page - 1) * pageSize
-    limit = pageSize
 
-    supplier_service = SupplierService(db)
-    return supplier_service.get_suppliers(skip=skip, limit=limit)
+    This version ensures proper handling of NULL datetime fields.
+    """
+    try:
+        # Convert page/pageSize to skip/limit
+        skip = (page - 1) * pageSize
+        limit = pageSize
+
+        # Get suppliers from service
+        supplier_service = SupplierService(db)
+        raw_suppliers = supplier_service.get_suppliers(skip=skip, limit=limit)
+
+        # Process the suppliers to ensure they match the Pydantic model
+        from datetime import datetime
+        from app.schemas.supplier import SupplierResponse
+
+        processed_suppliers = []
+        current_time = datetime.now()
+
+        for supplier in raw_suppliers:
+            # Convert to dict for easier manipulation
+            supplier_dict = supplier.__dict__ if hasattr(supplier, '__dict__') else dict(supplier)
+
+            # Fix datetime fields (replace None with current time if needed)
+            # Note: we do this because the schema expects valid datetimes
+            if 'created_at' not in supplier_dict or supplier_dict['created_at'] is None:
+                supplier_dict['created_at'] = current_time
+
+            if 'updated_at' not in supplier_dict or supplier_dict['updated_at'] is None:
+                supplier_dict['updated_at'] = current_time
+
+            # Create a Pydantic model from the dict
+            # This will validate and ensure all fields match the expected types
+            processed_supplier = SupplierResponse(**supplier_dict)
+            processed_suppliers.append(processed_supplier)
+
+        return processed_suppliers
+
+    except Exception as e:
+        logger.error(f"Error in list_suppliers endpoint: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching suppliers: {str(e)}"
+        )
 
 @router.post("/", response_model=Supplier, status_code=status.HTTP_201_CREATED)
 def create_supplier(

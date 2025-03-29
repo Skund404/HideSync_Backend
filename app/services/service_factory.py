@@ -1,4 +1,10 @@
 # File: app/services/service_factory.py
+"""
+Factory for creating service instances in HideSync.
+
+This module provides a centralized factory for creating service instances,
+ensuring consistent initialization and dependency injection.
+"""
 
 from typing import Optional, Any, Dict, Type
 from sqlalchemy.orm import Session
@@ -18,12 +24,13 @@ class ServiceFactory:
     """
 
     def __init__(
-        self,
-        session: Session,
-        security_context=None,
-        event_bus=None,
-        cache_service=None,
-        key_service=None,
+            self,
+            session: Session,
+            security_context=None,
+            event_bus=None,
+            cache_service=None,
+            key_service=None,
+            file_storage_service=None,
     ):
         """
         Initialize the service factory with dependencies.
@@ -34,12 +41,14 @@ class ServiceFactory:
             event_bus: Optional event bus for publishing domain events
             cache_service: Optional cache service for data caching
             key_service: Optional key service for encryption/decryption
+            file_storage_service: Optional service for file storage operations
         """
         self.session = session
         self.security_context = security_context
         self.event_bus = event_bus or EventBus()
         self.cache_service = cache_service
         self.key_service = key_service or KeyService()
+        self.file_storage_service = file_storage_service
 
         # Service instance cache for singleton services
         self._service_instances: Dict[str, Any] = {}
@@ -276,7 +285,7 @@ class ServiceFactory:
         return service
 
     def get_file_storage_service(
-        self, base_path: str = "./storage"
+            self, base_path: str = "./storage"
     ) -> "FileStorageService":
         """
         Get a FileStorageService instance.
@@ -361,6 +370,71 @@ class ServiceFactory:
         )
 
         self._service_instances["tool_service"] = service
+        return service
+
+    def get_media_asset_service(self) -> "MediaAssetService":
+        """
+        Get a MediaAssetService instance.
+
+        Returns:
+            MediaAssetService instance with all dependencies
+        """
+        from app.services.media_asset_service import MediaAssetService
+        from app.repositories.media_asset_repository import MediaAssetRepository
+        from app.repositories.tag_repository import TagRepository
+        from app.repositories.media_asset_tag_repository import MediaAssetTagRepository
+
+        # Return cached instance if available
+        if "media_asset_service" in self._service_instances:
+            return self._service_instances["media_asset_service"]
+
+        # Create media asset repository
+        media_asset_repository = MediaAssetRepository(self.session)
+        tag_repository = TagRepository(self.session)
+        media_asset_tag_repository = MediaAssetTagRepository(self.session)
+
+        # Create and cache media asset service
+        service = MediaAssetService(
+            session=self.session,
+            repository=media_asset_repository,
+            security_context=self.security_context,
+            event_bus=self.event_bus,
+            cache_service=self.cache_service,
+            file_storage_service=self.file_storage_service,
+        )
+
+        self._service_instances["media_asset_service"] = service
+        return service
+
+    def get_tag_service(self) -> "TagService":
+        """
+        Get a TagService instance.
+
+        Returns:
+            TagService instance with all dependencies
+        """
+        from app.services.tag_service import TagService
+        from app.repositories.tag_repository import TagRepository
+        from app.repositories.media_asset_tag_repository import MediaAssetTagRepository
+
+        # Return cached instance if available
+        if "tag_service" in self._service_instances:
+            return self._service_instances["tag_service"]
+
+        # Create tag repository
+        tag_repository = TagRepository(self.session)
+        media_asset_tag_repository = MediaAssetTagRepository(self.session)
+
+        # Create and cache tag service
+        service = TagService(
+            session=self.session,
+            repository=tag_repository,
+            security_context=self.security_context,
+            event_bus=self.event_bus,
+            cache_service=self.cache_service,
+        )
+
+        self._service_instances["tag_service"] = service
         return service
 
     def get_service(self, service_class: Type[BaseService], **kwargs) -> BaseService:

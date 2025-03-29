@@ -45,9 +45,31 @@ class BaseRepository(Generic[T]):
         entity = self.session.query(self.model).filter(self.model.id == id).first()
         return self._decrypt_sensitive_fields(entity) if entity else None
 
+    def stream(self, batch_size=100, **filters):
+        """
+        Stream results in batches without loading everything into memory.
+
+        Args:
+            batch_size (int): Batch size for fetching records
+            **filters: Filters to apply
+
+        Yields:
+            Entity instances, one at a time
+        """
+        offset = 0
+        while True:
+            batch = self.list(skip=offset, limit=batch_size, **filters)
+            if not batch:
+                break
+
+            for item in batch:
+                yield item
+
+            offset += batch_size
+
     def list(self, skip: int = 0, limit: int = 100, **filters) -> List[T]:
         """
-        Retrieve a list of entities with optional filtering, pagination.
+        Retrieve a list of entities with efficient pagination.
 
         Args:
             skip (int): Number of records to skip (for pagination)
@@ -64,7 +86,13 @@ class BaseRepository(Generic[T]):
             if hasattr(self.model, key):
                 query = query.filter(getattr(self.model, key) == value)
 
-        entities = query.offset(skip).limit(limit).all()
+        # Apply pagination at the SQL level for efficiency
+        query = query.offset(skip).limit(limit)
+
+        # Execute query only after pagination is applied
+        entities = query.all()
+
+        # Process entities if needed (e.g., decrypt sensitive fields)
         return [self._decrypt_sensitive_fields(entity) for entity in entities]
 
     def create(self, data: Dict[str, Any]) -> T:
