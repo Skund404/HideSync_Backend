@@ -1,4 +1,3 @@
-# File: app/api/endpoints/media_assets.py
 """
 Media Assets API endpoints for HideSync.
 
@@ -37,7 +36,6 @@ from app.schemas.media_asset import (
 from app.services.media_asset_service import MediaAssetService
 from app.services.tag_service import TagService
 from app.services.service_factory import ServiceFactory
-from app.services.file_storage_service import FileStorageService
 from app.core.exceptions import (
     EntityNotFoundException,
     BusinessRuleException,
@@ -65,22 +63,6 @@ async def list_media_assets(
 ):
     """
     Retrieve a list of media assets with optional filtering and pagination.
-
-    Args:
-        db: Database session
-        current_user: Currently authenticated user
-        skip: Number of records to skip for pagination
-        limit: Maximum number of records to return
-        sort_by: Field to sort by
-        sort_dir: Sort direction
-        file_name: Optional filter by file name
-        file_type: Optional filter by file type
-        tag_ids: Optional filter by tag IDs
-        uploaded_by: Optional filter by uploader
-        search: Optional search term
-
-    Returns:
-        Paginated list of media assets
     """
     # Create search parameters from query params
     search_params = MediaAssetSearchParams(
@@ -92,9 +74,8 @@ async def list_media_assets(
     )
 
     # Get service
-    file_storage_service = FileStorageService()
-    service_factory = ServiceFactory(db, file_storage_service=file_storage_service)
-    media_asset_service = service_factory.create_media_asset_service()
+    service_factory = ServiceFactory(db)
+    media_asset_service = service_factory.get_media_asset_service()
 
     # Get assets
     assets, total = media_asset_service.list_media_assets(
@@ -118,7 +99,6 @@ async def list_media_assets(
         pages=pages,
     )
 
-
 @router.post("/", response_model=MediaAssetResponse, status_code=status.HTTP_201_CREATED)
 async def create_media_asset(
         *,
@@ -128,20 +108,10 @@ async def create_media_asset(
 ):
     """
     Create a new media asset (metadata only).
-
-    This creates only the metadata record. Use the /upload endpoint to upload the actual file.
-
-    Args:
-        db: Database session
-        current_user: Currently authenticated user
-        asset_in: Media asset data
-
-    Returns:
-        Created media asset information
     """
     # Get service
     service_factory = ServiceFactory(db)
-    media_asset_service = service_factory.create_media_asset_service()
+    media_asset_service = service_factory.get_media_asset_service()
 
     try:
         # Create media asset
@@ -171,23 +141,10 @@ async def upload_media_asset(
 ):
     """
     Upload a new media asset file.
-
-    This endpoint both creates the metadata record and uploads the file in one operation.
-
-    Args:
-        db: Database session
-        current_user: Currently authenticated user
-        background_tasks: FastAPI background tasks
-        file: The file to upload
-        tag_ids: Optional list of tag IDs to associate
-
-    Returns:
-        Created media asset information
     """
     # Get services
-    file_storage_service = FileStorageService()
-    service_factory = ServiceFactory(db, file_storage_service=file_storage_service)
-    media_asset_service = service_factory.create_media_asset_service()
+    service_factory = ServiceFactory(db)
+    media_asset_service = service_factory.get_media_asset_service()
 
     try:
         # Read file content
@@ -220,18 +177,10 @@ async def get_media_asset(
 ):
     """
     Retrieve detailed information about a specific media asset.
-
-    Args:
-        db: Database session
-        current_user: Currently authenticated user
-        asset_id: ID of the media asset
-
-    Returns:
-        Media asset information
     """
     # Get service
     service_factory = ServiceFactory(db)
-    media_asset_service = service_factory.create_media_asset_service()
+    media_asset_service = service_factory.get_media_asset_service()
 
     # Get asset
     asset = media_asset_service.get_media_asset(asset_id)
@@ -253,19 +202,10 @@ async def download_media_asset(
 ):
     """
     Download a media asset file.
-
-    Args:
-        db: Database session
-        current_user: Currently authenticated user
-        asset_id: ID of the media asset
-
-    Returns:
-        Streaming response with the file content
     """
     # Get services
-    file_storage_service = FileStorageService()
-    service_factory = ServiceFactory(db, file_storage_service=file_storage_service)
-    media_asset_service = service_factory.create_media_asset_service()
+    service_factory = ServiceFactory(db)
+    media_asset_service = service_factory.get_media_asset_service()
 
     try:
         # Get asset
@@ -305,19 +245,10 @@ async def update_media_asset(
 ):
     """
     Update a media asset.
-
-    Args:
-        db: Database session
-        current_user: Currently authenticated user
-        asset_id: ID of the media asset
-        asset_in: Updated media asset data
-
-    Returns:
-        Updated media asset information
     """
     # Get service
     service_factory = ServiceFactory(db)
-    media_asset_service = service_factory.create_media_asset_service()
+    media_asset_service = service_factory.get_media_asset_service()
 
     try:
         # Update asset
@@ -350,20 +281,10 @@ async def update_media_asset_file(
 ):
     """
     Update a media asset's file content.
-
-    Args:
-        db: Database session
-        current_user: Currently authenticated user
-        asset_id: ID of the media asset
-        file: The new file to upload
-
-    Returns:
-        Updated media asset information
     """
     # Get services
-    file_storage_service = FileStorageService()
-    service_factory = ServiceFactory(db, file_storage_service=file_storage_service)
-    media_asset_service = service_factory.create_media_asset_service()
+    service_factory = ServiceFactory(db)
+    media_asset_service = service_factory.get_media_asset_service()
 
     try:
         # Read file content
@@ -394,19 +315,10 @@ async def delete_media_asset(
 ):
     """
     Delete a media asset.
-
-    Args:
-        db: Database session
-        current_user: Currently authenticated user
-        asset_id: ID of the media asset
-
-    Returns:
-        No content
     """
     # Get services
-    file_storage_service = FileStorageService()
-    service_factory = ServiceFactory(db, file_storage_service=file_storage_service)
-    media_asset_service = service_factory.create_media_asset_service()
+    service_factory = ServiceFactory(db)
+    media_asset_service = service_factory.get_media_asset_service()
 
     # Delete asset
     result = media_asset_service.delete_media_asset(asset_id)
@@ -427,19 +339,10 @@ async def add_tags_to_asset(
 ):
     """
     Add tags to a media asset.
-
-    Args:
-        db: Database session
-        current_user: Currently authenticated user
-        asset_id: ID of the media asset
-        tag_ids: List of tag IDs to add
-
-    Returns:
-        Updated media asset information
     """
     # Get service
     service_factory = ServiceFactory(db)
-    media_asset_service = service_factory.create_media_asset_service()
+    media_asset_service = service_factory.get_media_asset_service()
 
     try:
         # Add tags
@@ -462,19 +365,10 @@ async def remove_tags_from_asset(
 ):
     """
     Remove tags from a media asset.
-
-    Args:
-        db: Database session
-        current_user: Currently authenticated user
-        asset_id: ID of the media asset
-        tag_ids: List of tag IDs to remove
-
-    Returns:
-        Updated media asset information
     """
     # Get service
     service_factory = ServiceFactory(db)
-    media_asset_service = service_factory.create_media_asset_service()
+    media_asset_service = service_factory.get_media_asset_service()
 
     try:
         # Remove tags

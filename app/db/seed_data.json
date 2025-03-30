@@ -226,7 +226,7 @@
   "storage_locations": [
     {
       "name": "Main Workshop Cabinet A",
-      "type": "cabinet",
+      "type": "CABINET",
       "section": null,
       "description": "Large cabinet for leather storage",
       "dimensions": "{\"width\": 120, \"height\": 200, \"depth\": 60}",
@@ -244,7 +244,7 @@
     },
     {
       "name": "Hardware Drawer 1",
-      "type": "drawer",
+      "type": "DRAWER",
       "section": null,
       "description": "Small drawer for buckles and snaps",
       "dimensions": "{\"width\": 50, \"height\": 10, \"depth\": 60}",
@@ -262,7 +262,7 @@
     },
     {
       "name": "Tool Cabinet 1",
-      "type": "cabinet",
+      "type": "CABINET",
       "section": null,
       "description": "Cabinet for cutting tools",
       "dimensions": "{\"width\": 100, \"height\": 180, \"depth\": 50}",
@@ -280,7 +280,7 @@
     },
     {
       "name": "Dye Storage",
-      "type": "shelf",
+      "type": "SHELF",
       "section": null,
       "description": "Ventilated shelf for dyes and finishes",
       "dimensions": "{\"width\": 120, \"height\": 40, \"depth\": 30}",

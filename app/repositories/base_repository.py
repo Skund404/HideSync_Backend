@@ -20,7 +20,7 @@ class BaseRepository(Generic[T]):
         encryption_service (Optional): Service for encrypting/decrypting sensitive data
     """
 
-    def __init__(self, session: Session, encryption_service=None):
+    def __init__(self, session: Session, model=None, encryption_service=None):
         """
         Initialize the repository with a database session.
 
@@ -29,8 +29,8 @@ class BaseRepository(Generic[T]):
             encryption_service (Optional): Service for handling field encryption/decryption
         """
         self.session = session
+        self.model = model
         self.encryption_service = encryption_service
-        # The model attribute should be set by derived classes
 
     def get_by_id(self, id: int) -> Optional[T]:
         """

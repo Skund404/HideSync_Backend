@@ -655,11 +655,36 @@ class SupplierService(BaseService[Supplier]):
 
         return self.repository.search(**search_params)
 
-    # In app/services/supplier_service.py
-
-    # In app/services/supplier_service.py
-
     # Add this method to your SupplierService class in app/services/supplier_service.py
+
+    def count_suppliers(self, **filters) -> int:
+        """
+        Count total number of suppliers matching the given filters.
+
+        Args:
+            **filters: Optional filters to apply
+
+        Returns:
+            int: Total count of suppliers
+        """
+        try:
+            # Get count from repository
+            if hasattr(self.repository, 'count'):
+                # Use repository's count method if available
+                return self.repository.count(**filters)
+            else:
+                # Fallback to manual counting if repository doesn't have count method
+                # This is less efficient but works as a fallback
+                all_suppliers = self.repository.list(**filters)
+                return len(all_suppliers)
+
+        except Exception as e:
+            logger.error(f"Error counting suppliers: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            # Return a default value instead of raising an exception
+            # This makes the API more resilient
+            return 0
 
     def get_suppliers(self, skip: int = 0, limit: int = 100, **filters) -> List[Any]:
         """

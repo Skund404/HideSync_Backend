@@ -54,6 +54,7 @@ class MediaAssetService(BaseService[MediaAsset]):
         self.asset_tag_repository = MediaAssetTagRepository(session)
         self.file_storage_service = file_storage_service
 
+    
     def get_media_asset(self, asset_id: str) -> Optional[MediaAsset]:
         """
         Get a media asset by ID.
@@ -66,6 +67,7 @@ class MediaAssetService(BaseService[MediaAsset]):
         """
         return self.repository.get_by_id_with_tags(asset_id)
 
+    
     def list_media_assets(
             self,
             skip: int = 0,

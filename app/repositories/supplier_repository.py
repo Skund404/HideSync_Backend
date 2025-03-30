@@ -173,6 +173,75 @@ class SupplierRepository(BaseRepository[Supplier]):
                 message=f"Error retrieving suppliers with SQLAlchemy: {str(e)}",
                 entity_type="Supplier"
             )
+
+    # Add this method to the SupplierRepository class
+
+    # Replace the count method in your SupplierRepository
+
+    def count(self, **filters) -> int:
+        """
+        Count total number of suppliers matching the given filters.
+
+        Args:
+            **filters: Optional filters to apply
+
+        Returns:
+            int: Total count of suppliers
+        """
+        try:
+            # Use the direct SQL approach which we know works with SQLCipher
+            from app.db.session import EncryptionManager
+            from app.core.config import settings
+            import os
+
+            # Get database path and encryption key
+            db_path = os.path.abspath(settings.DATABASE_PATH)
+
+            try:
+                # Get SQLCipher module and connect
+                sqlcipher = EncryptionManager.get_sqlcipher_module()
+                conn = sqlcipher.connect(db_path)
+                cursor = conn.cursor()
+
+                # Configure encryption
+                key = EncryptionManager.get_key()
+                cursor.execute(f"PRAGMA key = \"x'{key}'\";")
+                cursor.execute("PRAGMA cipher_page_size = 4096;")
+                cursor.execute("PRAGMA kdf_iter = 256000;")
+                cursor.execute("PRAGMA cipher_hmac_algorithm = HMAC_SHA512;")
+                cursor.execute("PRAGMA cipher_kdf_algorithm = PBKDF2_HMAC_SHA512;")
+                cursor.execute("PRAGMA foreign_keys = ON;")
+
+                # Simple direct count query
+                sql = "SELECT COUNT(*) FROM suppliers"
+
+                # Execute and get count
+                cursor.execute(sql)
+                result = cursor.fetchone()
+                count = result[0] if result else 0
+
+                # Clean up
+                cursor.close()
+                conn.close()
+
+                return count
+
+            except ImportError:
+                # Fallback to a less efficient method if SQLCipher isn't available
+                logger.warning("SQLCipher not available, using fallback count method")
+                all_suppliers = self.list(**filters)
+                return len(all_suppliers)
+
+        except Exception as e:
+            logger.error(f"Error in supplier count: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            from app.core.exceptions import DatabaseException
+            raise DatabaseException(
+                message=f"Error counting suppliers: {str(e)}",
+                entity_type="Supplier"
+            )
+
     def stream_all(self, batch_size=50, **filters) -> Generator[Supplier, None, None]:
         """
         Stream all suppliers in memory-efficient batches.
@@ -211,26 +280,98 @@ class SupplierRepository(BaseRepository[Supplier]):
             int: Number of suppliers matching the criteria
         """
         try:
-            query = self.session.query(func.count(self.model.id))
+            # Avoid the SQLAlchemy boolean evaluation issue by using direct SQL for SQLCipher
+            try:
+                from app.db.session import EncryptionManager, use_sqlcipher
+                from app.core.config import settings
+                import os
 
-            # Apply filters
-            if "name" in filters and filters["name"]:
-                query = query.filter(self.model.name == filters["name"])
+                # Get database path
+                db_path = os.path.abspath(settings.DATABASE_PATH)
 
-            if "status" in filters and filters["status"]:
-                query = query.filter(self.model.status == filters["status"])
+                if use_sqlcipher:
+                    # Direct SQL approach for SQLCipher
+                    sqlcipher = EncryptionManager.get_sqlcipher_module()
+                    conn = sqlcipher.connect(db_path)
+                    cursor = conn.cursor()
 
-            if "category" in filters and filters["category"]:
-                query = query.filter(self.model.category == filters["category"])
+                    # Configure encryption
+                    key = EncryptionManager.get_key()
+                    cursor.execute(f"PRAGMA key = \"x'{key}'\";")
+                    cursor.execute("PRAGMA cipher_page_size = 4096;")
+                    cursor.execute("PRAGMA kdf_iter = 256000;")
+                    cursor.execute("PRAGMA cipher_hmac_algorithm = HMAC_SHA512;")
+                    cursor.execute("PRAGMA cipher_kdf_algorithm = PBKDF2_HMAC_SHA512;")
 
-            return query.scalar() or 0
+                    # Build query with WHERE clauses based on filters
+                    sql = "SELECT COUNT(*) FROM suppliers WHERE 1=1"
+                    params = []
+
+                    if "name" in filters and filters["name"]:
+                        sql += " AND name = ?"
+                        params.append(filters["name"])
+
+                    if "status" in filters and filters["status"]:
+                        sql += " AND status = ?"
+                        params.append(str(filters["status"]))
+
+                    if "category" in filters and filters["category"]:
+                        sql += " AND category = ?"
+                        params.append(filters["category"])
+
+                    # Execute the query
+                    cursor.execute(sql, params)
+                    result = cursor.fetchone()
+                    count = result[0] if result else 0
+
+                    # Clean up
+                    cursor.close()
+                    conn.close()
+
+                    return count
+                else:
+                    # Standard SQLAlchemy approach
+                    from sqlalchemy import func, select, text
+
+                    # Build the query properly with select() construct
+                    count_query = select(func.count()).select_from(self.model)
+
+                    # Apply filters
+                    if "name" in filters and filters["name"]:
+                        count_query = count_query.where(self.model.name == filters["name"])
+
+                    if "status" in filters and filters["status"]:
+                        count_query = count_query.where(self.model.status == filters["status"])
+
+                    if "category" in filters and filters["category"]:
+                        count_query = count_query.where(self.model.category == filters["category"])
+
+                    # Execute and return result
+                    result = self.session.execute(count_query).scalar()
+                    return result or 0
+
+            except ImportError:
+                # Safe fallback if imports fail
+                logger.warning("Import error in count method, using fallback counting")
+                suppliers = self.list(**filters)
+                return len(suppliers)
 
         except Exception as e:
             logger.error(f"Error in supplier count: {e}")
-            raise DatabaseException(
-                message=f"Error counting suppliers: {str(e)}",
-                entity_type="Supplier"
-            )
+            import traceback
+            logger.error(traceback.format_exc())
+
+            # Final fallback - do a basic count with list()
+            try:
+                suppliers = self.list(**filters)
+                return len(suppliers)
+            except Exception as fallback_error:
+                logger.error(f"Fallback count failed: {fallback_error}")
+                from app.core.exceptions import DatabaseException
+                raise DatabaseException(
+                    message=f"Error counting suppliers: {str(e)}",
+                    entity_type="Supplier"
+                )
 
     def search_suppliers(self, query_str: str, skip: int = 0, limit: int = 100) -> List[Supplier]:
         """

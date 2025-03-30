@@ -245,7 +245,7 @@ class ServiceFactory:
 
     def get_storage_location_service(self) -> "StorageLocationService":
         """
-        Get a StorageLocationService instance.
+        Get a StorageLocationService instance with a fresh session.
 
         Returns:
             StorageLocationService instance with all dependencies
@@ -257,21 +257,21 @@ class ServiceFactory:
             StorageAssignmentRepository,
             StorageMoveRepository,
         )
+        from app.db.session import get_db
 
-        # Return cached instance if available
-        if "storage_location_service" in self._service_instances:
-            return self._service_instances["storage_location_service"]
+        # Create a new session specifically for this service
+        new_session = get_db()
 
-        # Create repositories
-        storage_location_repository = StorageLocationRepository(self.session)
-        storage_cell_repository = StorageCellRepository(self.session)
-        storage_assignment_repository = StorageAssignmentRepository(self.session)
-        storage_move_repository = StorageMoveRepository(self.session)
+        # Create repositories with the new session
+        storage_location_repository = StorageLocationRepository(new_session)
+        storage_cell_repository = StorageCellRepository(new_session)
+        storage_assignment_repository = StorageAssignmentRepository(new_session)
+        storage_move_repository = StorageMoveRepository(new_session)
 
-        # Create and cache storage location service
+        # Create storage location service with the new session
         service = StorageLocationService(
-            session=self.session,
-            repository=storage_location_repository,
+            session=new_session,
+            location_repository=storage_location_repository,
             security_context=self.security_context,
             event_bus=self.event_bus,
             cache_service=self.cache_service,
@@ -281,7 +281,7 @@ class ServiceFactory:
             material_service=self.get_material_service(),
         )
 
-        self._service_instances["storage_location_service"] = service
+        # Note: We do NOT cache this service instance since it has a unique session
         return service
 
     def get_file_storage_service(
@@ -381,26 +381,15 @@ class ServiceFactory:
         """
         from app.services.media_asset_service import MediaAssetService
         from app.repositories.media_asset_repository import MediaAssetRepository
-        from app.repositories.tag_repository import TagRepository
-        from app.repositories.media_asset_tag_repository import MediaAssetTagRepository
 
         # Return cached instance if available
         if "media_asset_service" in self._service_instances:
             return self._service_instances["media_asset_service"]
 
-        # Create media asset repository
-        media_asset_repository = MediaAssetRepository(self.session)
-        tag_repository = TagRepository(self.session)
-        media_asset_tag_repository = MediaAssetTagRepository(self.session)
-
         # Create and cache media asset service
         service = MediaAssetService(
             session=self.session,
-            repository=media_asset_repository,
-            security_context=self.security_context,
-            event_bus=self.event_bus,
-            cache_service=self.cache_service,
-            file_storage_service=self.file_storage_service,
+            file_storage_service=self.file_storage_service
         )
 
         self._service_instances["media_asset_service"] = service
@@ -415,23 +404,14 @@ class ServiceFactory:
         """
         from app.services.tag_service import TagService
         from app.repositories.tag_repository import TagRepository
-        from app.repositories.media_asset_tag_repository import MediaAssetTagRepository
 
         # Return cached instance if available
         if "tag_service" in self._service_instances:
             return self._service_instances["tag_service"]
 
-        # Create tag repository
-        tag_repository = TagRepository(self.session)
-        media_asset_tag_repository = MediaAssetTagRepository(self.session)
-
         # Create and cache tag service
         service = TagService(
-            session=self.session,
-            repository=tag_repository,
-            security_context=self.security_context,
-            event_bus=self.event_bus,
-            cache_service=self.cache_service,
+            session=self.session
         )
 
         self._service_instances["tag_service"] = service

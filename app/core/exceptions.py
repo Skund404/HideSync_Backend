@@ -294,13 +294,15 @@ class InvalidPathException(StorageException):
 
 class StorageLocationNotFoundException(StorageException):
     """Raised when a requested storage location does not exist."""
-    def __init__(self, location_id: Any):
-        super().__init__(
-            f"Storage location with ID {location_id} not found",
-            f"{self.CODE_PREFIX}002",
-            {"location_id": location_id},
-        )
 
+    def __init__(self, location_id: Any):
+        # Pass message and details separately, don't try to pass a code parameter
+        # to StorageException as it doesn't expect it
+        message = f"Storage location with ID {location_id} not found"
+        details = {"location_id": location_id}
+
+        # Use the correct parameter order matching the parent class
+        super().__init__(message=message, details=details)
 
 # Tool-related exceptions
 class ToolException(HideSyncException):
@@ -421,5 +423,75 @@ class DatabaseException(HideSyncException):
         super().__init__(
             message=message,
             code=code,
+            details=error_details
+        )
+
+
+class ConnectionPoolExhaustedException(DatabaseException):
+    """
+    Exception raised when the database connection pool is exhausted.
+
+    This occurs when all connections in the pool are in use, the maximum
+    overflow limit has been reached, and the request timeout has expired.
+    """
+
+    def __init__(
+            self,
+            message: str = "Database connection pool exhausted",
+            timeout: Optional[int] = None,
+            pool_size: Optional[int] = None,
+            details: Optional[Dict[str, Any]] = None
+    ):
+        """
+        Initialize a connection pool exhaustion exception.
+
+        Args:
+            message: Human-readable error message
+            timeout: The timeout period that was exceeded in seconds
+            pool_size: The configured size of the connection pool
+            details: Additional details about the error
+        """
+        error_details = details or {}
+        if timeout is not None:
+            error_details["timeout"] = timeout
+        if pool_size is not None:
+            error_details["pool_size"] = pool_size
+
+        super().__init__(
+            message=message,
+            error_code=f"{self.CODE_PREFIX}002",
+            details=error_details
+        )
+
+
+class EncryptionKeyMissingException(SecurityException):
+    """
+    Exception raised when an encryption key is required but not available.
+
+    This occurs when attempting to access or create an encrypted database
+    without providing the necessary encryption key.
+    """
+
+    def __init__(
+            self,
+            message: str = "Encryption key is missing or invalid",
+            key_source: Optional[str] = None,
+            details: Optional[Dict[str, Any]] = None
+    ):
+        """
+        Initialize an encryption key missing exception.
+
+        Args:
+            message: Human-readable error message
+            key_source: The source from which the key was attempted to be retrieved
+            details: Additional details about the error
+        """
+        error_details = details or {}
+        if key_source:
+            error_details["key_source"] = key_source
+
+        super().__init__(
+            message=message,
+            code=f"{self.CODE_PREFIX}005",
             details=error_details
         )

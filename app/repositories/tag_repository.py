@@ -88,7 +88,7 @@ class TagRepository(BaseRepository[Tag]):
             skip: int = 0,
             limit: int = 100,
             sort_by: str = "name",
-            sort_dir: str = "asc"
+            sort_dir: str = "asc",
     ) -> Tuple[List[Tag], int]:
         """
         Search for tags with filtering, sorting, and pagination.
@@ -103,40 +103,39 @@ class TagRepository(BaseRepository[Tag]):
         Returns:
             Tuple of (list of matching tags, total count)
         """
-        query = self.session.query(self.model)
+        # Start with base query
+        query = self.session.query(Tag)
 
-        # Apply filters based on search parameters
+        # Apply filters
         if search_params:
-            if name := search_params.get('name'):
-                query = query.filter(self.model.name.ilike(f"%{name}%"))
+            # Filter by name
+            if "name" in search_params and search_params["name"]:
+                query = query.filter(Tag.name.ilike(f"%{search_params['name']}%"))
 
-            if search := search_params.get('search'):
-                # Search across multiple fields
+            # Filter by search term (if applicable)
+            if "search" in search_params and search_params["search"]:
+                search_term = search_params["search"]
                 query = query.filter(
                     or_(
-                        self.model.name.ilike(f"%{search}%"),
-                        self.model.description.ilike(f"%{search}%")
+                        Tag.name.ilike(f"%{search_term}%"),
+                        Tag.description.ilike(f"%{search_term}%")
                     )
                 )
 
-        # Get total count before pagination
-        total = query.count()
-
         # Apply sorting
-        if hasattr(self.model, sort_by):
-            if sort_dir.lower() == 'desc':
-                query = query.order_by(desc(getattr(self.model, sort_by)))
-            else:
-                query = query.order_by(asc(getattr(self.model, sort_by)))
+        if sort_dir.lower() == "asc":
+            query = query.order_by(getattr(Tag, sort_by).asc())
+        else:
+            query = query.order_by(getattr(Tag, sort_by).desc())
+
+        # Optimize count by using a separate query
+        total = query.count()
 
         # Apply pagination
         query = query.offset(skip).limit(limit)
 
-        # Execute query
+        # Execute query and fetch results
         tags = query.all()
-
-        # Decrypt sensitive fields if applicable
-        tags = [self._decrypt_sensitive_fields(tag) for tag in tags]
 
         return tags, total
 

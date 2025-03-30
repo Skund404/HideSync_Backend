@@ -770,7 +770,7 @@ class StorageAssignment(BaseModel):
     storage_id: str
     position: Optional[Dict[str, Any]] = None
     quantity: float
-    assigned_date: str
+    assigned_date: Optional[str] = None
     assigned_by: Optional[str] = None
     notes: Optional[str] = None
     material_name: Optional[str] = None

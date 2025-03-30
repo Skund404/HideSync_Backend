@@ -66,9 +66,10 @@ class MediaAssetResponse(MediaAssetBase):
     file_size_bytes: int = Field(..., description="Size of the file in bytes")
     uploaded_at: datetime = Field(..., description="When the file was uploaded")
     uploaded_by: str = Field(..., description="User who uploaded the file")
-    created_at: datetime = Field(..., description="When the record was created")
-    updated_at: datetime = Field(..., description="When the record was last updated")
+    created_at: Optional[datetime] = Field(None, description="When the record was created")
+    updated_at: Optional[datetime] = Field(None, description="When the record was last updated")
     tags: Optional[List[TagResponse]] = Field(None, description="Tags assigned to this asset")
+
 
     class Config:
         from_attributes = True

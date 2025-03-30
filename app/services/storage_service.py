@@ -767,52 +767,6 @@ class FileStorageService:
 
         return self.move_material_between_locations(move_dict)
 
-    def get_storage_occupancy_report(self, section=None, location_type=None):
-        # ... existing code ...
-
-        # Add new fields
-        most_utilized_locations = sorted(
-            locations,
-            key=lambda loc: (loc.utilized or 0) / (loc.capacity or 1) if loc.capacity else 0,
-            reverse=True
-        )[:5]  # Top 5 most utilized locations
-
-        least_utilized_locations = sorted(
-            locations,
-            key=lambda loc: (loc.utilized or 0) / (loc.capacity or 1) if loc.capacity else 0
-        )[:5]  # Top 5 least utilized locations
-
-        recommendations = []
-        if locations_at_capacity > len(locations) * 0.3:
-            recommendations.append("Consider expanding storage capacity")
-
-        if locations_nearly_empty > len(locations) * 0.3:
-            recommendations.append("Optimize storage allocation")
-
-        return {
-            # ... existing fields ...
-            "overall_usage_percentage": (
-                total_utilized / total_capacity * 100
-                if total_capacity > 0 else 0
-            ),
-            "locations_by_type": types,
-            "locations_by_section": sections,
-            "most_utilized_locations": [
-                {
-                    "id": loc.id,
-                    "name": loc.name,
-                    "utilization_percentage": (loc.utilized or 0) / (loc.capacity or 1) * 100
-                } for loc in most_utilized_locations
-            ],
-            "least_utilized_locations": [
-                {
-                    "id": loc.id,
-                    "name": loc.name,
-                    "utilization_percentage": (loc.utilized or 0) / (loc.capacity or 1) * 100
-                } for loc in least_utilized_locations
-            ],
-            "recommendations": recommendations
-        }
 
     def _get_storage_path(self, file_id: str, extension: str) -> Path:
         """
