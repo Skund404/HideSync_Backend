@@ -71,14 +71,24 @@ class Settings(BaseSettings):
     DATABASE_PASSWORD: Optional[str] = None
     DATABASE_NAME: Optional[str] = None
 
+    # Database performance tuning
+    DB_POOL_SIZE: int = 2  # Small pool size
+    DB_MAX_OVERFLOW: int = 3  # Limited overflow
+    DB_POOL_TIMEOUT: int = 20  # Faster timeout
+    DB_POOL_RECYCLE: int = 600  # 10 minutes
+    DB_DEFAULT_QUERY_LIMIT: int = 500  # Safety limit
+    TRACK_MEMORY_USAGE: bool = True  # Enable memory tracking
+    MEMORY_WARNING_THRESHOLD_MB: int = 200  # Early warning
+    MEMORY_CRITICAL_THRESHOLD_MB: int = 400  # Critical threshold
+
     # SQLCipher
     USE_SQLCIPHER: bool = True
     DATABASE_PATH: str = "hidesync.db"
-    DATABASE_ENCRYPTION_KEY: str = "change-me-in-production"
+    DATABASE_ENCRYPTION_KEY: str = "8f353342c59546db88dd352f883e440e0a413d34149bbdced9b4fc0c84028d9e"
 
     # Key Management
     KEY_MANAGEMENT_METHOD: str = "file"
-    KEY_FILE_PATH: str = "/etc/hidesync/keys/db.key"
+    KEY_FILE_PATH: str = "/etc/hidesync/dev_db.key"
     KEY_ENVIRONMENT_VARIABLE: str = "HIDESYNC_DB_KEY"
     ENFORCE_KEY_FILE_PERMISSIONS: bool = True
 

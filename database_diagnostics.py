@@ -1,14 +1,13 @@
-# Save as database_diagnostics.py
-# !/usr/bin/env python
+#!/usr/bin/env python
 """
-HideSync Database Diagnostics Script
+Targeted Database Write Diagnostic Script
 """
 
 import os
 import sys
-import json
-from pathlib import Path
 import logging
+import datetime
+from pathlib import Path
 
 # Add project root to Python path
 script_dir = Path(__file__).resolve().parent
@@ -18,170 +17,178 @@ if str(project_root) not in sys.path:
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
 
-def check_key_file():
-    """
-    Check key file configuration and contents
-    """
-    from app.core.config import settings
-
-    print("\n--- KEY FILE DIAGNOSTICS ---")
-    key_file_path = os.path.abspath(settings.KEY_FILE_PATH)
-
-    # Check file existence
-    if not os.path.exists(key_file_path):
-        print(f"❌ Key file NOT FOUND at: {key_file_path}")
-        return False
-
-    # Check file permissions
-    file_stat = os.stat(key_file_path)
-    print(f"Key File Path: {key_file_path}")
-    print(f"File Permissions: {oct(file_stat.st_mode & 0o777)}")
-
-    # Read key file
+def direct_sqlite_write_test():
+    """  
+    Perform a direct SQLite write test using pysqlcipher3    to bypass SQLAlchemy abstraction    """
     try:
-        with open(key_file_path, 'r') as f:
-            key = f.read().strip()
-
-        print(f"Key Length: {len(key)} characters")
-        print(f"Key (first 10 chars): {key[:10]}...")
-
-        # Basic key validation
-        if len(key) < 16:
-            print("❌ WARNING: Key seems very short. This might indicate an issue.")
-
-        return True
-    except Exception as e:
-        print(f"❌ Error reading key file: {e}")
-        return False
-
-
-def check_database_file():
-    """
-    Check database file configuration and existence
-    """
-    from app.core.config import settings
-
-    print("\n--- DATABASE FILE DIAGNOSTICS ---")
-    db_path = os.path.abspath(settings.DATABASE_PATH)
-
-    # Check database file existence
-    if not os.path.exists(db_path):
-        print(f"❌ Database file NOT FOUND at: {db_path}")
-        return False
-
-    # Get file details
-    db_stat = os.stat(db_path)
-    print(f"Database Path: {db_path}")
-    print(f"File Size: {db_stat.st_size} bytes")
-    print(f"File Permissions: {oct(db_stat.st_mode & 0o777)}")
-
-    return True
-
-
-def test_database_connection():
-    """
-    Attempt to connect to the database and get basic info
-    """
-    print("\n--- DATABASE CONNECTION TEST ---")
-    try:
-        from app.db.session import EncryptionManager, use_sqlcipher
+        import pysqlcipher3.dbapi2 as sqlcipher
         from app.core.config import settings
+        from app.core.key_manager import KeyManager
 
-        if not use_sqlcipher:
-            print("❌ SQLCipher is not enabled in settings")
-            return False
-
+        # Get database path and key
         db_path = os.path.abspath(settings.DATABASE_PATH)
+        key = KeyManager.get_database_encryption_key()
 
-        # Direct SQLCipher connection test
-        sqlcipher = EncryptionManager.get_sqlcipher_module()
+        logger.info(f"Database Path: {db_path}")
+        logger.info(f"Key Length: {len(key)} characters")
+
+        # Establish connection
         conn = sqlcipher.connect(db_path)
         cursor = conn.cursor()
 
         # Configure encryption
-        key_pragma_value = EncryptionManager.format_key_for_pragma()
-        cursor.execute(f"PRAGMA key = {key_pragma_value};")
+        logger.info("Configuring encryption...")
+        cursor.execute(f"PRAGMA key = \"x'{key}'\";")
         cursor.execute("PRAGMA cipher_page_size = 4096;")
         cursor.execute("PRAGMA kdf_iter = 256000;")
         cursor.execute("PRAGMA cipher_hmac_algorithm = HMAC_SHA512;")
         cursor.execute("PRAGMA cipher_kdf_algorithm = PBKDF2_HMAC_SHA512;")
+        cursor.execute("PRAGMA foreign_keys = ON;")
 
-        # Get table info
-        cursor.execute("SELECT count(*) FROM sqlite_master WHERE type='table';")
-        table_count = cursor.fetchone()[0]
+        # Test table creation and insertion
+        logger.info("Creating test table...")
+        cursor.execute("""  
+            CREATE TABLE IF NOT EXISTS write_diagnostic_test (                id INTEGER PRIMARY KEY,                test_data TEXT,                created_at DATETIME DEFAULT CURRENT_TIMESTAMP            )        """)
 
-        print(f"✅ Successfully connected to database")
-        print(f"Total Tables: {table_count}")
+        # Attempt insertion
+        logger.info("Attempting to insert test data...")
+        cursor.execute("""  
+            INSERT INTO write_diagnostic_test (test_data)            VALUES (?)  
+        """, (f"Diagnostic write test at {datetime.datetime.now()}",))
 
-        # List table names
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-        tables = cursor.fetchall()
-        print("\nTables in Database:")
-        for table in tables:
-            print(f"- {table[0]}")
+        # Commit transaction
+        conn.commit()
 
+        # Verify insertion
+        cursor.execute("SELECT * FROM write_diagnostic_test ORDER BY id DESC LIMIT 1")
+        last_record = cursor.fetchone()
+        logger.info(f"Last inserted record: {last_record}")
+
+        # Cleanup
+        cursor.close()
         conn.close()
+
+        logger.info("Direct write test SUCCESSFUL")
         return True
 
     except Exception as e:
-        print(f"❌ Database Connection Failed: {e}")
+        logger.error(f"Direct write test FAILED: {e}")
         import traceback
         traceback.print_exc()
         return False
 
 
-def check_sqlcipher_configuration():
-    """
-    Check SQLCipher library and configuration
-    """
-    print("\n--- SQLCIPHER CONFIGURATION ---")
+def sqlalchemy_direct_write_test():
+    """  
+    Perform a direct SQLAlchemy write test with SQLCipher configuration    Bypassing standard SQLAlchemy connection handling    """
     try:
-        import pysqlcipher3
-        print("✅ pysqlcipher3 library is installed")
+        import pysqlcipher3.dbapi2 as sqlcipher
+        from sqlalchemy import create_engine, text
+        from sqlalchemy.orm import sessionmaker
+        from app.core.config import settings
+        from app.core.key_manager import KeyManager
 
-        # Check library version
-        print(f"SQLCipher Version: {pysqlcipher3.__version__}")
-    except ImportError:
-        print("❌ pysqlcipher3 library is NOT installed")
-        print("Install with: pip install pysqlcipher3")
+        # Get database path and key
+        db_path = os.path.abspath(settings.DATABASE_PATH)
+        key = KeyManager.get_database_encryption_key()
+
+        # Manually create engine without default listeners
+        engine = create_engine(
+            f'sqlite:///{db_path}',
+            module=sqlcipher,
+            poolclass=None,  # Disable connection pooling
+            creator=lambda: sqlcipher.connect(
+                db_path,
+                check_same_thread=False
+            )
+        )
+
+        # Override connection to apply SQLCipher configuration
+        def get_connection():
+            conn = sqlcipher.connect(db_path, check_same_thread=False)
+
+            # Configure encryption
+            cursor = conn.cursor()
+            cursor.execute(f"PRAGMA key = \"x'{key}'\";")
+            cursor.execute("PRAGMA cipher_page_size = 4096;")
+            cursor.execute("PRAGMA kdf_iter = 256000;")
+            cursor.execute("PRAGMA cipher_hmac_algorithm = HMAC_SHA512;")
+            cursor.execute("PRAGMA cipher_kdf_algorithm = PBKDF2_HMAC_SHA512;")
+            cursor.execute("PRAGMA foreign_keys = ON;")
+
+            return conn
+
+            # Custom sessionmaker with manual connection management
+
+        Session = sessionmaker(
+            bind=engine,
+            autocommit=False,
+            autoflush=False
+        )
+        session = Session()
+
+        try:
+            # Direct connection retrieval and table creation
+            with get_connection() as conn:
+                cursor = conn.cursor()
+
+                # Create test table
+                cursor.execute("""  
+                    CREATE TABLE IF NOT EXISTS sqlalchemy_write_test (                        id INTEGER PRIMARY KEY,                        test_data TEXT,                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP                    )                """)
+
+                # Insert test data
+                cursor.execute(
+                    "INSERT INTO sqlalchemy_write_test (test_data) VALUES (?)",
+                    (f"SQLAlchemy direct write test at {datetime.datetime.now()}",)
+                )
+
+                # Commit transaction
+                conn.commit()
+
+                # Verify insertion
+                cursor.execute("SELECT * FROM sqlalchemy_write_test ORDER BY id DESC LIMIT 1")
+                last_record = cursor.fetchone()
+                logger.info(f"SQLAlchemy direct write test record: {last_record}")
+
+            return True
+
+        except Exception as inner_e:
+            logger.error(f"SQLAlchemy write operation FAILED: {inner_e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    except Exception as e:
+        logger.error(f"SQLAlchemy direct write test SETUP FAILED: {e}")
+        import traceback
+        traceback.print_exc()
         return False
-
-    return True
 
 
 def main():
-    """
-    Run all diagnostic checks
-    """
-    print("HideSync Database Diagnostics")
-    print("=" * 40)
+    """  
+    Run comprehensive write diagnostics    """
+    logger.info("Running Database Write Diagnostics...")
 
-    # Run all checks
-    key_check = check_key_file()
-    db_file_check = check_database_file()
-    sqlcipher_check = check_sqlcipher_configuration()
-    conn_check = test_database_connection()
+    # Run direct SQLite write test
+    direct_result = direct_sqlite_write_test()
 
-    # Summary
-    print("\n--- DIAGNOSTIC SUMMARY ---")
-    print(f"Key File Check:     {'✅ PASSED' if key_check else '❌ FAILED'}")
-    print(f"Database File Check: {'✅ PASSED' if db_file_check else '❌ FAILED'}")
-    print(f"SQLCipher Config:    {'✅ PASSED' if sqlcipher_check else '❌ FAILED'}")
-    print(f"Database Connection: {'✅ PASSED' if conn_check else '❌ FAILED'}")
+    # Run SQLAlchemy direct write test
+    sqlalchemy_result = sqlalchemy_direct_write_test()
 
-    # Recommendations
-    if not (key_check and db_file_check and sqlcipher_check and conn_check):
-        print("\nRECOMMENDATIONS:")
-        print("1. Verify your .env configuration")
-        print("2. Check that the database key matches the one used during creation")
-        print("3. Reinstall pysqlcipher3 if needed")
-        print("4. Consider recreating the database if all else fails")
+    # Final report
+    if direct_result and sqlalchemy_result:
+        logger.info("✅ ALL WRITE TESTS PASSED")
+        sys.exit(0)
+    else:
+        logger.error("❌ WRITE TESTS FAILED")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

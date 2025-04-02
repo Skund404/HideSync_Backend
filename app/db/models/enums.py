@@ -10,6 +10,9 @@ import enum
 from enum import Enum, auto
 from typing import Union
 
+from sqlalchemy import Column
+from app.db.custom_types import CaseInsensitiveEnum
+
 
 
 # Sales and Order Management Enums
@@ -1786,3 +1789,5 @@ class PickingListItemStatus(Enum):
     SUBSTITUTED = "substituted"
     BACKORDERED = "backordered"
     CANCELLED = "cancelled"
+
+

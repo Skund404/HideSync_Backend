@@ -61,6 +61,7 @@ class TagService(BaseService[Tag]):
             search_params: Optional[Dict[str, Any]] = None,
             sort_by: str = "name",
             sort_dir: str = "asc",
+            estimate_count: bool = True,
     ) -> Tuple[List[Tag], int]:
         """
         List tags with filtering, sorting, and pagination.
@@ -71,6 +72,7 @@ class TagService(BaseService[Tag]):
             search_params: Dictionary of search parameters
             sort_by: Field to sort by
             sort_dir: Sort direction ('asc' or 'desc')
+            estimate_count: Whether to use faster but approximate count method
 
         Returns:
             Tuple of (list of matching tags, total count)
@@ -81,6 +83,7 @@ class TagService(BaseService[Tag]):
             limit=limit,
             sort_by=sort_by,
             sort_dir=sort_dir,
+            estimate_count=estimate_count
         )
 
         return tags, total

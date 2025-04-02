@@ -5,16 +5,18 @@ Repository for Tag entities in HideSync.
 This module provides data access operations for tags, implementing
 the repository pattern to abstract database operations.
 """
-
+import logging
 from typing import List, Optional, Dict, Any, Tuple
-from sqlalchemy import or_, and_, desc, asc
+from sqlalchemy import or_, and_, desc, asc, func
 from sqlalchemy.orm import Session, joinedload
 import uuid
-
+from sqlalchemy.sql import text
 from app.db.models.tag import Tag
 from app.db.models.association_media import MediaAssetTag
 from app.repositories.base_repository import BaseRepository
 
+
+from sqlalchemy.sql import text
 
 class TagRepository(BaseRepository[Tag]):
     """
@@ -89,7 +91,11 @@ class TagRepository(BaseRepository[Tag]):
             limit: int = 100,
             sort_by: str = "name",
             sort_dir: str = "asc",
+            estimate_count: bool = True
     ) -> Tuple[List[Tag], int]:
+        import logging
+        from sqlalchemy.sql import func
+        logger = logging.getLogger(__name__)
         """
         Search for tags with filtering, sorting, and pagination.
 
@@ -99,6 +105,7 @@ class TagRepository(BaseRepository[Tag]):
             limit: Maximum number of records to return
             sort_by: Field to sort by
             sort_dir: Sort direction ('asc' or 'desc')
+            estimate_count: If True, use faster but approximate count method
 
         Returns:
             Tuple of (list of matching tags, total count)
@@ -122,22 +129,67 @@ class TagRepository(BaseRepository[Tag]):
                     )
                 )
 
+        # Get total count before pagination, using a more efficient approach
+        try:
+            # For more efficient counting, use optimized approach
+            if estimate_count:
+                # Option 1: Fast approximate count
+                count_query = self.session.execute(
+                    text(f"SELECT COUNT(1) FROM {Tag.__tablename__}")
+                )
+                total = count_query.scalar() or 0
+            else:
+                # Option 2: Exact count with optimized query
+                count_query = query.with_entities(func.count(Tag.id))
+                total = count_query.scalar() or 0
+        except MemoryError:
+            # Fallback if we still encounter memory errors
+            import gc
+            gc.collect()  # Force garbage collection
+
+            # Return a reasonable estimate and warning
+            total = limit * 10  # Assume at least 10 pages worth
+            logger.warning(f"Memory error during count operation, using estimated total: {total}")
+        except Exception as e:
+            logger.error(f"Error in tag count query: {e}")
+            total = 0  # Default to zero in case of errors
+
         # Apply sorting
         if sort_dir.lower() == "asc":
             query = query.order_by(getattr(Tag, sort_by).asc())
         else:
             query = query.order_by(getattr(Tag, sort_by).desc())
 
-        # Optimize count by using a separate query
-        total = query.count()
+        # Apply pagination - never skip this step to ensure memory safety
+        if limit is None or limit > 500:
+            limit = 500  # Hard safety limit
+            logger.warning("Limiting query results to 500 for memory safety")
 
-        # Apply pagination
         query = query.offset(skip).limit(limit)
 
         # Execute query and fetch results
-        tags = query.all()
+        try:
+            tags = query.all()
+        except Exception as e:
+            logger.error(f"Error fetching tags: {e}")
+            tags = []  # Return empty list on error
 
         return tags, total
+
+    def get_tag_count(self) -> int:
+        """
+        Get the total count of tags.
+
+        Returns:
+            Integer count of tags
+        """
+        try:
+            # Use text() to explicitly declare textual SQL
+            result = self.session.execute(text("SELECT COUNT(1) FROM tags"))
+            return result.scalar() or 0
+        except Exception as e:
+            logger.error(f"Error in tag count query: {str(e)}")
+            return 0
 
     def get_tags_by_asset(self, asset_id: str) -> List[Tag]:
         """

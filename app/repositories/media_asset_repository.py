@@ -7,17 +7,18 @@ the repository pattern to abstract database operations.
 """
 
 from typing import List, Optional, Dict, Any, Tuple
-from sqlalchemy import or_, and_, desc, asc
+from sqlalchemy import or_, and_, desc, asc, func
 from sqlalchemy.orm import Session, joinedload
 import uuid
 from datetime import datetime
-
+from sqlalchemy.sql import text
 from app.db.models.media_asset import MediaAsset
 from app.db.models.tag import Tag
 
 from app.repositories.base_repository import BaseRepository
 from app.db.models.association_media import MediaAssetTag
-
+import logging
+logger = logging.getLogger(__name__)
 
 class MediaAssetRepository(BaseRepository[MediaAsset]):
     """
@@ -56,7 +57,7 @@ class MediaAssetRepository(BaseRepository[MediaAsset]):
 
     def get_by_id_with_tags(self, id: str) -> Optional[MediaAsset]:
         """
-        Get a media asset by ID with its tags eagerly loaded.
+        Get a media asset by ID with its tags (with safer loading strategy).
 
         Args:
             id: The UUID of the media asset
@@ -64,13 +65,38 @@ class MediaAssetRepository(BaseRepository[MediaAsset]):
         Returns:
             The media asset with tags if found, None otherwise
         """
-        query = self.session.query(self.model). \
-            options(joinedload(self.model.tags)). \
-            filter(self.model.id == id)
+        # First get the asset without eager loading to avoid SQLCipher compatibility issues
+        asset = self.session.query(self.model).filter(self.model.id == id).first()
 
-        entity = query.first()
+        if not asset:
+            return None
 
-        return self._decrypt_sensitive_fields(entity) if entity else None
+        # Then manually load tags with a separate query to avoid memory errors
+        try:
+            # Make sure we're using the correct column names based on your database schema
+            # Check if the association table uses 'tag_id' (most likely) or 'tags_id'
+            tag_records = self.session.query(MediaAssetTag).filter(
+                MediaAssetTag.media_asset_id == id
+            ).all()
+
+            if tag_records:
+                # Get the tag IDs
+                tag_ids = [record.tag_id for record in tag_records]
+
+                # Fetch the actual tag objects
+                tags = self.session.query(Tag).filter(Tag.id.in_(tag_ids)).all()
+
+                # Manually set the tags attribute
+                asset.tags = tags
+            else:
+                asset.tags = []
+
+            return self._decrypt_sensitive_fields(asset)
+        except Exception as e:
+            # Log the error but return the asset without tags rather than failing completely
+            logger.error(f"Error loading tags for asset {id}: {str(e)}")
+            asset.tags = []  # Set empty tags list
+            return self._decrypt_sensitive_fields(asset)
 
     def search_assets(
             self,
@@ -78,7 +104,8 @@ class MediaAssetRepository(BaseRepository[MediaAsset]):
             skip: int = 0,
             limit: int = 100,
             sort_by: str = "uploaded_at",
-            sort_dir: str = "desc"
+            sort_dir: str = "desc",
+            estimate_count: bool = False,
     ) -> Tuple[List[MediaAsset], int]:
         """
         Search for media assets with filtering, sorting, and pagination.
@@ -89,6 +116,7 @@ class MediaAssetRepository(BaseRepository[MediaAsset]):
             limit: Maximum number of records to return
             sort_by: Field to sort by
             sort_dir: Sort direction ('asc' or 'desc')
+            estimate_count: Whether to use estimation for count query
 
         Returns:
             Tuple of (list of matching assets, total count)
@@ -129,8 +157,24 @@ class MediaAssetRepository(BaseRepository[MediaAsset]):
                     )
                 )
 
-        # Get total count before pagination
-        total = query.count()
+        # Get total count before pagination, with optional estimation
+        try:
+            if estimate_count:
+                # Use faster approximation for large datasets
+                count_result = self.session.execute(
+                    text("SELECT COUNT(*) FROM (SELECT 1 FROM media_assets LIMIT 1000)")
+                ).scalar()
+                total = count_result or 0
+
+                # If count is at limit, indicate it's an estimate
+                if total >= 1000:
+                    total = 1000
+            else:
+                # Use full count
+                total = query.count()
+        except Exception as e:
+            logger.error(f"Error getting count: {e}")
+            total = 0
 
         # Apply sorting
         if hasattr(self.model, sort_by):
@@ -142,8 +186,12 @@ class MediaAssetRepository(BaseRepository[MediaAsset]):
         # Apply pagination
         query = query.offset(skip).limit(limit)
 
-        # Execute query
-        assets = query.all()
+        # Execute query with error handling
+        try:
+            assets = query.all()
+        except Exception as e:
+            logger.error(f"Error executing query: {e}")
+            assets = []
 
         # Decrypt sensitive fields if applicable
         assets = [self._decrypt_sensitive_fields(asset) for asset in assets]

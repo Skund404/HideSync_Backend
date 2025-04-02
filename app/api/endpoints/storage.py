@@ -11,6 +11,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Path, status
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from app.api.deps import get_current_active_user, get_db
 from app.schemas.compatibility import (
@@ -41,12 +42,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-from typing import List, Optional, Any
-from fastapi import Query, Depends
-from sqlalchemy.orm import Session
-
-
-@router.get("/locations", response_model=List[StorageLocation])
+@router.get("/locations")
 def list_storage_locations(
         *,
         db: Session = Depends(get_db),
@@ -59,13 +55,20 @@ def list_storage_locations(
         section: Optional[str] = Query(None, description="Filter by section"),
         status: Optional[str] = Query(None, description="Filter by location status"),
         search: Optional[str] = Query(None, description="Search term for name"),
-) -> List[StorageLocation]:
+        sort_by: str = Query("name", description="Field to sort by"),
+        sort_dir: str = Query("asc", description="Sort direction (asc or desc)")
+) -> Dict[str, Any]:
     """
     Retrieve storage locations with optional filtering and pagination.
+    Returns a paginated response with total count and page information.
     """
-    logger.info(f"Getting storage locations with service pattern")
+    logger.info(f"Getting storage locations with optimized pagination")
 
     try:
+        # Validate sort direction
+        if sort_dir.lower() not in ["asc", "desc"]:
+            sort_dir = "asc"
+
         # Build search parameters
         search_params = {}
         if type:
@@ -77,81 +80,87 @@ def list_storage_locations(
         if search:
             search_params["search"] = search
 
-        # Use service pattern for data access
+        # Add sorting parameters
+        search_params["sort_by"] = sort_by
+        search_params["sort_dir"] = sort_dir
+
+        # Initialize service
         storage_service = StorageLocationService(db)
+
+        # First get total count
+        # Since there's no direct count method, we'll first get total count by
+        # making a smaller query that counts results
+        try:
+            # Try to use repository method if available
+            total = storage_service.repository.count(
+                **{k: v for k, v in search_params.items() if k not in ["sort_by", "sort_dir"]}
+            )
+        except (AttributeError, Exception) as e:
+            logger.warning(f"Count method not available, will estimate total: {e}")
+            # If no count method, we'll estimate using a full query with no limit
+            try:
+                # Try to get a quick count by getting IDs only
+                temp_locations = storage_service.get_storage_locations(
+                    skip=0,
+                    limit=10000,  # Large limit, but not unlimited to prevent memory issues
+                    search_params=search_params
+                )
+                total = len(temp_locations)
+            except Exception as e2:
+                logger.warning(f"Failed to get count estimation: {e2}")
+                total = None
+
+        # Get paginated locations
         locations = storage_service.get_storage_locations(
             skip=skip, limit=limit, search_params=search_params
         )
 
-        # Convert enum values before returning to FastAPI
-        for location in locations:
-            try:
-                convert_enum_values(location)
-            except Exception as e:
-                logger.error(f"Error converting enums for location {location.id}: {e}")
-                # Continue with other locations
+        # If we couldn't get an accurate count earlier, estimate based on results
+        if total is None:
+            total = skip + len(locations)
+            # If we got exactly the limit, there might be more
+            if len(locations) >= limit:
+                total += 1
 
         logger.info(f"Retrieved {len(locations)} storage locations")
 
-        # Return a list of dictionaries instead of model objects to avoid serialization issues
-        try:
-            return [dict(location) if hasattr(location, '__dict__') else location for location in locations]
-        except Exception as e:
-            logger.error(f"Error during final serialization: {e}", exc_info=True)
-            # If serialization fails, try to extract just the basic fields
-            basic_locations = []
-            for loc in locations:
-                try:
-                    basic_loc = {
-                        "id": str(getattr(loc, 'id', '')),
-                        "name": str(getattr(loc, 'name', 'Unknown')),
-                        "type": getattr(loc, 'type', 'other'),
-                        "section": getattr(loc, 'section', ''),
-                        "capacity": int(getattr(loc, 'capacity', 0)),
-                        "utilized": int(getattr(loc, 'utilized', 0)),
-                        "status": getattr(loc, 'status', 'ACTIVE'),
-                        "dimensions": {"width": 4, "height": 4},
-                    }
-                    basic_locations.append(basic_loc)
-                except Exception as e2:
-                    logger.error(f"Error extracting basic fields for location: {e2}")
-            return basic_locations
+        # Calculate pagination information
+        page = skip // limit + 1 if limit > 0 else 1
+        pages = (total + limit - 1) // limit if limit > 0 else 1
+
+        # Return frontend-friendly paginated response
+        return {
+            "items": locations,  # Already formatted by the service
+            "total": total,
+            "page": page,
+            "pages": pages,
+            "page_size": limit
+        }
 
     except Exception as e:
         logger.error(f"Error retrieving storage locations: {e}", exc_info=True)
-        # Return empty list on error to prevent frontend errors
-        return []
+        # Return empty paginated response to prevent frontend errors
+        return {
+            "items": [],
+            "total": 0,
+            "page": 1,
+            "pages": 0,
+            "page_size": limit
+        }
 
-def convert_enum_values(obj):
-    """Convert any enum values to their string representation."""
-    if isinstance(obj, dict):
-        for key, value in obj.items():
-            if key == 'type' and isinstance(value, str) and '.' in value:
-                # Convert "StorageLocationType.CABINET" to "cabinet"
-                obj[key] = value.split('.')[-1].lower()
-            elif key == 'type' and hasattr(value, 'value'):
-                # Convert enum objects to their string value
-                obj[key] = value.value.lower()
-    elif hasattr(obj, '__dict__'):
-        if hasattr(obj, 'type'):
-            if isinstance(obj.type, str) and '.' in obj.type:
-                obj.type = obj.type.split('.')[-1].lower()
-            elif hasattr(obj.type, 'value'):
-                obj.type = obj.type.value.lower()
-    return obj
 
-@router.post("/locations", response_model=StorageLocation, status_code=status.HTTP_201_CREATED)
+@router.post("/locations", status_code=status.HTTP_201_CREATED)
 def create_storage_location(
         *,
         db: Session = Depends(get_db),
         location_in: StorageLocationCreate,
         current_user: Any = Depends(get_current_active_user),
-) -> StorageLocation:
+) -> Dict[str, Any]:
     """
     Create a new storage location.
     """
     # Convert to dict and fix the type
-    location_dict = dict(location_in)
+    location_dict = location_in.dict() if hasattr(location_in, 'dict') else dict(location_in)
 
     # Fix the type field by removing enum prefix and converting to lowercase
     if "type" in location_dict and isinstance(location_dict["type"], str):
@@ -163,15 +172,8 @@ def create_storage_location(
 
     storage_service = StorageLocationService(db)
     try:
+        # The create_storage_location method already formats the result
         result = storage_service.create_storage_location(location_dict, current_user.id)
-
-        # Ensure the result type is a string, not an enum
-        if hasattr(result, 'type') and hasattr(result.type, 'value'):
-            result.type = result.type.value
-        elif isinstance(result, dict) and 'type' in result:
-            if hasattr(result['type'], 'value'):
-                result['type'] = result['type'].value
-
         return result
     except BusinessRuleException as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -204,144 +206,8 @@ def sync_storage_utilization(
             detail=f"Error synchronizing storage utilization: {str(e)}"
         )
 
-def _format_location_for_api(self, location) -> Dict[str, Any]:
-    """
-    Format a storage location object for API response with robust error handling.
-    Ensures enum values are converted to strings.
-    """
-    try:
-        # Handle empty location
-        if not location:
-            logger.warning("Attempting to format None location object")
-            return {
-                "id": "unknown",
-                "name": "Unknown Location",
-                "type": "other",
-                "status": "UNKNOWN"
-            }
 
-        # Create a base dictionary
-        result = {}
-
-        # Get ID with type handling
-        try:
-            location_id = getattr(location, 'id', None)
-            if location_id is None:
-                location_id = getattr(location, 'uuid', 'unknown')
-            result["id"] = str(location_id)
-        except Exception:
-            result["id"] = "unknown"
-
-        # Safely get attributes with defaults
-        attributes = {
-            "name": ("name", "Unknown Location", str),
-            "section": ("section", "", str),
-            "description": ("description", "", str),
-            "capacity": ("capacity", 0, int),
-            "utilized": ("utilized", 0, int),
-            "status": ("status", "ACTIVE", str),
-            "parent_id": ("parent_id", None, lambda x: str(x) if x else None)
-        }
-
-        for key, (attr_name, default, converter) in attributes.items():
-            try:
-                value = getattr(location, attr_name, default)
-                if value is not None:
-                    result[key] = converter(value)
-                else:
-                    result[key] = default
-            except Exception:
-                result[key] = default
-
-        # Special handling for type field to ensure it's a string
-        try:
-            type_value = getattr(location, 'type', 'other')
-
-            # Convert enum to string if it's an enum
-            if hasattr(type_value, 'value'):
-                result["type"] = type_value.value.lower()
-            # If it's already a string but contains enum prefix
-            elif isinstance(type_value, str) and '.' in type_value:
-                result["type"] = type_value.split('.')[-1].lower()
-            # If it's a string, ensure it's lowercase
-            elif isinstance(type_value, str):
-                result["type"] = type_value.lower()
-            else:
-                result["type"] = "other"
-        except Exception:
-            result["type"] = "other"
-
-        # Handle dimensions with special care
-        try:
-            dimensions = getattr(location, 'dimensions', None)
-            if dimensions:
-                # Handle string format (JSON)
-                if isinstance(dimensions, str):
-                    try:
-                        import json
-                        dimensions = json.loads(dimensions)
-                    except:
-                        dimensions = {"width": 4, "height": 4}
-                # Handle dict format
-                elif isinstance(dimensions, dict):
-                    pass
-                # Handle other formats
-                else:
-                    dimensions = {"width": 4, "height": 4}
-            else:
-                dimensions = {"width": 4, "height": 4}
-
-            result["dimensions"] = dimensions
-        except Exception:
-            result["dimensions"] = {"width": 4, "height": 4}
-
-        # Add timestamps if available
-        for timestamp in ["created_at", "updated_at", "last_modified"]:
-            try:
-                value = getattr(location, timestamp, None)
-                if value:
-                    if hasattr(value, 'isoformat'):
-                        result[timestamp] = value.isoformat()
-                    else:
-                        result[timestamp] = str(value)
-            except Exception:
-                pass
-
-        return result
-
-    except Exception as e:
-        logger.error(f"Error formatting location for API: {e}")
-        # Return minimal safe dictionary
-        return {
-            "id": str(getattr(location, 'id', 'unknown')),
-            "name": "Error Formatting Location",
-            "type": "other",
-            "status": "UNKNOWN",
-            "capacity": 0,
-            "utilized": 0,
-            "dimensions": {"width": 4, "height": 4},
-            "_error": str(e)
-        }
-def _convert_enum_values(obj):
-    """Convert any enum values to their string representation."""
-    if isinstance(obj, dict):
-        for key, value in obj.items():
-            if key == 'type' and isinstance(value, str) and '.' in value:
-                # Convert "StorageLocationType.CABINET" to "cabinet"
-                obj[key] = value.split('.')[-1].lower()
-            elif key == 'type' and hasattr(value, 'value'):
-                # Convert enum objects to their string value
-                obj[key] = value.value.lower()
-    elif hasattr(obj, '__dict__'):
-        if hasattr(obj, 'type'):
-            if isinstance(obj.type, str) and '.' in obj.type:
-                obj.type = obj.type.split('.')[-1].lower()
-            elif hasattr(obj.type, 'value'):
-                obj.type = obj.type.value.lower()
-    return obj
-
-
-@router.put("/locations/{location_id}", response_model=StorageLocation)
+@router.put("/locations/{location_id}")
 def update_storage_location(
         *,
         db: Session = Depends(get_db),
@@ -350,14 +216,16 @@ def update_storage_location(
         ),
         location_in: StorageLocationUpdate,
         current_user: Any = Depends(get_current_active_user),
-) -> StorageLocation:
+) -> Dict[str, Any]:
     """
     Update a storage location.
     """
     storage_service = StorageLocationService(db)
     try:
+        # Update method already formats the response correctly
+        location_data = location_in.dict(exclude_unset=True) if hasattr(location_in, 'dict') else dict(location_in)
         return storage_service.update_storage_location(
-            location_id, location_in.dict(exclude_unset=True), current_user.id
+            location_id, location_data, current_user.id
         )
     except StorageLocationNotFoundException:
         raise HTTPException(
@@ -393,30 +261,108 @@ def delete_storage_location(
 
 
 # Storage cells
-@router.get("/locations/{location_id}/cells", response_model=List[StorageCell])
+@router.get("/locations/{location_id}/cells")
 def list_storage_cells(
         *,
         db: Session = Depends(get_db),
         location_id: str = Path(..., description="The ID of the storage location"),
         current_user: Any = Depends(get_current_active_user),
         occupied: Optional[bool] = Query(None, description="Filter by occupied status"),
-) -> List[StorageCell]:
+        skip: int = Query(0, ge=0, description="Number of records to skip"),
+        limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
+        sort_by: str = Query("position.row", description="Field to sort by"),
+        sort_dir: str = Query("asc", description="Sort direction (asc or desc)")
+) -> Dict[str, Any]:
     """
-    Retrieve cells for a storage location.
+    Retrieve cells for a storage location with pagination.
+    Returns a paginated response with total count and page information.
     """
     logger.info(f"Getting cells for location {location_id}")
 
+    # Validate sort direction
+    if sort_dir.lower() not in ["asc", "desc"]:
+        sort_dir = "asc"
+
     storage_service = StorageLocationService(db)
     try:
-        # First verify location exists
+        # First check if location exists
         try:
             storage_service.get_storage_location(location_id)
         except StorageLocationNotFoundException:
             logger.warning(f"Storage location {location_id} not found")
-            # Return fallback grid for frontend compatibility
+            # Return fallback grid for frontend compatibility in proper pagination format
             fallback_grid = []
+            total_cells = 16  # 4x4 grid
+
             for row in range(1, 5):
                 for col in range(1, 5):
+                    if len(fallback_grid) >= limit:
+                        break
+                    if (row - 1) * 4 + (col - 1) >= skip:
+                        fallback_grid.append({
+                            "id": f"cell_{location_id}_{row}_{col}",
+                            "storage_id": location_id,
+                            "position": {"row": row, "column": col},
+                            "occupied": False,
+                            "material_id": None
+                        })
+
+            # Return paginated response
+            return {
+                "items": fallback_grid,
+                "total": total_cells,
+                "page": skip // limit + 1,
+                "pages": (total_cells + limit - 1) // limit,
+                "page_size": limit
+            }
+
+        # Get total count of cells for pagination
+        total = None
+        try:
+            # Try to get count efficiently if repository has method
+            all_cells = storage_service.get_storage_cells(location_id, occupied)
+            total = len(all_cells)
+
+            # Apply pagination manually since the service method doesn't
+            # support pagination directly
+            cells = all_cells[skip:skip + limit]
+        except Exception as e:
+            logger.error(f"Error getting cells: {e}", exc_info=True)
+            # Create a fallback grid as in the original code
+            cells = []
+            for row in range(1, 5):
+                for col in range(1, 5):
+                    cells.append({
+                        "id": f"cell_{location_id}_{row}_{col}",
+                        "storage_id": location_id,
+                        "position": {"row": row, "column": col},
+                        "occupied": False,
+                        "material_id": None
+                    })
+            total = len(cells)
+
+        logger.info(f"Retrieved {len(cells)} cells for location {location_id}")
+
+        # Return paginated response
+        return {
+            "items": cells,
+            "total": total,
+            "page": skip // limit + 1,
+            "pages": (total + limit - 1) // limit,
+            "page_size": limit
+        }
+
+    except Exception as e:
+        logger.error(f"Error retrieving cells: {e}", exc_info=True)
+        # Create a fallback grid for error cases with proper pagination format
+        fallback_grid = []
+        total_cells = 16  # Standard 4x4 grid
+
+        for row in range(1, 5):
+            for col in range(1, 5):
+                if len(fallback_grid) >= limit:
+                    break
+                if (row - 1) * 4 + (col - 1) >= skip:
                     fallback_grid.append({
                         "id": f"cell_{location_id}_{row}_{col}",
                         "storage_id": location_id,
@@ -424,32 +370,18 @@ def list_storage_cells(
                         "occupied": False,
                         "material_id": None
                     })
-            return fallback_grid
 
-        # Get cells with optional filter
-        cells = storage_service.get_storage_cells(location_id, occupied)
-        logger.info(f"Retrieved {len(cells)} cells for location {location_id}")
-        return cells
-
-    except Exception as e:
-        logger.error(f"Error retrieving cells: {e}", exc_info=True)
-        # Create a fallback grid for error cases
-        fallback_grid = []
-        for row in range(1, 5):
-            for col in range(1, 5):
-                fallback_grid.append({
-                    "id": f"cell_{location_id}_{row}_{col}",
-                    "storage_id": location_id,
-                    "position": {"row": row, "column": col},
-                    "occupied": False,
-                    "material_id": None
-                })
-        return fallback_grid
+        return {
+            "items": fallback_grid,
+            "total": total_cells,
+            "page": skip // limit + 1,
+            "pages": (total_cells + limit - 1) // limit,
+            "page_size": limit
+        }
 
 
 @router.post(
     "/locations/{location_id}/cells",
-    response_model=StorageCell,
     status_code=status.HTTP_201_CREATED,
 )
 def create_storage_cell(
@@ -458,15 +390,18 @@ def create_storage_cell(
         location_id: str = Path(..., description="The ID of the storage location"),
         cell_in: StorageCellCreate,
         current_user: Any = Depends(get_current_active_user),
-) -> StorageCell:
+) -> Dict[str, Any]:
     """
     Create a new storage cell for a location.
     """
     storage_service = StorageLocationService(db)
     try:
-        return storage_service.create_storage_cell(
+        cell = storage_service.create_storage_cell(
             location_id, cell_in, current_user.id
         )
+
+        # Return formatted cell data
+        return cell  # The service should already format this
     except StorageLocationNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -477,33 +412,65 @@ def create_storage_cell(
 
 
 # Storage assignments
-@router.get("/assignments", response_model=List[StorageAssignment])
+@router.get("/assignments")
 def list_storage_assignments(
         *,
         db: Session = Depends(get_db),
         current_user: Any = Depends(get_current_active_user),
         item_id: Optional[int] = Query(None, ge=1, description="Filter by item ID"),
         item_type: Optional[str] = Query(None, description="Filter by item type"),
-        location_id: Optional[str] = Query(
-            None, description="Filter by storage location ID"
-        ),
-) -> List[StorageAssignment]:
+        location_id: Optional[str] = Query(None, description="Filter by storage location ID"),
+        skip: int = Query(0, ge=0, description="Number of records to skip"),
+        limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
+        sort_by: str = Query("created_at", description="Field to sort by"),
+        sort_dir: str = Query("desc", description="Sort direction (asc or desc)")
+) -> Dict[str, Any]:
     """
-    Retrieve storage assignments with optional filtering.
+    Retrieve storage assignments with optional filtering and pagination.
+    Returns a paginated response with total count and page information.
     """
+    # Validate sort direction
+    if sort_dir.lower() not in ["asc", "desc"]:
+        sort_dir = "desc"  # Default for assignments is newest first
+
     storage_service = StorageLocationService(db)
     try:
-        return storage_service.get_storage_assignments(
-            item_id=item_id, item_type=item_type, location_id=location_id
+        # Since there's no direct pagination support in the service method,
+        # we'll need to get all assignments first and paginate in memory
+        assignments = storage_service.get_storage_assignments(
+            item_id=item_id,
+            item_type=item_type,
+            location_id=location_id
         )
+
+        # Get total count for pagination
+        total = len(assignments)
+
+        # Apply pagination manually
+        paginated_assignments = assignments[skip:skip + limit]
+
+        # Return paginated response
+        return {
+            "items": paginated_assignments,
+            "total": total,
+            "page": skip // limit + 1,
+            "pages": (total + limit - 1) // limit,
+            "page_size": limit
+        }
     except Exception as e:
         logger.error(f"Error retrieving storage assignments: {e}", exc_info=True)
-        return []
+        # Return empty paginated response
+        return {
+            "items": [],
+            "total": 0,
+            "page": 1,
+            "pages": 0,
+            "page_size": limit
+        }
 
 
 @router.post(
     "/assignments",
-    response_model=StorageAssignment,
     status_code=status.HTTP_201_CREATED,
 )
 def create_storage_assignment(
@@ -511,15 +478,17 @@ def create_storage_assignment(
         db: Session = Depends(get_db),
         assignment_in: StorageAssignmentCreate,
         current_user: Any = Depends(get_current_active_user),
-) -> StorageAssignment:
+) -> Dict[str, Any]:
     """
     Create a new storage assignment.
     """
     storage_service = StorageLocationService(db)
     try:
-        return storage_service.create_storage_assignment(
-            assignment_in.dict(), current_user.id
+        assignment_data = assignment_in.dict() if hasattr(assignment_in, 'dict') else dict(assignment_in)
+        assignment = storage_service.create_storage_assignment(
+            assignment_data, current_user.id
         )
+        return assignment  # The service should already format this
     except EntityNotFoundException as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
@@ -555,44 +524,91 @@ def delete_storage_assignment(
 
 
 # Storage moves
-@router.get("/moves", response_model=List[StorageMove])
+@router.get("/moves")
 def list_storage_moves(
         *,
         db: Session = Depends(get_db),
         current_user: Any = Depends(get_current_active_user),
         skip: int = Query(0, ge=0, description="Number of records to skip"),
-        limit: int = Query(
-            100, ge=1, le=1000, description="Maximum number of records to return"
-        ),
+        limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
         item_id: Optional[int] = Query(None, ge=1, description="Filter by item ID"),
         item_type: Optional[str] = Query(None, description="Filter by item type"),
-) -> List[StorageMove]:
+        sort_by: str = Query("created_at", description="Field to sort by"),
+        sort_dir: str = Query("desc", description="Sort direction (asc or desc)")
+) -> Dict[str, Any]:
     """
     Retrieve storage moves with optional filtering and pagination.
+    Returns a paginated response with total count and page information.
     """
+    # Validate sort direction
+    if sort_dir.lower() not in ["asc", "desc"]:
+        sort_dir = "desc"  # Default for moves is newest first
+
     storage_service = StorageLocationService(db)
     try:
-        return storage_service.get_storage_moves(
-            skip=skip, limit=limit, item_id=item_id, item_type=item_type
+        # The service method already supports pagination
+        moves = storage_service.get_storage_moves(
+            skip=skip,
+            limit=limit,
+            item_id=item_id,
+            item_type=item_type
         )
+
+        # Try to get total count for more accurate pagination
+        # Since there's no direct count method, we'll need to make an estimation
+        total = None
+        try:
+            # Try to get all moves to count them - this is not efficient,
+            # but it's a fallback without a direct count method
+            all_moves = storage_service.get_storage_moves(
+                skip=0,
+                limit=10000,  # Large but not unlimited
+                item_id=item_id,
+                item_type=item_type
+            )
+            total = len(all_moves)
+        except Exception as e:
+            logger.warning(f"Error counting moves: {e}")
+            # If we couldn't get the count, estimate based on results
+            total = skip + len(moves)
+            if len(moves) >= limit:
+                total += 1
+
+        # Return paginated response
+        return {
+            "items": moves,
+            "total": total,
+            "page": skip // limit + 1,
+            "pages": (total + limit - 1) // limit,
+            "page_size": limit
+        }
     except Exception as e:
         logger.error(f"Error retrieving storage moves: {e}", exc_info=True)
-        return []
+        # Return empty paginated response
+        return {
+            "items": [],
+            "total": 0,
+            "page": 1,
+            "pages": 0,
+            "page_size": limit
+        }
 
 
-@router.post("/moves", response_model=StorageMove, status_code=status.HTTP_201_CREATED)
+@router.post("/moves", status_code=status.HTTP_201_CREATED)
 def create_storage_move(
         *,
         db: Session = Depends(get_db),
         move_in: StorageMoveCreate,
         current_user: Any = Depends(get_current_active_user),
-) -> StorageMove:
+) -> Dict[str, Any]:
     """
     Create a new storage move.
     """
     storage_service = StorageLocationService(db)
     try:
-        return storage_service.create_storage_move(move_in.dict(), current_user.id)
+        move_data = move_in.dict() if hasattr(move_in, 'dict') else dict(move_in)
+        move = storage_service.create_storage_move(move_data, current_user.id)
+        return move  # The service should already format this
     except EntityNotFoundException as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except StorageLocationNotFoundException as e:
@@ -607,14 +623,14 @@ def create_storage_move(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.get("/occupancy", response_model=StorageOccupancyReport)
+@router.get("/occupancy")
 def get_storage_occupancy_report(
         *,
         db: Session = Depends(get_db),
         current_user: Any = Depends(get_current_active_user),
         section: Optional[str] = Query(None, description="Filter by section"),
         type: Optional[str] = Query(None, description="Filter by location type"),
-) -> StorageOccupancyReport:
+) -> Dict[str, Any]:
     """
     Get storage occupancy report.
     """
@@ -623,7 +639,7 @@ def get_storage_occupancy_report(
     storage_service = StorageLocationService(db)
     try:
         report = storage_service.get_storage_occupancy_report(section, type)
-        logger.info(f"Successfully generated occupancy report with {report['total_locations']} locations")
+        logger.info(f"Successfully generated occupancy report with {report.get('total_locations', 0)} locations")
         return report
     except Exception as e:
         logger.error(f"Error generating occupancy report: {e}", exc_info=True)
@@ -643,3 +659,51 @@ def get_storage_occupancy_report(
             "least_utilized_locations": [],
             "recommendations": ["Unable to generate occupancy report"]
         }
+
+
+# Add a monitoring endpoint as suggested in the guide
+@router.get("/system/memory", include_in_schema=False)
+def check_memory_usage(
+        *,
+        current_user: Any = Depends(get_current_active_user),
+):
+    """Check current memory usage (admin only)."""
+    # Verify the user has admin permissions
+    if not hasattr(current_user, 'is_admin') or not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required for memory usage monitoring"
+        )
+
+    try:
+        import psutil
+        import gc
+
+        # Force garbage collection before measuring
+        gc.collect()
+
+        # Get memory info
+        process = psutil.Process()
+        memory_info = process.memory_info()
+        memory_mb = memory_info.rss / (1024 * 1024)
+
+        # Get database connection pool info if possible
+        pool_info = {
+            "total_connections": "N/A",
+            "idle_connections": "N/A",
+            "in_use_connections": "N/A"
+        }
+
+        return {
+            "memory_usage_mb": round(memory_mb, 2),
+            "percent_memory": round(process.memory_percent(), 2),
+            "db_connections": pool_info.get("total_connections", "N/A"),
+            "db_idle_connections": pool_info.get("idle_connections", "N/A"),
+            "db_in_use_connections": pool_info.get("in_use_connections", "N/A"),
+            "gc_counts": gc.get_count()
+        }
+    except ImportError:
+        return {"error": "psutil module not available for memory monitoring"}
+    except Exception as e:
+        logger.error(f"Error checking memory usage: {e}", exc_info=True)
+        return {"error": f"Error monitoring memory: {str(e)}"}
