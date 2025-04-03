@@ -22,6 +22,34 @@ class EntityMediaService:
         self.entity_media_repository = EntityMediaRepository(db, encryption_service)
         self.media_asset_repository = MediaAssetRepository(db, encryption_service)
 
+    def find_by_media_asset_id(self, media_asset_id: str) -> List[EntityMedia]:
+        """
+        Find all entity media records associated with a specific media asset.
+
+        Args:
+            media_asset_id: The ID of the media asset
+
+        Returns:
+            List of EntityMedia associations for the media asset
+        """
+        try:
+            # Use the repository method to find entity media records by media asset ID
+            entity_media_list = self.entity_media_repository.find_by_media_asset_id(media_asset_id)
+
+            # Enhance with media asset data
+            for entity_media in entity_media_list:
+                if hasattr(entity_media, 'media_asset_id') and entity_media.media_asset_id:
+                    try:
+                        media_asset = self.media_asset_repository.get_by_id(entity_media.media_asset_id)
+                        entity_media.media_asset = media_asset
+                    except Exception as e:
+                        logger.warning(f"Failed to fetch media asset {entity_media.media_asset_id}: {str(e)}")
+
+            return entity_media_list
+        except Exception as e:
+            logger.error(f"Error finding entity media for asset {media_asset_id}: {str(e)}")
+            return []
+
     def get_by_entity(self, entity_type: str, entity_id: str) -> List[EntityMedia]:
         """
         Get all media associations for a specific entity.
@@ -178,20 +206,32 @@ class EntityMediaService:
             logger.error(f"Error deleting entity media {id}: {str(e)}")
             raise
 
-    def remove_entity_media(self, entity_type: str, entity_id: str, media_type: Optional[str] = None) -> bool:
+    def remove_entity_media_by_asset_id(self, media_asset_id: str) -> bool:
         """
-        Remove media associations for an entity.
+        Remove all entity media associations for a specific media asset ID.
 
         Args:
-            entity_type: The type of entity (material, tool, supplier, etc.)
-            entity_id: The ID of the entity
-            media_type: Optional type of media to remove (if None, removes all)
+            media_asset_id: The ID of the media asset to remove associations for
 
         Returns:
-            True if associations were removed, False otherwise
+            bool: True if any associations were removed, False otherwise
         """
         try:
-            return self.entity_media_repository.remove_entity_media(entity_type, entity_id, media_type)
+            # Query for all entity media records with the given media_asset_id
+            entity_media_records = self.entity_media_repository.find_by_media_asset_id(media_asset_id)
+
+            if not entity_media_records:
+                logger.info(f"No entity media associations found for asset ID {media_asset_id}")
+                return False
+
+            # Delete each association
+            count = 0
+            for record in entity_media_records:
+                self.entity_media_repository.delete(record.id)
+                count += 1
+
+            logger.info(f"Removed {count} entity media associations for media asset {media_asset_id}")
+            return True
         except Exception as e:
-            logger.error(f"Error removing media for {entity_type} {entity_id}: {str(e)}")
+            logger.error(f"Error removing entity media for asset {media_asset_id}: {str(e)}", exc_info=True)
             raise

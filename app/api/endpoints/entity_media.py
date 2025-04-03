@@ -45,6 +45,30 @@ async def get_entity_media(
         )
 
 
+@router.get("/media-asset/{media_asset_id}", response_model=List[EntityMediaResponse])
+async def get_entity_media_by_asset(
+        media_asset_id: str = Path(..., description="The ID of the media asset"),
+        db: Session = Depends(get_db),
+        current_user: dict = Depends(get_current_active_user),
+):
+    """
+    Retrieve all entity associations for a specific media asset.
+    """
+    try:
+        service_factory = ServiceFactory(db)
+        entity_media_service = service_factory.get_entity_media_service()
+
+        # Fetch all entities for the media asset
+        entity_media_list = entity_media_service.find_by_media_asset_id(media_asset_id)
+
+        return entity_media_list
+    except Exception as e:
+        logger.error(f"Error retrieving entities for media asset {media_asset_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve entities for media asset {media_asset_id}: {str(e)}"
+        )
+
 @router.get("/thumbnail/{entity_type}/{entity_id}", response_model=Optional[EntityMediaResponse])
 async def get_entity_thumbnail(
         entity_type: str = Path(..., description="The type of entity (material, tool, supplier, etc.)"),

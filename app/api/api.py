@@ -8,10 +8,12 @@ for different domains of the application.
 
 from fastapi import APIRouter
 
+
 from app.api.endpoints import (
     auth,
     customers,
     materials,
+    entity_media,
     projects,
     inventory,
     sales,
@@ -50,3 +52,4 @@ api_router.include_router(
     media_assets.router, prefix="/media-assets", tags=["Media Assets"]
 )
 api_router.include_router(tags.router, prefix="/tags", tags=["Tags"])
+api_router.include_router(entity_media.router, prefix="/entity-media", tags=["entity-media"])

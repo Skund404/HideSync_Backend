@@ -147,6 +147,20 @@ class SupplierRepository(BaseRepository[Supplier]):
                 entity_type="Supplier"
             )
 
+
+    def exists_by_name(self, name: str) -> bool:
+        """Check if a supplier with the given name exists."""
+        if not name:
+            return False
+
+        try:
+            query = "SELECT COUNT(*) FROM suppliers WHERE name = ?"
+            result = self.session.execute(query, (name,)).fetchone()
+            return result[0] > 0
+        except Exception as e:
+            logger.error(f"Error checking if supplier exists by name: {e}")
+            return False
+
     def _list_with_sqlalchemy(self, skip: int, limit: int, filters: Dict[str, Any]) -> List[Supplier]:
         """SQLAlchemy fallback implementation."""
         try:

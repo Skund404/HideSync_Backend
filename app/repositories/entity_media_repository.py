@@ -26,6 +26,18 @@ class EntityMediaRepository(BaseRepository[EntityMedia]):
         super().__init__(session, encryption_service)
         self.model = EntityMedia
 
+    def find_by_media_asset_id(self, media_asset_id: str) -> List[EntityMedia]:
+        """
+        Find all entity media records associated with a specific media asset.
+
+        Args:
+            media_asset_id: The ID of the media asset
+
+        Returns:
+            List[EntityMedia]: List of entity media records
+        """
+        return self.session.query(self.model).filter(self.model.media_asset_id == media_asset_id).all()
+
     def create_with_id(self, data: Dict[str, Any]) -> EntityMedia:
         """
         Create a new entity media association with a generated UUID.

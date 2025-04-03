@@ -1,6 +1,6 @@
 # File: app/db/models/entity_media.py
 
-from sqlalchemy import Column, String, DateTime, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, String, DateTime, ForeignKey, UniqueConstraint, Integer
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 
@@ -31,7 +31,7 @@ class EntityMedia(AbstractBase, TimestampMixin):
     media_type = Column(String(50), default="thumbnail")  # "thumbnail", "gallery", "document", etc.
 
     # Display order (for multiple images)
-    display_order = Column(int, default=0)
+    display_order = Column(Integer, default=0)
 
     # Caption or description
     caption = Column(String(255))

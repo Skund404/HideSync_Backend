@@ -858,20 +858,40 @@ async def delete_media_asset(
         asset_id: str = Path(..., description="The ID of the media asset"),
 ):
     """
-    Delete a media asset.
+    Delete a media asset and all associated entity media references.
     """
     try:
         # Get services
         service_factory = ServiceFactory(db)
         media_asset_service = service_factory.get_media_asset_service()
+        entity_media_service = service_factory.get_entity_media_service()
 
-        # Delete asset
+        # First, check if the asset exists
+        asset = media_asset_service.get_media_asset(asset_id)
+        if not asset:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Media asset with ID {asset_id} not found",
+            )
+
+        # Delete all entity media associations that reference this asset
+        try:
+            logger.info(f"Removing entity media associations for media asset {asset_id}")
+            entity_media_service.remove_entity_media_by_asset_id(asset_id)
+        except Exception as e:
+            logger.error(f"Error removing entity media associations for asset {asset_id}: {e}", exc_info=True)
+            # Continue with asset deletion even if association deletion fails
+            # This prevents orphaned associations but allows cleanup of the asset
+
+        # Delete the media asset
         result = media_asset_service.delete_media_asset(asset_id)
         if not result:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Media asset with ID {asset_id} not found",
             )
+
+        logger.info(f"Successfully deleted media asset {asset_id} and its entity associations")
     except HTTPException:
         raise
     except Exception as e:
@@ -880,7 +900,6 @@ async def delete_media_asset(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred while deleting the media asset"
         )
-
 
 @router.post("/{asset_id}/tags", response_model=MediaAssetResponse)
 async def add_tags_to_asset(

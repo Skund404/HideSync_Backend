@@ -284,6 +284,34 @@ class ServiceFactory:
         # Note: We do NOT cache this service instance since it has a unique session
         return service
 
+    def get_entity_media_service(self) -> "EntityMediaService":
+        """
+        Get an EntityMediaService instance.
+
+        Returns:
+            EntityMediaService instance with all dependencies
+        """
+        from app.services.entity_media_service import EntityMediaService
+        from app.repositories.entity_media_repository import EntityMediaRepository
+        from app.repositories.media_asset_repository import MediaAssetRepository
+
+        # Return cached instance if available
+        if "entity_media_service" in self._service_instances:
+            return self._service_instances["entity_media_service"]
+
+        # Create repositories
+        entity_media_repository = EntityMediaRepository(self.session, self.key_service)
+        media_asset_repository = MediaAssetRepository(self.session, self.key_service)
+
+        # Create and cache entity media service
+        service = EntityMediaService(
+            db=self.session,
+            encryption_service=self.key_service
+        )
+
+        self._service_instances["entity_media_service"] = service
+        return service
+
     def get_file_storage_service(
             self, base_path: str = "./storage"
     ) -> "FileStorageService":
