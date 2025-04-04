@@ -196,15 +196,15 @@ async def update_entity_media(
         )
 
 
+from fastapi import Response  # Add this import at the top
+
+# Fix the DELETE endpoint
 @router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_entity_media(
         id: str = Path(..., description="The ID of the entity media association"),
         db: Session = Depends(get_db),
         current_user: dict = Depends(get_current_active_user),
 ):
-    """
-    Delete an entity media association.
-    """
     try:
         service_factory = ServiceFactory(db)
         entity_media_service = service_factory.get_entity_media_service()
@@ -218,7 +218,8 @@ async def delete_entity_media(
                 detail=f"Entity media with ID {id} not found"
             )
 
-        return None
+        # Return a proper 204 No Content response instead of None
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
     except HTTPException:
         raise
     except Exception as e:
@@ -253,7 +254,7 @@ async def delete_entity_media_by_entity(
                 detail=f"No media found for {entity_type} {entity_id}"
             )
 
-        return None
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
     except HTTPException:
         raise
     except Exception as e:

@@ -236,6 +236,86 @@ async def file_diagnostic(
         logger.error(f"Diagnostic error: {str(e)}", exc_info=True)
         return {"error": str(e)}
 
+
+@router.get("/file-locator/{asset_id}")
+async def locate_file(
+        *,
+        db: Session = Depends(get_db),
+        current_user: Any = Depends(get_current_active_user),
+        asset_id: str = Path(...),
+):
+    """Diagnostic endpoint to find files in the filesystem."""
+    try:
+        # Get asset info
+        service_factory = ServiceFactory(db)
+        media_asset_service = service_factory.get_media_asset_service()
+        asset = media_asset_service.get_media_asset(asset_id)
+
+        if not asset:
+            return {"error": "Asset not found"}
+
+        # Get the storage location from DB
+        db_path = asset.storage_location
+
+        # Look for the file in various locations
+        results = {
+            "asset_id": asset_id,
+            "db_path": db_path,
+            "file_name": asset.file_name,
+            "content_type": asset.content_type,
+            "paths_checked": [],
+            "file_found": False,
+            "found_at": None
+        }
+
+        # Get the current working directory
+        cwd = os.getcwd()
+        results["cwd"] = cwd
+
+        # Check if common directories exist
+        media_dir = os.path.join(cwd, "media_assets")
+        results["media_dir_exists"] = os.path.exists(media_dir)
+
+        # List all files in the media directory
+        if results["media_dir_exists"]:
+            results["media_dir_files"] = os.listdir(media_dir)
+
+        # Use glob to find any files with this asset ID
+        import glob
+
+        # Try different search patterns
+        search_patterns = [
+            f"{cwd}/**/{asset_id}*",
+            f"{cwd}/media_assets/**/{asset_id}*",
+            f"{media_dir}/**/{asset_id}*",
+            f"{media_dir}/{asset_id}*",
+        ]
+
+        all_matches = []
+        for pattern in search_patterns:
+            results["paths_checked"].append(pattern)
+            matches = glob.glob(pattern, recursive=True)
+            if matches:
+                all_matches.extend(matches)
+
+        # Process and deduplicate the matches
+        unique_matches = list(set(all_matches))
+        results["all_matching_files"] = unique_matches
+
+        if unique_matches:
+            results["file_found"] = True
+            results["found_at"] = unique_matches
+
+            # Update the database path if we found a file
+            if len(unique_matches) == 1:
+                # Maybe update the path in the database?
+                pass
+
+        return results
+    except Exception as e:
+        logger.error(f"File locator error: {str(e)}", exc_info=True)
+        return {"error": str(e)}
+
 @router.get("/", response_model=MediaAssetListResponse)
 async def list_media_assets(
         *,
@@ -386,29 +466,76 @@ async def preview_media_asset(
         if not asset:
             raise HTTPException(status_code=404, detail="Asset not found")
 
-        # Try the exact same approach that works in the public endpoint
-        storage_path = asset.storage_location
-        alt_path = f"media_assets/{asset_id}_{asset.file_name}"
+        logger.info(f"Preview request for: {asset_id}, storage path: {asset.storage_location}")
 
-        if os.path.exists(storage_path):
-            logger.info(f"Serving file from storage_location: {storage_path}")
+        # Get working directory and base paths
+        cwd = os.getcwd()
+        media_dir = os.path.join(cwd, "media_assets")
+
+        # Create directory if it doesn't exist
+        os.makedirs(media_dir, exist_ok=True)
+
+        # Try multiple paths
+        paths_to_try = [
+            asset.storage_location,
+            os.path.join(cwd, asset.storage_location),
+            os.path.join(media_dir, f"{asset_id}_{asset.file_name}"),
+            os.path.join(media_dir, asset_id[:2], asset_id[2:4], f"{asset_id}{os.path.splitext(asset.file_name)[1]}"),
+        ]
+
+        # Look for the file
+        for path in paths_to_try:
+            logger.info(f"Checking path: {path}")
+            if os.path.exists(path):
+                logger.info(f"Found file at: {path}")
+                return FileResponse(
+                    path=path,
+                    media_type=asset.content_type
+                )
+
+        # Create placeholder if not found (for development/testing)
+        placeholder_path = os.path.join(media_dir, f"placeholder_{asset_id}.png")
+
+        try:
+            # Create simple placeholder image
+            from PIL import Image, ImageDraw
+
+            # Create a colored background based on asset ID for uniqueness
+            # This helps visually distinguish different assets
+            hue = int(asset_id.replace("-", "")[:8], 16) % 360
+
+            img = Image.new('RGB', (300, 200), color=hsv_to_rgb(hue / 360, 0.3, 0.95))
+            d = ImageDraw.Draw(img)
+
+            # Draw asset info
+            d.text((10, 10), f"Asset ID: {asset_id[:8]}...", fill=(0, 0, 0))
+            d.text((10, 30), f"File: {asset.file_name[:30]}", fill=(0, 0, 0))
+            d.text((10, 160), "Placeholder Image", fill=(0, 0, 0))
+
+            # Save the placeholder
+            img.save(placeholder_path)
+            logger.info(f"Created placeholder at: {placeholder_path}")
+
             return FileResponse(
-                path=storage_path,
-                media_type=asset.content_type
+                path=placeholder_path,
+                media_type="image/png"
             )
-        elif os.path.exists(alt_path):
-            logger.info(f"Serving file from alt path: {alt_path}")
-            return FileResponse(
-                path=alt_path,
-                media_type=asset.content_type
-            )
-        else:
-            logger.error(f"File not found for {asset_id} at {storage_path} or {alt_path}")
+        except Exception as e:
+            logger.error(f"Error creating placeholder: {str(e)}")
             raise HTTPException(status_code=404, detail="File not found")
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Preview error: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# Helper function for placeholder image colors
+def hsv_to_rgb(h, s, v):
+    import colorsys
+    r, g, b = colorsys.hsv_to_rgb(h, s, v)
+    return (int(r * 255), int(g * 255), int(b * 255))
 
 
 @router.get("/{asset_id}/download")

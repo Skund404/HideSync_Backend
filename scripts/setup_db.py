@@ -6,10 +6,13 @@ This script handles:
 1. Creating/resetting the database (with SQLCipher support)
 2. Creating tables by running SQLAlchemy model creation code
 3. Seeding the database from JSON data
+4. Diagnosing database tables and ensuring media system tables exist
 
 Usage (from project root directory):
   python -m scripts.setup_db --reset --seed
   python -m scripts.setup_db --reset --seed --seed-file PATH_TO_SEED_FILE
+  python -m scripts.setup_db --diagnose
+  python -m scripts.setup_db --ensure-media-tables
 """
 
 import os
@@ -20,7 +23,7 @@ import logging
 import argparse
 import importlib.util
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Type
+from typing import Dict, Any, List, Optional, Type, Set, Tuple
 from datetime import datetime
 from enum import Enum
 
@@ -68,6 +71,7 @@ except Exception as e:
 try:
     from app.db.session import SessionLocal, engine, EncryptionManager, use_sqlcipher, init_db
     from app.core.config import settings
+    from app.core.key_manager import KeyManager
     from app.db.models.base import Base
     from app.db import models
     from app.db.models import (
@@ -169,7 +173,115 @@ model_map = {
     "timeline_tasks": TimelineTask,
     "products": Product,
     "components": Component,
+    # Media system tables might not have SQLAlchemy models yet, we'll handle them separately
+    "media_assets": None,
+    "media_tags": None,
+    "media_asset_tags": None,
+    "entity_media": None,
 }
+
+# --- SQL statements for media system tables ---
+MEDIA_SYSTEM_TABLE_STATEMENTS = {
+    'media_assets': """
+    CREATE TABLE IF NOT EXISTS media_assets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        filename TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        file_size INTEGER,
+        file_type TEXT,
+        mime_type TEXT,
+        width INTEGER,
+        height INTEGER,
+        duration INTEGER,
+        title TEXT,
+        description TEXT,
+        alt_text TEXT,
+        created_by INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP,
+        uuid TEXT,
+        is_public BOOLEAN DEFAULT FALSE,
+        status TEXT DEFAULT 'active',
+        metadata TEXT
+    );
+    """,
+    'entity_media': """
+    CREATE TABLE IF NOT EXISTS entity_media (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        media_asset_id INTEGER NOT NULL,
+        entity_type TEXT NOT NULL,
+        entity_id INTEGER NOT NULL,
+        media_type TEXT,
+        display_order INTEGER DEFAULT 0,
+        caption TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        uuid TEXT,
+        is_active BOOLEAN DEFAULT TRUE,
+        updated_at TIMESTAMP,
+        FOREIGN KEY (media_asset_id) REFERENCES media_assets(id) ON DELETE CASCADE
+    );
+    """,
+    'media_tags': """
+    CREATE TABLE IF NOT EXISTS media_tags (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        slug TEXT NOT NULL UNIQUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP
+    );
+    """,
+    'media_asset_tags': """
+    CREATE TABLE IF NOT EXISTS media_asset_tags (
+        media_asset_id INTEGER NOT NULL,
+        tag_id INTEGER NOT NULL,
+        PRIMARY KEY (media_asset_id, tag_id),
+        FOREIGN KEY (media_asset_id) REFERENCES media_assets(id) ON DELETE CASCADE,
+        FOREIGN KEY (tag_id) REFERENCES media_tags(id) ON DELETE CASCADE
+    );
+    """
+}
+
+# List of all expected tables in the database based on the ER diagram
+EXPECTED_TABLES = [
+    # Core entities
+    "users", "roles", "permissions",
+    "customers", "suppliers",
+    "materials", "leather_materials", "hardware_materials", "supplies_materials",
+    "tools", "products", "components",
+
+    # Storage system
+    "storage_locations", "storage_cells", "storage_assignments", "storage_moves",
+
+    # Projects system
+    "projects", "project_templates", "project_components", "timeline_tasks",
+    "recurring_projects", "recurrence_patterns", "generated_projects",
+
+    # Sales system
+    "sales", "sale_items", "shipments", "refunds",
+
+    # Purchasing system
+    "purchases", "purchase_items", "purchase_timeline_items",
+
+    # Tool management
+    "tool_maintenance", "tool_checkouts",
+
+    # Planning and picking
+    "patterns", "picking_lists", "picking_list_items",
+
+    # Inventory management
+    "inventory", "component_materials",
+
+    # Documentation system
+    "documentation_categories", "documentation_resources",
+    "documentation_category_assignments", "application_contexts",
+    "contextual_help_mappings",
+
+    # Platform integration
+    "platform_integrations", "sync_events",
+
+    # Media system
+    "media_assets", "media_tags", "media_asset_tags", "entity_media"
+]
 
 # --- Define Field Overrides ---
 # These mappings handle differences between JSON field names and model field names
@@ -270,7 +382,12 @@ def parse_arguments():
     parser = argparse.ArgumentParser(
         description="Set up the HideSync database.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="Example:\n  python -m scripts.setup_db --reset --seed",
+        epilog="""
+Examples:
+  python -m scripts.setup_db --reset --seed
+  python -m scripts.setup_db --diagnose
+  python -m scripts.setup_db --ensure-media-tables
+        """,
     )
     parser.add_argument(
         "--seed", action="store_true", help="Seed the database with initial data"
@@ -305,6 +422,26 @@ def parse_arguments():
         "--debug",
         action="store_true",
         help="Enable debug logging for more detailed output",
+    )
+    parser.add_argument(
+        "--diagnose",
+        action="store_true",
+        help="Run database diagnostics to check table structure",
+    )
+    parser.add_argument(
+        "--ensure-media-tables",
+        action="store_true",
+        help="Ensure that all media system tables exist in the database",
+    )
+    parser.add_argument(
+        "--verbose-diagnostics",
+        action="store_true",
+        help="Show detailed information in diagnostics output",
+    )
+    parser.add_argument(
+        "--fix-missing-tables",
+        action="store_true",
+        help="Automatically fix missing tables detected by diagnostics",
     )
     return parser.parse_args()
 
@@ -364,6 +501,13 @@ def initialize_database_schema():
             logger.error("Database schema initialization failed.")
             return False
         logger.info("Database schema successfully initialized with SQLCipher")
+
+        # Also ensure media tables exist (they might not be in SQLAlchemy models)
+        success = ensure_media_tables_exist()
+        if not success:
+            logger.error("Media tables creation failed.")
+            return False
+
         return True
     else:
         # For non-encrypted databases, use the standard SQLAlchemy approach
@@ -371,6 +515,13 @@ def initialize_database_schema():
             logger.info("Using standard SQLite mode - calling create_all")
             Base.metadata.create_all(bind=engine)
             logger.info("Database tables created successfully")
+
+            # Also ensure media tables exist (they might not be in SQLAlchemy models)
+            success = ensure_media_tables_exist()
+            if not success:
+                logger.error("Media tables creation failed.")
+                return False
+
             return True
         except Exception as e:
             logger.error(f"Error creating database tables: {str(e)}")
@@ -378,6 +529,236 @@ def initialize_database_schema():
             import traceback
             logger.error(traceback.format_exc())
             return False
+
+
+def ensure_media_tables_exist():
+    """Create media system tables if they don't exist."""
+    logger.info("Ensuring media system tables exist...")
+
+    if use_sqlcipher:
+        # For SQLCipher databases, use direct SQL
+        return create_media_tables_direct_sql()
+    else:
+        # For non-encrypted databases, we could use SQLAlchemy
+        # but for consistency, use the same direct SQL approach
+        return create_media_tables_direct_sql()
+
+
+def create_media_tables_direct_sql():
+    """Create media system tables using direct SQL commands."""
+    db_path = os.path.abspath(settings.DATABASE_PATH)
+
+    # Establish connection
+    try:
+        # Get SQLCipher module
+        sqlcipher = EncryptionManager.get_sqlcipher_module()
+        if not sqlcipher:
+            logger.error("SQLCipher module not available")
+            return False
+
+        # Connect to the database
+        conn = sqlcipher.connect(db_path)
+        cursor = conn.cursor()
+
+        # Configure encryption with hex key approach
+        key = KeyManager.get_database_encryption_key()
+        cursor.execute(f"PRAGMA key = \"x'{key}'\";")
+        cursor.execute("PRAGMA cipher_page_size = 4096;")
+        cursor.execute("PRAGMA kdf_iter = 256000;")
+        cursor.execute("PRAGMA cipher_hmac_algorithm = HMAC_SHA512;")
+        cursor.execute("PRAGMA cipher_kdf_algorithm = PBKDF2_HMAC_SHA512;")
+        cursor.execute("PRAGMA foreign_keys = ON;")
+
+        # Check which tables already exist
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+        existing_tables = [row[0] for row in cursor.fetchall()]
+
+        # Create tables in the right order to respect foreign key constraints
+        tables_to_create = []
+        for table_name in ['media_assets', 'entity_media', 'media_tags', 'media_asset_tags']:
+            if table_name not in existing_tables:
+                tables_to_create.append(table_name)
+
+        if not tables_to_create:
+            logger.info("All media system tables already exist")
+            return True
+
+        logger.info(f"Creating missing media tables: {', '.join(tables_to_create)}")
+
+        # Create tables (in the right order for foreign key constraints)
+        created_tables = []
+        for table_name in ['media_assets', 'media_tags', 'media_asset_tags', 'entity_media']:
+            if table_name in tables_to_create:
+                try:
+                    cursor.execute(MEDIA_SYSTEM_TABLE_STATEMENTS[table_name])
+                    created_tables.append(table_name)
+                    logger.info(f"Created table: {table_name}")
+                except Exception as e:
+                    logger.error(f"Error creating table {table_name}: {e}")
+                    conn.rollback()
+                    conn.close()
+                    return False
+
+        # Commit changes
+        conn.commit()
+        logger.info(f"Successfully created media tables: {', '.join(created_tables)}")
+
+        # Verify the tables were created
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+        updated_tables = [row[0] for row in cursor.fetchall()]
+
+        all_created = True
+        for table_name in tables_to_create:
+            if table_name not in updated_tables:
+                logger.error(f"Table {table_name} was not created")
+                all_created = False
+
+        conn.close()
+        return all_created
+
+    except Exception as e:
+        logger.error(f"Error ensuring media tables exist: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return False
+
+
+# --- Database Diagnostics ---
+
+def run_database_diagnostics(verbose=False, fix_missing=False):
+    """Run a comprehensive database diagnostic check."""
+    logger.info("Running database diagnostics...")
+
+    db_path = os.path.abspath(settings.DATABASE_PATH)
+    if not os.path.exists(db_path):
+        logger.error(f"Database file not found at: {db_path}")
+        return False
+
+    try:
+        # Get SQLCipher module
+        sqlcipher = EncryptionManager.get_sqlcipher_module()
+        if not sqlcipher:
+            logger.error("SQLCipher module not available")
+            return False
+
+        # Connect to the database
+        conn = sqlcipher.connect(db_path)
+        cursor = conn.cursor()
+
+        # Configure encryption with hex key approach
+        key = KeyManager.get_database_encryption_key()
+        cursor.execute(f"PRAGMA key = \"x'{key}'\";")
+        cursor.execute("PRAGMA cipher_page_size = 4096;")
+        cursor.execute("PRAGMA kdf_iter = 256000;")
+        cursor.execute("PRAGMA cipher_hmac_algorithm = HMAC_SHA512;")
+        cursor.execute("PRAGMA cipher_kdf_algorithm = PBKDF2_HMAC_SHA512;")
+        cursor.execute("PRAGMA foreign_keys = ON;")
+
+        # Verify connection and basic functionality
+        try:
+            cursor.execute("SELECT 1")
+            result = cursor.fetchone()
+            logger.info(f"Database connection test: {result}")
+        except Exception as e:
+            logger.error(f"Database connection test failed: {e}")
+            return False
+
+        # Get database version info
+        cursor.execute("SELECT sqlite_version()")
+        sqlite_version = cursor.fetchone()[0]
+        logger.info(f"SQLite version: {sqlite_version}")
+
+        try:
+            cursor.execute("PRAGMA cipher_version")
+            cipher_version = cursor.fetchone()[0]
+            logger.info(f"SQLCipher version: {cipher_version}")
+        except:
+            logger.info("SQLCipher version not available (using standard SQLite)")
+
+        # Get database file info
+        db_size = os.path.getsize(db_path)
+        logger.info(f"Database file size: {db_size} bytes ({db_size / 1024 / 1024:.2f} MB)")
+
+        # Get all tables in the database
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+        existing_tables = set(row[0] for row in cursor.fetchall())
+
+        logger.info(f"Found {len(existing_tables)} tables in the database")
+        if verbose:
+            logger.info(f"Tables: {', '.join(sorted(existing_tables))}")
+
+        # Check for expected tables
+        missing_tables = set(EXPECTED_TABLES) - existing_tables
+        unexpected_tables = existing_tables - set(EXPECTED_TABLES)
+
+        if missing_tables:
+            logger.warning(f"Missing {len(missing_tables)} expected tables:")
+            for table in sorted(missing_tables):
+                logger.warning(f"  - {table}")
+        else:
+            logger.info("All expected tables are present in the database")
+
+        if unexpected_tables:
+            logger.info(f"Found {len(unexpected_tables)} unexpected tables:")
+            for table in sorted(unexpected_tables):
+                logger.info(f"  + {table}")
+
+        # Check media system tables specifically
+        media_tables = {'media_assets', 'entity_media', 'media_tags', 'media_asset_tags'}
+        missing_media_tables = media_tables - existing_tables
+
+        if missing_media_tables:
+            logger.warning(f"Missing media system tables: {', '.join(sorted(missing_media_tables))}")
+
+            if fix_missing:
+                logger.info("Attempting to create missing media tables...")
+                if create_media_tables_direct_sql():
+                    logger.info("Successfully created missing media tables")
+                else:
+                    logger.error("Failed to create missing media tables")
+        else:
+            logger.info("All media system tables are present")
+
+        # Check table structures if verbose
+        if verbose:
+            logger.info("\nTable structure details:")
+            for table_name in sorted(existing_tables):
+                cursor.execute(f"PRAGMA table_info({table_name})")
+                columns = cursor.fetchall()
+
+                logger.info(f"\nTable: {table_name} ({len(columns)} columns)")
+                for col in columns:
+                    pk_str = "PK" if col[5] else "  "
+                    nn_str = "NN" if col[3] else "  "
+                    logger.info(f"  - {col[1]:<20} {col[2]:<10} {pk_str} {nn_str} {col[4] or ''}")
+
+                # Check row count
+                try:
+                    cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
+                    count = cursor.fetchone()[0]
+                    logger.info(f"  Rows: {count}")
+                except:
+                    logger.warning(f"  Could not count rows in {table_name}")
+
+        conn.close()
+
+        # Summary
+        if missing_tables:
+            if fix_missing:
+                logger.info("\nDiagnostics Summary: Issues found and repair attempted")
+            else:
+                logger.info("\nDiagnostics Summary: Issues found")
+                logger.info("Run with --fix-missing-tables to attempt repair")
+            return False
+        else:
+            logger.info("\nDiagnostics Summary: Database appears healthy")
+            return True
+
+    except Exception as e:
+        logger.error(f"Error running diagnostics: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return False
 
 
 # --- Database Seeding ---
@@ -720,8 +1101,8 @@ def seed_with_direct_sqlcipher(seed_data, entities_order):
         cursor = conn.cursor()
 
         # Configure SQLCipher parameters
-        key_pragma_value = EncryptionManager.format_key_for_pragma()
-        cursor.execute(f"PRAGMA key = {key_pragma_value};")
+        key = KeyManager.get_database_encryption_key()
+        cursor.execute(f"PRAGMA key = \"x'{key}'\";")
         cursor.execute("PRAGMA cipher_page_size = 4096;")
         cursor.execute("PRAGMA kdf_iter = 256000;")
         cursor.execute("PRAGMA cipher_hmac_algorithm = HMAC_SHA512;")
@@ -1130,6 +1511,30 @@ def main():
         logger.setLevel(logging.DEBUG)
         logger.debug("Debug logging enabled")
 
+    # See if we need to diagnose the database
+    if args.diagnose:
+        logger.info("Running database diagnostics...")
+        success = run_database_diagnostics(args.verbose_diagnostics, args.fix_missing_tables)
+        if success:
+            logger.info("Database diagnostics completed successfully.")
+            return
+        elif args.fix_missing_tables:
+            logger.info("Database diagnostics completed with fixes applied.")
+            return
+        else:
+            logger.error("Database diagnostics found issues. Run with --fix-missing-tables to attempt repair.")
+            sys.exit(1)
+
+    # Check if we're only ensuring media tables exist
+    if args.ensure_media_tables:
+        logger.info("Ensuring media tables exist...")
+        if ensure_media_tables_exist():
+            logger.info("Media tables exist or were created successfully.")
+            return
+        else:
+            logger.error("Failed to ensure media tables exist.")
+            sys.exit(1)
+
     # Step 1: Reset database if requested
     if args.reset:
         if not reset_database():
@@ -1153,6 +1558,14 @@ def main():
             sys.exit(1)
         else:
             logger.info("Database seeding completed.")
+
+    # Step 4: Ensure media tables exist
+    if not args.ensure_media_tables:  # Skip if already done
+        if not ensure_media_tables_exist():
+            logger.error("Failed to ensure media tables exist.")
+            sys.exit(1)
+        else:
+            logger.info("Media tables exist or were created successfully.")
 
     logger.info("--- Database setup process finished successfully ---")
 

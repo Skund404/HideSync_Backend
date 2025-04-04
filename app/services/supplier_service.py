@@ -25,6 +25,27 @@ from app.services.base_service import BaseService
 
 logger = logging.getLogger(__name__)
 
+class SupplierDeleted(DomainEvent):
+    """Event emitted when a supplier is deleted."""
+
+    def __init__(
+        self,
+        supplier_id: int,
+        supplier_name: str,
+        user_id: Optional[int] = None,
+    ):
+        """
+        Initialize supplier deleted event.
+
+        Args:
+            supplier_id: ID of the deleted supplier
+            supplier_name: Name of the supplier
+            user_id: Optional ID of the user who deleted the supplier
+        """
+        super().__init__()
+        self.supplier_id = supplier_id
+        self.supplier_name = supplier_name
+        self.user_id = user_id
 
 class SupplierCreated(DomainEvent):
     """Event emitted when a supplier is created."""
@@ -248,7 +269,6 @@ class SupplierService(BaseService[Supplier]):
             supplier = self.get_by_id(supplier_id)
             if not supplier:
                 from app.core.exceptions import SupplierNotFoundException
-
                 raise SupplierNotFoundException(supplier_id)
 
             # Check for duplicate name if changing name
@@ -268,6 +288,16 @@ class SupplierService(BaseService[Supplier]):
                         "SUPPLIER_002",
                         {"field": "email", "value": data["email"]},
                     )
+
+            # Handle common field variations
+            self._handle_field_variations(data, "payment_terms", "paymentTerms")
+            self._handle_field_variations(data, "min_order_amount", "minOrderAmount")
+            self._handle_field_variations(data, "lead_time", "leadTime")
+            self._handle_field_variations(data, "last_order_date", "lastOrderDate")
+            self._handle_field_variations(data, "material_categories", "materialCategories")
+
+            # Log the data being processed for debugging
+            logger.debug(f"Processing update for supplier {supplier_id} with data: {data}")
 
             # Capture changes for event
             changes = {}
@@ -302,6 +332,25 @@ class SupplierService(BaseService[Supplier]):
                 self.cache_service.invalidate(f"Supplier:detail:{supplier_id}")
 
             return updated_supplier
+
+    def _handle_field_variations(self, data: Dict[str, Any], snake_case: str, camel_case: str) -> None:
+        """
+        Handle variations in field naming between snake_case and camelCase.
+        Ensures that the snake_case version is always present in data if either variant exists.
+
+        Args:
+            data: The data dictionary to modify
+            snake_case: The snake_case field name
+            camel_case: The camelCase field name
+        """
+        # If camelCase exists but snake_case doesn't, copy the value
+        if camel_case in data and snake_case not in data:
+            data[snake_case] = data[camel_case]
+            logger.debug(f"Copied value from {camel_case} to {snake_case}: {data[camel_case]}")
+
+        # Remove the camelCase version to avoid confusion
+        if camel_case in data:
+            data.pop(camel_case)
 
     def change_supplier_status(
         self,
@@ -899,6 +948,82 @@ class SupplierService(BaseService[Supplier]):
             True if supplier exists, False otherwise
         """
         return len(self.repository.list(email=email)) > 0
+
+    def delete_supplier(self, supplier_id: int) -> bool:
+        """
+        Delete a supplier by ID.
+
+        Args:
+            supplier_id: ID of the supplier to delete
+
+        Returns:
+            True if deletion was successful
+
+        Raises:
+            EntityNotFoundException: If supplier not found
+            BusinessRuleException: If supplier cannot be deleted (e.g., has active purchases)
+        """
+        with self.transaction():
+            # Check if supplier exists
+            supplier = self.get_by_id(supplier_id)
+            if not supplier:
+                from app.core.exceptions import EntityNotFoundException
+                raise EntityNotFoundException(f"Supplier with ID {supplier_id} not found")
+
+            # Check if supplier can be deleted (e.g., no active purchases)
+            # This would be a business rule validation
+            if self.purchase_service:
+                active_purchases = self._check_active_purchases(supplier_id)
+                if active_purchases:
+                    from app.core.exceptions import BusinessRuleException
+                    raise BusinessRuleException(
+                        f"Cannot delete supplier with {len(active_purchases)} active purchases",
+                        "SUPPLIER_DELETE_001",
+                        {"active_purchases": len(active_purchases)}
+                    )
+
+            # Get user ID for events
+            user_id = self.security_context.current_user.id if self.security_context else None
+
+            # Delete the supplier
+            result = self.repository.delete(supplier_id)
+
+            # Publish event if event bus exists
+            if self.event_bus:
+                self.event_bus.publish(
+                    SupplierDeleted(
+                        supplier_id=supplier_id,
+                        supplier_name=supplier.name,
+                        user_id=user_id
+                    )
+                )
+
+            # Invalidate cache if cache service exists
+            if self.cache_service:
+                self.cache_service.invalidate(f"Supplier:{supplier_id}")
+                self.cache_service.invalidate(f"Supplier:detail:{supplier_id}")
+
+            return result
+
+    def _check_active_purchases(self, supplier_id: int) -> list:
+        """
+        Check if supplier has any active purchases that would prevent deletion.
+
+        Args:
+            supplier_id: ID of the supplier
+
+        Returns:
+            List of active purchase IDs, empty if none
+        """
+        if not self.purchase_service:
+            return []
+
+        try:
+            # This would call a method on the purchase service
+            return self.purchase_service.get_active_purchases_by_supplier(supplier_id)
+        except Exception as e:
+            logger.warning(f"Error checking active purchases for supplier {supplier_id}: {str(e)}")
+            return []
 
     def _validate_status_transition(self, current_status: str, new_status: str) -> None:
         """
