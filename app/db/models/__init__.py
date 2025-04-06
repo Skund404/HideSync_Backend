@@ -116,6 +116,7 @@ from app.db.models.communication import CustomerCommunication
 
 # Import Media & Asset Management Models
 from app.db.models.media_asset import MediaAsset
+from app.db.models.entity_media import EntityMedia  # Add this import
 from app.db.models.tag import Tag
 from app.db.models.association_media import MediaAssetTag
 
@@ -186,6 +187,7 @@ __all__ = [
     "CustomerCommunication",
     # Media & Asset Management Models
     "MediaAsset",
+    "EntityMedia",  # Add this to __all__
     "Tag",
     "MediaAssetTag",
     # Documentation & Utility Models

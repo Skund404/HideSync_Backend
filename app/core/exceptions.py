@@ -495,3 +495,23 @@ class EncryptionKeyMissingException(SecurityException):
             code=f"{self.CODE_PREFIX}005",
             details=error_details
         )
+
+
+class SupplierException(HideSyncException):
+    """Base exception for supplier-related errors."""
+    CODE_PREFIX = "SUPPLIER_" # Define a prefix for supplier-specific error codes
+
+class SupplierNotFoundException(SupplierException): # Inherit from SupplierException
+    """Raised when a requested supplier does not exist."""
+    def __init__(self, supplier_id: int):
+        """
+        Initialize the SupplierNotFoundException.
+
+        Args:
+            supplier_id: The ID of the supplier that was not found.
+        """
+        super().__init__(
+            message=f"Supplier with ID {supplier_id} not found",
+            code=f"{self.CODE_PREFIX}001", # Assign a specific code (e.g., SUPPLIER_001)
+            details={"supplier_id": supplier_id},
+        )

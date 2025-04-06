@@ -12,6 +12,7 @@ from app.core.exceptions import (
     ValidationException,
     EntityNotFoundException,
     DuplicateEntityException,
+    SupplierNotFoundException,
 )
 from app.core.validation import validate_input, validate_entity
 from app.db.models.enums import SupplierStatus
@@ -155,6 +156,8 @@ class SupplierRatingChanged(DomainEvent):
 validate_supplier = validate_entity(Supplier)
 
 
+
+
 class SupplierService(BaseService[Supplier]):
     """
     Service for managing suppliers in the HideSync system.
@@ -254,7 +257,7 @@ class SupplierService(BaseService[Supplier]):
 
         Args:
             supplier_id: ID of the supplier to update
-            data: Updated supplier data
+            data: Updated supplier data (expected in snake_case)
 
         Returns:
             Updated supplier entity
@@ -268,8 +271,19 @@ class SupplierService(BaseService[Supplier]):
             # Check if supplier exists
             supplier = self.get_by_id(supplier_id)
             if not supplier:
-                from app.core.exceptions import SupplierNotFoundException
-                raise SupplierNotFoundException(supplier_id)
+                # Explicitly raise the correct exception if needed
+                # from app.core.exceptions import SupplierNotFoundException
+                raise SupplierNotFoundException(supplier_id=supplier_id) # Pass keyword argument
+
+            # Validate input data keys against model fields if needed (optional enhancement)
+            valid_keys = {c.name for c in Supplier.__table__.columns}
+            invalid_keys = set(data.keys()) - valid_keys - {'id'} # Allow 'id' temporarily if present
+            if invalid_keys:
+                 logger.warning(f"Received unexpected keys in update data for supplier {supplier_id}: {invalid_keys}")
+                 # Optionally remove invalid keys or raise an error
+                 # for key in invalid_keys:
+                 #     data.pop(key, None)
+
 
             # Check for duplicate name if changing name
             if "name" in data and data["name"] != supplier.name:
@@ -289,28 +303,44 @@ class SupplierService(BaseService[Supplier]):
                         {"field": "email", "value": data["email"]},
                     )
 
-            # Handle common field variations
-            self._handle_field_variations(data, "payment_terms", "paymentTerms")
-            self._handle_field_variations(data, "min_order_amount", "minOrderAmount")
-            self._handle_field_variations(data, "lead_time", "leadTime")
-            self._handle_field_variations(data, "last_order_date", "lastOrderDate")
-            self._handle_field_variations(data, "material_categories", "materialCategories")
+            # REMOVED THESE HELPER CALLS - Frontend service and Pydantic ensure snake_case
+            # self._handle_field_variations(data, "payment_terms", "paymentTerms")
+            # self._handle_field_variations(data, "min_order_amount", "minOrderAmount")
+            # self._handle_field_variations(data, "lead_time", "leadTime")
+            # self._handle_field_variations(data, "last_order_date", "lastOrderDate")
+            # self._handle_field_variations(data, "material_categories", "materialCategories")
 
-            # Log the data being processed for debugging
-            logger.debug(f"Processing update for supplier {supplier_id} with data: {data}")
+            # Log the data being processed for debugging - BEFORE calculating changes
+            logger.debug(f"Processing update for supplier {supplier_id} with snake_case data: {data}")
 
-            # Capture changes for event
+            # Capture changes for event (based on snake_case keys)
             changes = {}
             for key, new_value in data.items():
+                # Check against the supplier model's attributes
                 if hasattr(supplier, key):
                     old_value = getattr(supplier, key)
-                    if old_value != new_value:
-                        changes[key] = {"old": old_value, "new": new_value}
+                    # Handle potential type differences (e.g., enum vs string)
+                    if isinstance(old_value, SupplierStatus):
+                         old_value_cmp = old_value.value
+                    else:
+                         old_value_cmp = old_value
+
+                    if isinstance(new_value, SupplierStatus):
+                         new_value_cmp = new_value.value
+                    else:
+                         new_value_cmp = new_value
+
+                    if old_value_cmp != new_value_cmp:
+                        changes[key] = {"old": old_value_cmp, "new": new_value_cmp}
+                elif key != 'id': # Ignore 'id' if it sneaks in
+                     logger.warning(f"Key '{key}' from update data not found in Supplier model.")
+
 
             # Set updated timestamp
             data["updated_at"] = datetime.now()
 
-            # Update supplier
+            # Update supplier using the repository
+            # The repository's update method should handle setting attributes based on the 'data' dict keys
             updated_supplier = self.repository.update(supplier_id, data)
 
             # Publish event if event bus exists and there are changes
@@ -332,6 +362,27 @@ class SupplierService(BaseService[Supplier]):
                 self.cache_service.invalidate(f"Supplier:detail:{supplier_id}")
 
             return updated_supplier
+
+    # REMOVE or comment out the _handle_field_variations method as it's no longer needed here
+    # def _handle_field_variations(self, data: Dict[str, Any], snake_case: str, camel_case: str) -> None:
+    #     """
+    #     (No longer used in update_supplier)
+    #     Handle variations in field naming between snake_case and camelCase.
+    #     Ensures that the snake_case version is always present in data if either variant exists.
+    #
+    #     Args:
+    #         data: The data dictionary to modify
+    #         snake_case: The snake_case field name
+    #         camel_case: The camelCase field name
+    #     """
+    #     # If camelCase exists but snake_case doesn't, copy the value
+    #     if camel_case in data and snake_case not in data:
+    #         data[snake_case] = data[camel_case]
+    #         logger.debug(f"Copied value from {camel_case} to {snake_case}: {data[camel_case]}")
+    #
+    #     # Remove the camelCase version to avoid confusion
+    #     if camel_case in data:
+    #         data.pop(camel_case)
 
     def _handle_field_variations(self, data: Dict[str, Any], snake_case: str, camel_case: str) -> None:
         """

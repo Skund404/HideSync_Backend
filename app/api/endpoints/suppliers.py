@@ -5,7 +5,7 @@ Supplier API endpoints for HideSync.
 This module provides endpoints for managing suppliers, including
 supplier information, ratings, purchasing history, and related operations.
 """
-
+import json
 import logging
 from typing import Any, List, Optional, Dict
 from datetime import datetime
@@ -103,7 +103,7 @@ def list_suppliers(
 
         # Calculate pages
         pages = max(1, (total + pageSize - 1) // pageSize)
-
+        logger.debug(f"Supplier list being returned from GET /suppliers: {json.dumps(supplier_list, indent=2)}")
         # Create response dictionary
         response_data = {
             "items": supplier_list,

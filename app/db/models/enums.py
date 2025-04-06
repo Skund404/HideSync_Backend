@@ -1330,6 +1330,7 @@ class SupplierStatus(str, Enum):
     3. Operational Status
     4. Compliance Status
     """
+    # --- MODIFIED VALUES TO BE LOWERCASE ---
     # Activity Status
     ACTIVE = "active"
     INACTIVE = "inactive"
