@@ -1,1054 +1,655 @@
 # File: services/product_service.py
 
-"""
-Product management service for the HideSync system.
-
-This module provides comprehensive functionality for managing leathercraft products,
-which represent sellable items in the HideSync system. It handles product creation,
-catalog management, pricing, inventory tracking, and the relationships between
-products, patterns, and materials.
-
-Products represent the final output of the leathercraft process - items that can be
-sold to customers. They may be based on patterns and typically have associated
-costs, prices, and inventory tracking.
-
-Key features:
-- Product creation and catalog management
-- Pricing and cost calculation
-- Inventory tracking and management
-- Pattern and material association
-- Product variants and customization options
-- Product search and categorization
-- Sales performance tracking
-
-The service follows clean architecture principles with clear separation from
-the data access layer through repository interfaces, and integrates with other
-services like PatternService and InventoryService.
-"""
-
-from typing import List, Optional, Dict, Any, Union, Tuple
-from datetime import datetime
 import logging
 import json
 import uuid
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Union
+
 from sqlalchemy.orm import Session
 
+# --- Application Imports ---
+# Adjust paths as per your project structure
 from app.core.events import DomainEvent
 from app.core.exceptions import (
-    HideSyncException,
-    ValidationException,
-    EntityNotFoundException,
     BusinessRuleException,
     ConcurrentOperationException,
+    EntityNotFoundException,
+    HideSyncException,
+    InsufficientInventoryException, # Import if needed for adjust_inventory handling
+    ValidationException,
 )
-from app.core.validation import validate_input, validate_entity
-from app.db.models.enums import ProjectType, InventoryStatus
-from app.db.models.inventory import Product
+# from app.core.validation import validate_input # Using Pydantic schemas in endpoints now
+from app.db.models.enums import InventoryStatus, ProjectType, InventoryAdjustmentType # Added necessary enums
+from app.db.models import Product
+
+
 from app.repositories.product_repository import ProductRepository
 from app.services.base_service import BaseService
+# Import dependent services (ensure they are injected in __init__)
+from app.services.inventory_service import InventoryService
+# from app.services.pattern_service import PatternService
+# from app.services.sale_service import SaleService
+# from app.services.material_service import MaterialService # Only if calculating costs here
+from app.schemas.product import ProductCreate, ProductUpdate, ProductFilter, ProductList, ProductResponse # Import necessary schemas
 
 logger = logging.getLogger(__name__)
 
 
+# --- Domain Events ---
 class ProductCreated(DomainEvent):
-    """Event emitted when a product is created."""
-
-    def __init__(
-        self,
-        product_id: int,
-        name: str,
-        product_type: str,
-        user_id: Optional[int] = None,
-    ):
-        """
-        Initialize product created event.
-
-        Args:
-            product_id: ID of the created product
-            name: Name of the product
-            product_type: Type of product
-            user_id: Optional ID of the user who created the product
-        """
+    def __init__(self, product_id: int, name: str, sku: str, product_type: Optional[ProjectType], user_id: Optional[int] = None):
         super().__init__()
-        self.product_id = product_id
-        self.name = name
-        self.product_type = product_type
-        self.user_id = user_id
-
+        self.product_id = product_id; self.name = name; self.sku = sku;
+        self.product_type = product_type.name if product_type else None; self.user_id = user_id
 
 class ProductUpdated(DomainEvent):
-    """Event emitted when a product is updated."""
-
-    def __init__(
-        self,
-        product_id: int,
-        name: str,
-        changes: List[str],
-        user_id: Optional[int] = None,
-    ):
-        """
-        Initialize product updated event.
-
-        Args:
-            product_id: ID of the updated product
-            name: Name of the product
-            changes: List of fields that were changed
-            user_id: Optional ID of the user who updated the product
-        """
+    def __init__(self, product_id: int, name: str, sku: str, changes: List[str], user_id: Optional[int] = None):
         super().__init__()
-        self.product_id = product_id
-        self.name = name
-        self.changes = changes
-        self.user_id = user_id
-
+        self.product_id = product_id; self.name = name; self.sku = sku;
+        self.changes = changes; self.user_id = user_id
 
 class ProductDeleted(DomainEvent):
-    """Event emitted when a product is deleted."""
-
-    def __init__(self, product_id: int, name: str, user_id: Optional[int] = None):
-        """
-        Initialize product deleted event.
-
-        Args:
-            product_id: ID of the deleted product
-            name: Name of the product
-            user_id: Optional ID of the user who deleted the product
-        """
+     def __init__(self, product_id: int, name: str, sku: str, user_id: Optional[int] = None):
         super().__init__()
-        self.product_id = product_id
-        self.name = name
+        self.product_id = product_id; self.name = name; self.sku = sku;
         self.user_id = user_id
-
 
 class ProductInventoryChanged(DomainEvent):
-    """Event emitted when a product's inventory changes."""
-
-    def __init__(
-        self,
-        product_id: int,
-        name: str,
-        previous_quantity: int,
-        new_quantity: int,
-        reason: str,
-        user_id: Optional[int] = None,
-    ):
-        """
-        Initialize inventory changed event.
-
-        Args:
-            product_id: ID of the product
-            name: Name of the product
-            previous_quantity: Previous inventory quantity
-            new_quantity: New inventory quantity
-            reason: Reason for the change
-            user_id: Optional ID of the user who changed the inventory
-        """
+     def __init__(self, product_id: int, name: str, sku: str, previous_quantity: float, new_quantity: float, reason: str, user_id: Optional[int] = None):
         super().__init__()
-        self.product_id = product_id
-        self.name = name
-        self.previous_quantity = previous_quantity
-        self.new_quantity = new_quantity
-        self.change = new_quantity - previous_quantity
-        self.reason = reason
+        self.product_id = product_id; self.name = name; self.sku = sku;
+        self.previous_quantity = previous_quantity; self.new_quantity = new_quantity;
+        self.change = new_quantity - previous_quantity; self.reason = reason;
         self.user_id = user_id
-
-
-# Validation functions
-validate_product = validate_entity(Product)
+# --- End Domain Events ---
 
 
 class ProductService(BaseService[Product]):
     """
-    Service for managing products in the HideSync system.
-
-    Provides functionality for:
-    - Product creation and catalog management
-    - Pricing and cost calculation
-    - Inventory tracking and management
-    - Pattern and material association
-    - Product variants and customization options
-    - Product search and categorization
-    - Sales performance tracking
+    Service layer for managing Product entities.
+    Coordinates interactions between the Product API endpoints,
+    the ProductRepository, InventoryService, and other related services.
+    Handles business logic, validation, event publishing, and caching for Products.
     """
+
+    # Type hint dependencies for clarity
+    inventory_service: InventoryService
+    # pattern_service: Optional[PatternService]
+    # sale_service: Optional[SaleService]
+    # material_service: Optional[MaterialService]
 
     def __init__(
         self,
         session: Session,
-        repository=None,
+        repository: Optional[ProductRepository] = None, # Allow repo injection
+        inventory_service: Optional[InventoryService] = None, # << ACCEPT inventory_service
         security_context=None,
         event_bus=None,
         cache_service=None,
-        pattern_service=None,
-        inventory_service=None,
-        material_service=None,
-        sale_service=None,
+        # ... other optional service args ...
     ):
-        """
-        Initialize ProductService with dependencies.
-
-        Args:
-            session: Database session for persistence operations
-            repository: Optional repository for products
-            security_context: Optional security context for authorization
-            event_bus: Optional event bus for publishing domain events
-            cache_service: Optional cache service for data caching
-            pattern_service: Optional service for pattern operations
-            inventory_service: Optional service for inventory operations
-            material_service: Optional service for material operations
-            sale_service: Optional service for sale operations
-        """
         self.session = session
-        self.repository = repository or ProductRepository(session)
+        self.repository = repository or ProductRepository(session) # Instantiate repo if not provided
+
+        # --- Store Injected InventoryService ---
+        if not inventory_service: # Check if it was actually passed
+             logger.error("CRITICAL: InventoryService was not provided to ProductService constructor!")
+             raise ValueError("InventoryService is required for ProductService")
+        self.inventory_service = inventory_service # Store the injected instance
+
+        # Core services
         self.security_context = security_context
         self.event_bus = event_bus
         self.cache_service = cache_service
-        self.pattern_service = pattern_service
-        self.inventory_service = inventory_service
-        self.material_service = material_service
-        self.sale_service = sale_service
 
-    @validate_input(validate_product)
-    def create_product(self, data: Dict[str, Any]) -> Product:
+    def _get_current_user_id(self) -> Optional[int]:
+        """Helper to safely get current user ID."""
+        if self.security_context and hasattr(self.security_context, 'current_user') and self.security_context.current_user:
+            # Ensure the user object actually has an id and return it
+            user_id = getattr(self.security_context.current_user, 'id', None)
+            return int(user_id) if user_id is not None else None
+        return None
+
+    # --- CRUD Operations ---
+
+    def create_product(self, product_in: ProductCreate, user_id: Optional[int] = None) -> Product:
         """
-        Create a new product.
+        Creates a new product and its associated inventory record.
 
         Args:
-            data: Product data with required fields
-                Required fields:
-                - name: Product name
-                - productType: Type of product
-                Optional fields:
-                - sku: Stock keeping unit
-                - description: Product description
-                - materials: List/string of materials used
-                - color: Color description
-                - dimensions: Dimensions description
-                - patternId: ID of the pattern used
-                - quantity: Initial inventory quantity
-                - reorderPoint: Inventory level for reorder alert
-                - sellingPrice: Selling price
-                - totalCost: Total cost to produce
-                - thumbnail: Thumbnail image path
+            product_in: Validated data for the new product (from endpoint).
+            user_id: ID of the user performing the action.
 
         Returns:
-            Created product entity
-
-        Raises:
-            ValidationException: If validation fails
-            EntityNotFoundException: If referenced pattern not found
+            The created Product ORM instance.
         """
+        logger.info(f"Service: Creating product with SKU '{product_in.sku}' by user ID {user_id or 'Unknown'}")
+        user_id = user_id or self._get_current_user_id()
+
         with self.transaction():
-            # Check if pattern exists if pattern ID is provided
-            pattern_id = data.get("patternId")
-            if pattern_id and self.pattern_service:
-                pattern = self.pattern_service.get_by_id(pattern_id)
-                if not pattern:
-                    from app.core.exceptions import EntityNotFoundException
+            # 1. Validate SKU uniqueness
+            if self.repository.get_product_by_sku(product_in.sku):
+                logger.warning(f"SKU conflict during creation: '{product_in.sku}' already exists.")
+                raise BusinessRuleException(f"SKU '{product_in.sku}' already exists.", "PRODUCT_SKU_CONFLICT")
 
-                    raise EntityNotFoundException("Pattern", pattern_id)
+            # 2. Prepare data for repository
+            product_data = product_in.model_dump(exclude={'quantity', 'status', 'storage_location'}) # Exclude stock fields
 
-            # Generate SKU if not provided
-            if "sku" not in data or not data["sku"]:
-                data["sku"] = self._generate_sku(data["name"], data.get("productType"))
+            # Ensure SKU generation if needed (repository might also do this)
+            if not product_data.get('sku'):
+                 product_data['sku'] = self._generate_sku(product_data['name'], product_data.get('product_type'))
+                 logger.info(f"Generated SKU '{product_data['sku']}' for new product.")
 
-            # Set default values if not provided
-            if "quantity" not in data:
-                data["quantity"] = 0
+            # 3. Create Product record
+            product = self.repository.create(product_data)
+            logger.info(f"Service: Product record created with ID: {product.id}")
 
-            if "reorderPoint" not in data:
-                data["reorderPoint"] = 0
+            # 4. Create associated Inventory record via InventoryService
+            try:
+                initial_quantity = product_in.quantity if product_in.quantity is not None else 0.0
+                # Let Inventory Service determine initial status based on quantity & reorder point
+                # initial_status = InventoryStatus.OUT_OF_STOCK if initial_quantity <= 0 else InventoryStatus.IN_STOCK
+                # No - pass quantity and let inventory service handle status logic
 
-            if "status" not in data:
-                if data.get("quantity", 0) > 0:
-                    data["status"] = InventoryStatus.IN_STOCK.value
-                else:
-                    data["status"] = InventoryStatus.OUT_OF_STOCK.value
-
-            if "dateAdded" not in data:
-                data["dateAdded"] = datetime.now()
-
-            if "lastUpdated" not in data:
-                data["lastUpdated"] = datetime.now()
-
-            # Convert materials to string if it's a list
-            if "materials" in data and isinstance(data["materials"], list):
-                data["materials"] = json.dumps(data["materials"])
-
-            # Convert customizations to string if it's a list
-            if "customizations" in data and isinstance(data["customizations"], list):
-                data["customizations"] = json.dumps(data["customizations"])
-
-            # Convert costBreakdown to string if it's a dict
-            if "costBreakdown" in data and isinstance(data["costBreakdown"], dict):
-                data["costBreakdown"] = json.dumps(data["costBreakdown"])
-
-            # Create product
-            product = self.repository.create(data)
-
-            # Create inventory record if inventory service is available
-            if self.inventory_service and hasattr(
-                self.inventory_service, "create_inventory"
-            ):
                 self.inventory_service.create_inventory(
-                    {
-                        "itemType": "product",
-                        "itemId": product.id,
-                        "quantity": data.get("quantity", 0),
-                        "status": data.get("status"),
-                        "storageLocation": data.get("storageLocation"),
-                    }
+                    item_type="product",
+                    item_id=product.id,
+                    quantity=initial_quantity,
+                    # status=initial_status, # Let InventoryService determine status
+                    storage_location=product_in.storage_location,
+                    user_id=user_id
                 )
+                logger.info(f"Service: Inventory record created via InventoryService for product ID: {product.id}")
+            except Exception as e:
+                logger.error(f"Service: Failed to create inventory record for product {product.id}: {e}", exc_info=True)
+                raise HideSyncException(f"Failed to initialize inventory for product {product.id}") from e # Rollback transaction
 
-            # Publish event if event bus exists
+            # 5. Publish Event
             if self.event_bus:
-                user_id = (
-                    self.security_context.current_user.id
-                    if self.security_context
-                    else None
-                )
                 self.event_bus.publish(
                     ProductCreated(
-                        product_id=product.id,
-                        name=product.name,
-                        product_type=product.productType,
-                        user_id=user_id,
+                        product_id=product.id, name=product.name, sku=product.sku,
+                        product_type=product.product_type, user_id=user_id
                     )
                 )
 
+            self.session.flush()
+            self.session.refresh(product, attribute_names=['inventory'])
+
+            logger.info(f"Service: Product {product.id} '{product.name}' created successfully.")
             return product
 
-    def update_product(self, product_id: int, data: Dict[str, Any]) -> Product:
+    def update_product(self, product_id: int, product_update: ProductUpdate, user_id: Optional[int] = None) -> Product:
         """
-        Update an existing product.
+        Updates product details (non-stock related fields).
 
         Args:
-            product_id: ID of the product to update
-            data: Updated product data
+            product_id: ID of the product to update.
+            product_update: Validated update data.
+            user_id: ID of the user performing the action.
 
         Returns:
-            Updated product entity
-
-        Raises:
-            EntityNotFoundException: If product not found
-            ValidationException: If validation fails
+            The updated Product ORM instance.
         """
-        with self.transaction():
-            # Check if product exists
-            product = self.get_by_id(product_id)
-            if not product:
-                from app.core.exceptions import EntityNotFoundException
+        logger.info(f"Service: Updating product ID: {product_id} by user ID {user_id or 'Unknown'}")
+        user_id = user_id or self._get_current_user_id()
 
+        with self.transaction():
+            # 1. Get existing product
+            product = self.repository.get_by_id(product_id, load_inventory=False) # Don't need inventory loaded for this
+            if not product:
                 raise EntityNotFoundException("Product", product_id)
 
-            # Check if pattern exists if pattern ID is provided
-            pattern_id = data.get("patternId")
-            if pattern_id and self.pattern_service:
-                pattern = self.pattern_service.get_by_id(pattern_id)
-                if not pattern:
-                    from app.core.exceptions import EntityNotFoundException
+            # 2. Prepare update data
+            update_data = product_update.model_dump(exclude_unset=True, exclude={'quantity', 'status', 'storage_location'})
 
-                    raise EntityNotFoundException("Pattern", pattern_id)
+            if not update_data:
+                 logger.info(f"Service: No valid fields provided to update for product {product_id}.")
+                 return product
 
-            # Update lastUpdated timestamp
-            data["lastUpdated"] = datetime.now()
+            # 3. Validate SKU uniqueness if changed
+            new_sku = update_data.get('sku')
+            if new_sku and new_sku != product.sku:
+                existing = self.repository.get_product_by_sku(new_sku)
+                if existing and existing.id != product_id:
+                    raise BusinessRuleException(f"SKU '{new_sku}' already exists.", "PRODUCT_SKU_CONFLICT")
 
-            # Track changed fields for event
-            changes = list(data.keys())
+            # 4. Update using repository (which guards stock fields)
+            updated_product = self.repository.update(product_id, update_data)
+            if not updated_product:
+                 raise HideSyncException(f"Update failed unexpectedly for product {product_id}")
 
-            # Convert materials to string if it's a list
-            if "materials" in data and isinstance(data["materials"], list):
-                data["materials"] = json.dumps(data["materials"])
+            # 5. Check if reorder_point changed - may need to update Inventory status via InventoryService
+            if 'reorder_point' in update_data and self.inventory_service:
+                try:
+                    # Ask inventory service to re-evaluate status based on new reorder point
+                    logger.info(f"Reorder point changed for {product_id}, triggering inventory status re-evaluation.")
+                    # This requires InventoryService to have a method like this:
+                    self.inventory_service.reevaluate_status(item_type="product", item_id=product_id)
+                except Exception as e:
+                    logger.error(f"Failed to trigger inventory status re-evaluation for product {product_id}: {e}", exc_info=True)
+                    # Decide if this should be a critical failure
 
-            # Convert customizations to string if it's a list
-            if "customizations" in data and isinstance(data["customizations"], list):
-                data["customizations"] = json.dumps(data["customizations"])
-
-            # Convert costBreakdown to string if it's a dict
-            if "costBreakdown" in data and isinstance(data["costBreakdown"], dict):
-                data["costBreakdown"] = json.dumps(data["costBreakdown"])
-
-            # Check if quantity is changing
-            previous_quantity = product.quantity if hasattr(product, "quantity") else 0
-            new_quantity = data.get("quantity")
-
-            # Update product
-            updated_product = self.repository.update(product_id, data)
-
-            # Update inventory if quantity changed and inventory service is available
-            if (
-                new_quantity is not None
-                and new_quantity != previous_quantity
-                and self.inventory_service
-            ):
-                if hasattr(self.inventory_service, "adjust_inventory"):
-                    self.inventory_service.adjust_inventory(
-                        item_type="product",
-                        item_id=product_id,
-                        quantity_change=new_quantity - previous_quantity,
-                        adjustment_type="INVENTORY_CORRECTION",
-                        reason="Product updated",
-                    )
-
-                # Publish inventory changed event
-                if self.event_bus:
-                    user_id = (
-                        self.security_context.current_user.id
-                        if self.security_context
-                        else None
-                    )
-                    self.event_bus.publish(
-                        ProductInventoryChanged(
-                            product_id=product_id,
-                            name=updated_product.name,
-                            previous_quantity=previous_quantity,
-                            new_quantity=new_quantity,
-                            reason="Product updated",
-                            user_id=user_id,
-                        )
-                    )
-
-            # Publish product updated event
+            # 6. Publish event
             if self.event_bus:
-                user_id = (
-                    self.security_context.current_user.id
-                    if self.security_context
-                    else None
-                )
                 self.event_bus.publish(
                     ProductUpdated(
-                        product_id=product_id,
-                        name=updated_product.name,
-                        changes=changes,
-                        user_id=user_id,
+                        product_id=updated_product.id, name=updated_product.name, sku=updated_product.sku,
+                        changes=list(update_data.keys()), user_id=user_id
                     )
                 )
 
-            # Invalidate cache if cache service exists
-            if self.cache_service:
-                self.cache_service.invalidate(f"Product:{product_id}")
-                self.cache_service.invalidate(f"Product:detail:{product_id}")
+            # 7. Invalidate Cache
+            self._invalidate_product_cache(product_id)
 
+            self.session.refresh(updated_product)
+            logger.info(f"Service: Product {product_id} updated successfully.")
             return updated_product
 
-    def delete_product(self, product_id: int) -> bool:
+    def delete_product(self, product_id: int, user_id: Optional[int] = None) -> bool:
         """
-        Delete a product.
+        Deletes a product and its associated inventory record.
 
         Args:
-            product_id: ID of the product to delete
+            product_id: ID of the product to delete.
+            user_id: ID of the user performing the action.
 
         Returns:
-            True if deletion was successful
-
-        Raises:
-            EntityNotFoundException: If product not found
-            BusinessRuleException: If product has active sales
+            True if deletion was successful.
         """
-        with self.transaction():
-            # Check if product exists
-            product = self.get_by_id(product_id)
-            if not product:
-                from app.core.exceptions import EntityNotFoundException
+        logger.info(f"Service: Deleting product ID: {product_id} by user ID {user_id or 'Unknown'}")
+        user_id = user_id or self._get_current_user_id()
 
+        with self.transaction():
+            # 1. Get product
+            product = self.repository.get_by_id(product_id, load_inventory=False)
+            if not product:
                 raise EntityNotFoundException("Product", product_id)
 
-            # Check if product has active sales
-            if self._has_active_sales(product_id):
-                from app.core.exceptions import BusinessRuleException
-
-                raise BusinessRuleException(
-                    "Cannot delete product with active sales", "PRODUCT_001"
-                )
-
-            # Store product name for event
             product_name = product.name
+            product_sku = product.sku
 
-            # Delete from inventory if inventory service is available
-            if self.inventory_service and hasattr(
-                self.inventory_service, "delete_inventory"
-            ):
-                self.inventory_service.delete_inventory(
-                    item_type="product", item_id=product_id
-                )
+            # 2. Check business rules (e.g., active sales)
+            if self._has_active_sales(product_id):
+                 raise BusinessRuleException("Cannot delete product with active sales", "PRODUCT_ACTIVE_SALES")
 
-            # Delete product
-            result = self.repository.delete(product_id)
+            # 3. Delete associated Inventory record via InventoryService
+            try:
+                deleted_inv = self.inventory_service.delete_inventory(item_type="product", item_id=product_id)
+                if not deleted_inv:
+                     logger.warning(f"Service: Inventory record for product {product_id} was not found or delete failed.")
+            except Exception as e:
+                logger.error(f"Service: Error deleting inventory for product {product_id}: {e}", exc_info=True)
+                raise HideSyncException(f"Failed to delete inventory for product {product_id}") from e
 
-            # Publish event if event bus exists
+            # 4. Delete the Product record
+            deleted_prod = self.repository.delete(product_id)
+            if not deleted_prod:
+                 raise HideSyncException(f"Product deletion failed unexpectedly for {product_id}")
+
+            # 5. Publish event
             if self.event_bus:
-                user_id = (
-                    self.security_context.current_user.id
-                    if self.security_context
-                    else None
-                )
                 self.event_bus.publish(
-                    ProductDeleted(
-                        product_id=product_id, name=product_name, user_id=user_id
-                    )
+                    ProductDeleted(product_id=product_id, name=product_name, sku=product_sku, user_id=user_id)
                 )
 
-            # Invalidate cache if cache service exists
-            if self.cache_service:
-                self.cache_service.invalidate(f"Product:{product_id}")
-                self.cache_service.invalidate(f"Product:detail:{product_id}")
+            # 6. Invalidate cache
+            self._invalidate_product_cache(product_id)
 
-            return result
+            logger.info(f"Service: Product {product_id} deleted successfully.")
+            return True
+
+    # --- Read Operations ---
+
+    def get_product_by_id(self, product_id: int, load_inventory: bool = True) -> Optional[Product]:
+        """Gets a product by ID, optionally loading inventory via relationship."""
+        logger.debug(f"Service: Getting product by ID: {product_id}, load inventory: {load_inventory}")
+        return self.repository.get_by_id(product_id, load_inventory=load_inventory)
+
+    def get_product_by_sku(self, sku: str) -> Optional[Product]:
+        """Gets a product by SKU."""
+        logger.debug(f"Service: Getting product by SKU: {sku}")
+        return self.repository.get_product_by_sku(sku)
+
+    def list_products_paginated(
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        filters: Optional[ProductFilter] = None
+    ) -> Dict[str, Any]:
+        """
+        Lists products with pagination and filtering using the repository.
+        Repository handles JOINs with Inventory for status/location filters.
+
+        Returns:
+            Dict containing 'items': List[Product] and 'total': int.
+        """
+        logger.info(f"Service: Listing products paginated: skip={skip}, limit={limit}, filters={filters.model_dump(exclude_none=True) if filters else 'None'}")
+        paginated_result = self.repository.list_products_paginated(
+            skip=skip, limit=limit, filters=filters
+        )
+        logger.info(f"Service: Repository returned {len(paginated_result['items'])} items, total: {paginated_result['total']}")
+        # Returns ORM objects, endpoint will serialize
+        return paginated_result
 
     def get_product_with_details(self, product_id: int) -> Dict[str, Any]:
         """
-        Get a product with comprehensive details.
-
-        Args:
-            product_id: ID of the product
-
-        Returns:
-            Product with detailed information
-
-        Raises:
-            EntityNotFoundException: If product not found
+        Gets detailed product view including related data (inventory, pattern, etc.).
+        Uses the Product model's to_dict method which accesses inventory.
         """
-        # Check cache first
+        logger.debug(f"Service: Getting detailed view for product ID: {product_id}")
+        cache_key = f"Product:detail:{product_id}"
         if self.cache_service:
-            cache_key = f"Product:detail:{product_id}"
             cached = self.cache_service.get(cache_key)
-            if cached:
-                return cached
+            if cached: return cached
 
-        # Get product
-        product = self.get_by_id(product_id)
+        product = self.repository.get_by_id(product_id, load_inventory=True)
         if not product:
-            from app.core.exceptions import EntityNotFoundException
-
             raise EntityNotFoundException("Product", product_id)
 
-        # Convert to dict
-        result = product.to_dict()
+        result = product.to_dict() # Uses inventory relationship for stock fields
 
-        # Parse JSON fields
-        if "materials" in result and result["materials"]:
-            try:
-                result["materials"] = json.loads(result["materials"])
-            except (json.JSONDecodeError, TypeError):
-                # If not valid JSON, convert to list if string with commas
-                if isinstance(result["materials"], str) and "," in result["materials"]:
-                    result["materials"] = [
-                        m.strip() for m in result["materials"].split(",")
-                    ]
-                # Otherwise keep as is
+        # Add other related details here if needed
+        # if product.pattern_id and self.pattern_service: ...
 
-        if "customizations" in result and result["customizations"]:
-            try:
-                result["customizations"] = json.loads(result["customizations"])
-            except (json.JSONDecodeError, TypeError):
-                # If not valid JSON, leave as is
-                pass
-
-        if "costBreakdown" in result and result["costBreakdown"]:
-            try:
-                result["costBreakdown"] = json.loads(result["costBreakdown"])
-            except (json.JSONDecodeError, TypeError):
-                # If not valid JSON, leave as is
-                pass
-
-        # Get pattern details if available
-        pattern_id = result.get("patternId")
-        if pattern_id and self.pattern_service:
-            try:
-                pattern = self.pattern_service.get_by_id(pattern_id)
-                if pattern:
-                    result["pattern"] = {
-                        "id": pattern.id,
-                        "name": pattern.name,
-                        "projectType": (
-                            pattern.projectType
-                            if hasattr(pattern, "projectType")
-                            else None
-                        ),
-                        "skillLevel": (
-                            pattern.skillLevel
-                            if hasattr(pattern, "skillLevel")
-                            else None
-                        ),
-                        "thumbnail": (
-                            pattern.thumbnail if hasattr(pattern, "thumbnail") else None
-                        ),
-                    }
-            except Exception as e:
-                logger.warning(f"Failed to get pattern for product: {str(e)}")
-
-        # Get inventory status if inventory service is available
-        if self.inventory_service and hasattr(
-            self.inventory_service, "get_inventory_status"
-        ):
-            try:
-                inventory = self.inventory_service.get_inventory_status(
-                    item_type="product", item_id=product_id
-                )
-                if inventory:
-                    result["inventory"] = inventory
-            except Exception as e:
-                logger.warning(f"Failed to get inventory for product: {str(e)}")
-
-        # Get sales data if sale service is available
-        if self.sale_service and hasattr(self.sale_service, "get_product_sales"):
-            try:
-                sales_data = self.sale_service.get_product_sales(product_id)
-                result["sales_data"] = sales_data
-            except Exception as e:
-                logger.warning(f"Failed to get sales data for product: {str(e)}")
-
-        # Store in cache if cache service exists
         if self.cache_service:
-            self.cache_service.set(cache_key, result, ttl=3600)  # 1 hour TTL
+            self.cache_service.set(cache_key, result, ttl=1800)
 
         return result
 
+    # --- Inventory Specific Method (Delegation) ---
+
     def adjust_inventory(
-        self,
-        product_id: int,
-        quantity_change: int,
-        reason: str,
-        reference_id: Optional[str] = None,
+            self,
+            product_id: int,
+            quantity_change: float,
+            reason: str,
+            # CHANGE THE DEFAULT VALUE HERE:
+            adjustment_type: InventoryAdjustmentType = InventoryAdjustmentType.PHYSICAL_COUNT,
+            # Or PHYSICAL_COUNT, etc.
+            reference_id: Optional[str] = None,
+            reference_type: Optional[str] = None,
+            notes: Optional[str] = None,
+            user_id: Optional[int] = None,
     ) -> Product:
         """
-        Adjust product inventory.
-
-        Args:
-            product_id: ID of the product
-            quantity_change: Quantity to add (positive) or subtract (negative)
-            reason: Reason for adjustment
-            reference_id: Optional reference ID (e.g., sale ID, project ID)
-
-        Returns:
-            Updated product entity
-
-        Raises:
-            EntityNotFoundException: If product not found
-            ValidationException: If resulting quantity would be negative
+        Adjusts inventory for a specific product via InventoryService and returns the updated Product.
         """
-        with self.transaction():
-            # Check if product exists
-            product = self.get_by_id(product_id)
-            if not product:
-                from app.core.exceptions import EntityNotFoundException
+        logger.info(f"Service: Delegating inventory adjustment for product ID {product_id}: change={quantity_change}, reason='{reason}'")
+        user_id = user_id or self._get_current_user_id()
 
-                raise EntityNotFoundException("Product", product_id)
+        # 1. Get product for event data and ensure it exists
+        product = self.repository.get_by_id(product_id, load_inventory=True)
+        if not product: raise EntityNotFoundException("Product", product_id)
+        if not product.inventory: raise HideSyncException(f"Inventory record missing for product {product_id}")
 
-            # Get current quantity
-            current_quantity = product.quantity if hasattr(product, "quantity") else 0
+        previous_quantity = product.inventory.quantity
 
-            # Calculate new quantity
-            new_quantity = current_quantity + quantity_change
+        # 2. Call InventoryService (handles validation, update, transaction, events)
+        try:
+            updated_inventory = self.inventory_service.adjust_inventory(
+                item_type="product", item_id=product_id, quantity_change=quantity_change,
+                adjustment_type=adjustment_type, reason=reason,
+                reference_id=reference_id, reference_type=reference_type, notes=notes, user_id=user_id,
+                to_location=product.inventory.storage_location # Keep current location unless specified
+            )
+            new_quantity = updated_inventory.quantity
+            logger.info(f"Service: InventoryService successful adjustment for product ID {product_id}. New quantity: {new_quantity}")
 
-            # Validate new quantity
-            if new_quantity < 0:
-                raise ValidationException(
-                    f"Cannot adjust inventory to negative quantity: {new_quantity}",
-                    {"quantity": ["Cannot be negative"]},
+        except Exception as e: # Catch specific exceptions if needed (Insufficient, etc.)
+            logger.error(f"Service: Inventory adjustment failed for product {product_id}: {e}", exc_info=True)
+            raise # Re-raise the exception
+
+        # 3. Publish Product-specific inventory change event
+        if self.event_bus:
+            self.event_bus.publish(
+                ProductInventoryChanged(
+                    product_id=product_id, name=product.name, sku=product.sku,
+                    previous_quantity=previous_quantity, new_quantity=new_quantity,
+                    reason=reason, user_id=user_id
                 )
-
-            # Determine new status
-            new_status = None
-            if new_quantity == 0:
-                new_status = InventoryStatus.OUT_OF_STOCK.value
-            elif (
-                new_quantity <= product.reorderPoint
-                if hasattr(product, "reorderPoint")
-                else 0
-            ):
-                new_status = InventoryStatus.LOW_STOCK.value
-            else:
-                new_status = InventoryStatus.IN_STOCK.value
-
-            # Update product
-            updated_product = self.update_product(
-                product_id,
-                {
-                    "quantity": new_quantity,
-                    "status": new_status,
-                    "lastUpdated": datetime.now(),
-                },
             )
 
-            # Update inventory if inventory service is available
-            if self.inventory_service and hasattr(
-                self.inventory_service, "adjust_inventory"
-            ):
-                adjustment_type = "SALE" if quantity_change < 0 else "RESTOCK"
+        # 4. Invalidate Product cache (status might change via inventory relationship)
+        self._invalidate_product_cache(product_id)
 
-                self.inventory_service.adjust_inventory(
-                    item_type="product",
-                    item_id=product_id,
-                    quantity_change=quantity_change,
-                    adjustment_type=adjustment_type,
-                    reason=reason,
-                    reference_id=reference_id,
-                )
+        # 5. Return the refreshed product instance
+        # The inventory relationship on 'product' should be updated by the ORM if using the same session.
+        # Fetching again guarantees latest state if sessions are complex.
+        refreshed_product = self.repository.get_by_id(product_id, load_inventory=True)
+        return refreshed_product if refreshed_product else product
 
-            # Publish event if event bus exists
-            if self.event_bus:
-                user_id = (
-                    self.security_context.current_user.id
-                    if self.security_context
-                    else None
-                )
-                self.event_bus.publish(
-                    ProductInventoryChanged(
-                        product_id=product_id,
-                        name=product.name,
-                        previous_quantity=current_quantity,
-                        new_quantity=new_quantity,
-                        reason=reason,
-                        user_id=user_id,
-                    )
-                )
 
-            return updated_product
-
-    def get_products_by_type(
-        self, product_type: Union[ProjectType, str]
-    ) -> List[Product]:
+    def get_low_stock_products(self) -> List[Dict[str, Any]]:
         """
-        Get products by type.
-
-        Args:
-            product_type: Type of product
-
-        Returns:
-            List of products of the specified type
+        Gets products low in stock using the repository (which handles JOINs)
+        and formats the output.
         """
-        # Convert string to enum if needed
-        if isinstance(product_type, str):
-            try:
-                product_type = ProjectType[product_type.upper()]
-                product_type = product_type.value
-            except (KeyError, AttributeError):
-                pass
+        logger.info("Service: Fetching low stock products.")
+        low_stock_products: List[Product] = self.repository.get_products_low_in_stock(limit=1000) # Use corrected repo method
 
-        return self.repository.list(productType=product_type)
+        results = []
+        for product in low_stock_products:
+            if not product.inventory: continue
 
-    def get_low_stock_products(
-        self, threshold_percentage: float = 100.0
-    ) -> List[Dict[str, Any]]:
-        """
-        Get products that are below their reorder point.
+            # Format using product's to_dict and add extra calculated fields
+            product_dict = product.to_dict() # Includes inventory data now
+            reorder_point = product.reorder_point or 0
+            quantity = product_dict.get('quantity', 0)
 
-        Args:
-            threshold_percentage: Percentage of reorder point to use as threshold
-                                 (100% means at or below reorder point,
-                                  50% means at or below half of reorder point)
+            product_dict["percent_of_reorder"] = round((quantity / reorder_point * 100) if reorder_point > 0 else 0, 1)
+            product_dict["units_below_reorder"] = max(0, reorder_point - quantity)
+            results.append(product_dict)
 
-        Returns:
-            List of products with low stock
-        """
-        # Get all products
-        products = self.repository.list()
+        logger.info(f"Service: Found {len(results)} low stock products.")
+        return sorted(results, key=lambda x: x["percent_of_reorder"])
 
-        # Filter for low stock
-        low_stock = []
-
-        for product in products:
-            reorder_point = (
-                product.reorderPoint if hasattr(product, "reorderPoint") else 0
-            )
-            quantity = product.quantity if hasattr(product, "quantity") else 0
-
-            # Skip products with no reorder point
-            if reorder_point == 0:
-                continue
-
-            # Calculate threshold
-            threshold = reorder_point * (threshold_percentage / 100.0)
-
-            # Check if below threshold
-            if quantity <= threshold:
-                # Prepare result object
-                product_dict = product.to_dict()
-
-                # Add calculated fields
-                product_dict["threshold"] = threshold
-                product_dict["percent_of_reorder"] = (
-                    (quantity / reorder_point * 100) if reorder_point > 0 else 0
-                )
-                product_dict["units_below_reorder"] = max(0, reorder_point - quantity)
-
-                low_stock.append(product_dict)
-
-        # Sort by percent of reorder (ascending)
-        return sorted(low_stock, key=lambda x: x["percent_of_reorder"])
-
-    def search_products(
-        self,
-        query: str,
-        product_type: Optional[str] = None,
-        in_stock_only: bool = False,
-        min_price: Optional[float] = None,
-        max_price: Optional[float] = None,
-        limit: int = 100,
-        offset: int = 0,
-    ) -> Dict[str, Any]:
-        """
-        Search for products based on various criteria.
-
-        Args:
-            query: Search query for product name and description
-            product_type: Optional product type filter
-            in_stock_only: Whether to include only in-stock products
-            min_price: Optional minimum price filter
-            max_price: Optional maximum price filter
-            limit: Maximum number of results
-            offset: Result offset for pagination
-
-        Returns:
-            Dictionary with search results and total count
-        """
-        filters = {}
-
-        # Add product type filter if specified
-        if product_type:
-            filters["productType"] = product_type
-
-        # Add in-stock filter if specified
-        if in_stock_only:
-            filters["status"] = InventoryStatus.IN_STOCK.value
-
-        # Repository would implement search functionality with price filtering
-        # This is a simplified example
-        if hasattr(self.repository, "search"):
-            results, total = self.repository.search(
-                query=query,
-                min_price=min_price,
-                max_price=max_price,
-                limit=limit,
-                offset=offset,
-                **filters,
-            )
+    # --- Methods needed for InventoryService Summary ---
+    def count_all_products(self) -> int:
+        """Counts all product records."""
+        logger.debug("Service: Counting all products.")
+        # Assuming BaseRepository has a count method or implement specific one
+        if hasattr(self.repository, 'count'):
+             return self.repository.count()
         else:
-            # Fallback to basic filter
-            all_products = self.repository.list(**filters)
+             # Fallback if base repo doesn't have count
+             return len(self.repository.list(limit=100000)) # Less efficient
 
-            # Filter by query
-            if query:
-                query = query.lower()
-                filtered_products = [
-                    p
-                    for p in all_products
-                    if (query in p.name.lower() if hasattr(p, "name") else False)
-                    or (
-                        query in p.description.lower()
-                        if hasattr(p, "description")
-                        else False
-                    )
-                    or (query in p.sku.lower() if hasattr(p, "sku") else False)
-                ]
-            else:
-                filtered_products = all_products
-
-            # Filter by price
-            if min_price is not None:
-                filtered_products = [
-                    p
-                    for p in filtered_products
-                    if (
-                        p.sellingPrice >= min_price
-                        if hasattr(p, "sellingPrice")
-                        else True
-                    )
-                ]
-
-            if max_price is not None:
-                filtered_products = [
-                    p
-                    for p in filtered_products
-                    if (
-                        p.sellingPrice <= max_price
-                        if hasattr(p, "sellingPrice")
-                        else True
-                    )
-                ]
-
-            # Apply pagination
-            total = len(filtered_products)
-            results = filtered_products[offset : offset + limit]
-
-        return {
-            "items": [p.to_dict() for p in results],
-            "total": total,
-            "limit": limit,
-            "offset": offset,
-        }
-
-    def get_products_by_pattern(self, pattern_id: int) -> List[Product]:
+    def get_all_product_margins(self) -> List[Optional[float]]:
         """
-        Get products based on a specific pattern.
-
-        Args:
-            pattern_id: ID of the pattern
-
-        Returns:
-            List of products using the pattern
+        Retrieves the profit margin for all products.
+        Optimized to fetch only necessary fields if possible.
         """
-        return self.repository.list(patternId=pattern_id)
+        logger.debug("Service: Getting margins for all products.")
+        # This could be optimized in the repository to only select id, selling_price, total_cost
+        all_products = self.repository.list(limit=100000) # Fetch all (potentially optimize)
+        margins = [p.profit_margin for p in all_products] # Uses hybrid property
+        return margins
+
+    # --- Helper Methods ---
+    def _invalidate_product_cache(self, product_id: int):
+        """Invalidates cache entries for a specific product."""
+        if self.cache_service:
+            logger.debug(f"Invalidating cache for product ID: {product_id}")
+            self.cache_service.invalidate(f"Product:{product_id}")
+            self.cache_service.invalidate(f"Product:detail:{product_id}")
+            self.cache_service.invalidate_by_pattern("Product:list:")
+
+    def _has_active_sales(self, product_id: int) -> bool:
+        """Placeholder: Check if product is in active sales orders."""
+        # if self.sale_service and hasattr(self.sale_service, "has_active_sales_for_product"):
+        #     return self.sale_service.has_active_sales_for_product(product_id)
+        logger.warning(f"Placeholder check for active sales for product {product_id}. Returning False.")
+        return False
+
+    def _generate_sku(self, name: str, product_type: Optional[Union[ProjectType, str]] = None) -> str:
+        """Generates a reasonably unique SKU."""
+        name_part = "".join(c for c in name if c.isalnum()).upper()[:4]
+        type_prefix = "PROD"
+        if product_type:
+            type_str = product_type.name if isinstance(product_type, ProjectType) else str(product_type)
+            type_mapping = {"WALLET": "WAL", "BAG": "BAG", "BELT": "BLT", "ACCESSORY": "ACC", "CASE": "CSE", "CUSTOM": "CST", "OTHER": "OTH"}
+            type_prefix = type_mapping.get(type_str.upper(), type_str[:3].upper())
+        unique_part = uuid.uuid4().hex[:6].upper()
+        sku = f"{type_prefix}-{name_part}-{unique_part}"
+        return sku
 
     def calculate_cost_breakdown(self, product_id: int) -> Dict[str, Any]:
         """
-        Calculate detailed cost breakdown for a product.
+        Calculates (or recalculates) the detailed cost breakdown for a product
+        based on its associated pattern's material requirements and potentially
+        configured labor/overhead costs. Updates the product record.
 
         Args:
-            product_id: ID of the product
+            product_id: The ID of the product.
 
         Returns:
-            Dictionary with cost breakdown details
+            A dictionary representing the cost breakdown:
+            {
+                "material_costs": float,
+                "labor_costs": float,
+                "overhead_costs": float,
+                "total_calculated_cost": float, # Renamed for clarity
+                "materials_detail": [ # Added more detail
+                    { "material_id": int, "name": str, "type": str, "quantity": float, "unit": str, "cost_per_unit": float, "total_cost": float }, ...
+                ]
+            }
 
         Raises:
-            EntityNotFoundException: If product not found
+            EntityNotFoundException: If the product or required pattern/materials are not found.
+            HideSyncException: If required services (PatternService, MaterialService) are not injected.
         """
-        # Check if product exists
-        product = self.get_by_id(product_id)
-        if not product:
-            from app.core.exceptions import EntityNotFoundException
+        logger.info(f"Service: Calculating cost breakdown for product ID: {product_id}")
 
+        # 1. Get Product
+        product = self.repository.get_by_id(product_id, load_inventory=False)
+        if not product:
             raise EntityNotFoundException("Product", product_id)
 
-        # Initialize cost breakdown
+        # 2. Initialize Breakdown Structure
         breakdown = {
             "material_costs": 0.0,
-            "labor_costs": 0.0,
-            "overhead_costs": 0.0,
-            "total_cost": 0.0,
-            "selling_price": (
-                product.sellingPrice if hasattr(product, "sellingPrice") else 0.0
-            ),
-            "profit_margin": 0.0,
-            "materials": [],
+            "labor_costs": getattr(product, 'labor_cost', 0.0), # Get from product or default
+            "overhead_costs": getattr(product, 'overhead_cost', 0.0), # Get from product or default
+            "total_calculated_cost": 0.0, # Will sum at the end
+            "materials_detail": [],
+            "calculation_timestamp": datetime.now().isoformat(),
+            "errors": [] # To log any issues during calculation
         }
 
-        # Get pattern
-        pattern_id = product.patternId if hasattr(product, "patternId") else None
-
-        # If we have pattern and component services, calculate material costs
-        if (
-            pattern_id
-            and self.pattern_service
-            and hasattr(self.component_service, "calculate_material_requirements")
-        ):
+        # 3. Calculate Material Costs (Requires Pattern & Material Services)
+        pattern_id = product.pattern_id
+        if not pattern_id:
+             logger.warning(f"Product {product_id} has no associated pattern_id. Cannot calculate material costs.")
+             breakdown["errors"].append("No pattern associated with product.")
+        elif not hasattr(self, 'pattern_service') or not self.pattern_service:
+            logger.error("PatternService not available. Cannot calculate material costs.")
+            breakdown["errors"].append("PatternService dependency missing.")
+            # Optionally raise HideSyncException here if this is critical
+        elif not hasattr(self, 'material_service') or not self.material_service:
+             logger.error("MaterialService not available. Cannot calculate material costs.")
+             breakdown["errors"].append("MaterialService dependency missing.")
+             # Optionally raise HideSyncException here
+        else:
             try:
-                # Get material requirements
-                materials = self.component_service.calculate_material_requirements(
-                    pattern_id
-                )
+                # Assume pattern service returns dict like: { "material_id": {"quantity_required": X, "unit": "Y", ...} }
+                # This method might need adjustments based on actual PatternService implementation
+                if not hasattr(self.pattern_service, 'get_material_requirements_for_pattern'):
+                     raise NotImplementedError("PatternService needs 'get_material_requirements_for_pattern'")
 
-                # Calculate cost for each material
-                for material_id, material_data in materials.items():
-                    # Get material cost
-                    material_cost = 0.0
-                    if self.material_service:
-                        material = self.material_service.get_by_id(material_id)
-                        if material and hasattr(material, "cost"):
-                            material_cost = material.cost
+                material_reqs = self.pattern_service.get_material_requirements_for_pattern(pattern_id)
+                logger.debug(f"Material requirements for pattern {pattern_id}: {material_reqs}")
 
-                    # Calculate total cost for this material
-                    quantity = material_data.get("quantity_required", 0)
-                    total_material_cost = material_cost * quantity
+                if not material_reqs:
+                     logger.warning(f"No material requirements found for pattern {pattern_id}.")
+                     breakdown["errors"].append(f"No materials defined for pattern {pattern_id}.")
 
-                    # Add to total
-                    breakdown["material_costs"] += total_material_cost
+                for mat_id_str, req_data in material_reqs.items():
+                    try:
+                        mat_id = int(mat_id_str) # Ensure ID is integer
+                        quantity_needed = float(req_data.get('quantity_required', 0.0))
+                        unit_needed = req_data.get('unit', 'unknown_unit')
 
-                    # Add to materials list
-                    breakdown["materials"].append(
-                        {
-                            "id": material_id,
-                            "name": material_data.get(
-                                "name", f"Material {material_id}"
-                            ),
-                            "quantity": quantity,
-                            "unit": material_data.get("unit", "UNIT"),
-                            "cost_per_unit": material_cost,
-                            "total_cost": total_material_cost,
-                        }
-                    )
+                        if quantity_needed <= 0:
+                            continue
+
+                        # Fetch material details for cost
+                        material = self.material_service.get_by_id(mat_id)
+                        if not material:
+                            error_msg = f"Material ID {mat_id} required by pattern {pattern_id} not found."
+                            logger.warning(error_msg)
+                            breakdown["errors"].append(error_msg)
+                            continue # Skip this material
+
+                        mat_cost_per_unit = getattr(material, 'cost', 0.0)
+                        mat_name = getattr(material, 'name', f"Material {mat_id}")
+                        mat_type = getattr(material, 'material_type', 'UNKNOWN').name if hasattr(getattr(material, 'material_type', None), 'name') else getattr(material, 'material_type', 'UNKNOWN')
+                        mat_unit = getattr(material, 'unit', 'unknown_unit').name if hasattr(getattr(material, 'unit', None), 'name') else getattr(material, 'unit', 'unknown_unit')
+
+
+                        # Basic Unit Conversion (Example - NEEDS ROBUST IMPLEMENTATION)
+                        # If required unit and material cost unit differ, attempt conversion
+                        cost_multiplier = 1.0
+                        if unit_needed.lower() != mat_unit.lower():
+                             # Add specific conversion logic here based on your units (e.g., sqft to hide piece)
+                             # This is complex and application specific!
+                             logger.warning(f"Unit mismatch for material {mat_id}: Required '{unit_needed}', Material cost unit '{mat_unit}'. Cost calculation might be inaccurate without conversion logic.")
+                             breakdown["errors"].append(f"Unit mismatch for material {mat_id} ('{mat_name}'). Check pattern requirements vs material definition.")
+                             # Example placeholder: Assume cost is per primary unit listed on material
+                             # cost_multiplier = get_conversion_factor(mat_unit, unit_needed)
+
+                        material_total_cost = quantity_needed * mat_cost_per_unit * cost_multiplier
+                        breakdown["material_costs"] += material_total_cost
+
+                        breakdown["materials_detail"].append({
+                            "material_id": mat_id,
+                            "name": mat_name,
+                            "type": mat_type,
+                            "quantity_required": round(quantity_needed, 4),
+                            "unit_required": unit_needed,
+                            "cost_per_unit": round(mat_cost_per_unit, 4), # Cost per material's base unit
+                            "material_base_unit": mat_unit,
+                            "total_cost": round(material_total_cost, 2)
+                        })
+
+                    except ValueError:
+                        logger.warning(f"Invalid material ID format '{mat_id_str}' in requirements for pattern {pattern_id}.")
+                        breakdown["errors"].append(f"Invalid material ID format: {mat_id_str}")
+                    except Exception as mat_err:
+                         logger.error(f"Error processing material {mat_id_str} for product {product_id}: {mat_err}", exc_info=True)
+                         breakdown["errors"].append(f"Error processing material {mat_id_str}: {str(mat_err)[:100]}") # Limit error message length
+
+            except EntityNotFoundException as e:
+                logger.warning(f"Pattern {pattern_id} not found for product {product_id} cost calculation: {e}")
+                breakdown["errors"].append(f"Pattern {pattern_id} not found.")
+            except NotImplementedError as e:
+                 logger.error(f"Missing required service method for cost calculation: {e}")
+                 breakdown["errors"].append(f"Service method missing: {e}")
             except Exception as e:
-                logger.warning(f"Failed to calculate material costs: {str(e)}")
+                 logger.error(f"Error calculating material costs for product {product_id}: {e}", exc_info=True)
+                 breakdown["errors"].append(f"Unexpected error during material cost calculation.")
 
-        # In a real implementation, labor and overhead would be calculated based on
-        # time estimates, labor rates, and overhead allocation
-        # For now, we'll use placeholder values
-        breakdown["labor_costs"] = (
-            product.laborCost if hasattr(product, "laborCost") else 0.0
-        )
-        breakdown["overhead_costs"] = (
-            product.overheadCost if hasattr(product, "overheadCost") else 0.0
+        # 4. Sum Total Calculated Cost
+        breakdown["total_calculated_cost"] = round(
+            breakdown["material_costs"] + breakdown["labor_costs"] + breakdown["overhead_costs"],
+            2
         )
 
-        # Calculate total cost
-        breakdown["total_cost"] = (
-            breakdown["material_costs"]
-            + breakdown["labor_costs"]
-            + breakdown["overhead_costs"]
-        )
+        # 5. Update Product Record (only update costs, not details list)
+        # Use model_dump to serialize the breakdown dict correctly if needed by repo update
+        try:
+             cost_update_data = {
+                  "cost_breakdown": json.dumps(breakdown), # Store full breakdown as JSON
+                  "total_cost": breakdown["total_calculated_cost"]
+             }
+             self.repository.update(product_id, cost_update_data) # Use simple update
+             logger.info(f"Updated cost breakdown and total cost for product ID {product_id}. New total cost: {breakdown['total_calculated_cost']}")
+             # Invalidate cache after successful update
+             self._invalidate_product_cache(product_id)
+        except Exception as e:
+             logger.error(f"Failed to update product {product_id} with calculated costs: {e}", exc_info=True)
+             breakdown["errors"].append("Failed to save calculated costs to product record.")
+             # Decide if this should raise an exception or just be logged in the result
 
-        # Calculate profit margin
-        if breakdown["total_cost"] > 0 and breakdown["selling_price"] > 0:
-            profit = breakdown["selling_price"] - breakdown["total_cost"]
-            breakdown["profit_margin"] = (profit / breakdown["selling_price"]) * 100
-
-        # Update product with cost breakdown
-        self.update_product(
-            product_id,
-            {"costBreakdown": breakdown, "totalCost": breakdown["total_cost"]},
-        )
-
-        return breakdown
-
-    def _generate_sku(self, name: str, product_type: Optional[str] = None) -> str:
-        """
-        Generate a SKU for a product.
-
-        Args:
-            name: Product name
-            product_type: Optional product type
-
-        Returns:
-            Generated SKU
-        """
-        # Clean name
-        name_part = "".join(c for c in name.upper() if c.isalnum())[:4]
-
-        # Get type prefix
-        type_prefix = "PROD"
-        if product_type:
-            # Convert common product types to prefixes
-            type_mapping = {
-                "WALLET": "WAL",
-                "BAG": "BAG",
-                "BELT": "BLT",
-                "ACCESSORY": "ACC",
-            }
-            type_prefix = type_mapping.get(
-                product_type.upper(), product_type[:3].upper()
-            )
-
-        # Generate unique part
-        unique_part = str(uuid.uuid4())[-8:].upper()
-
-        return f"{type_prefix}-{name_part}-{unique_part}"
-
-    def _has_active_sales(self, product_id: int) -> bool:
-        """
-        Check if a product has active sales.
-
-        Args:
-            product_id: ID of the product
-
-        Returns:
-            True if product has active sales
-        """
-        # In a real implementation, this would check the sale repository
-        # for active orders containing this product
-        # For now, return False as a placeholder
-        if self.sale_service and hasattr(
-            self.sale_service, "has_active_sales_for_product"
-        ):
-            return self.sale_service.has_active_sales_for_product(product_id)
-
-        return False
+        return breakdown # Return the detailed breakdown dictionary

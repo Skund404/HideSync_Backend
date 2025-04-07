@@ -11,7 +11,7 @@ from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Path, status, Body
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_active_user
+from app.api.deps import get_current_active_user, get_inventory_service
 from app.db.session import get_db
 from app.schemas.inventory import (
     Inventory,
@@ -30,7 +30,9 @@ from app.core.exceptions import (
 from app.core.exceptions import (
     InsufficientInventoryException as InsufficientQuantityException,
 )
-
+from app.schemas.inventory import InventorySummaryResponse
+import logging
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -83,6 +85,33 @@ def list_inventory(
             detail="An unexpected error occurred while retrieving inventory items."
         )
 
+@router.get(
+    "/summary",
+    response_model=InventorySummaryResponse,
+    summary="Get Inventory Summary",
+    description="Retrieves overall inventory statistics.",
+    # dependencies=[Depends(PermissionsChecker(["inventory:read", "product:read"]))], # Optional permissions
+)
+def get_inventory_summary(
+    *,
+    inventory_service: InventoryService = Depends(get_inventory_service), # Use dependency getter
+    current_user: Any = Depends(get_current_active_user),
+) -> InventorySummaryResponse:
+    """
+    Endpoint to retrieve inventory summary statistics.
+    """
+    try:
+        summary_data = inventory_service.get_summary_data()
+        return summary_data
+    except NotImplementedError as e:
+         logger.error(f"Summary endpoint failed: {e}", exc_info=True)
+         raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail=str(e))
+    except Exception as e:
+        logger.error(f"Unexpected error getting inventory summary: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while calculating the inventory summary.",
+        )
 
 @router.get("/transactions", response_model=List[InventoryTransaction])
 def list_inventory_transactions(
