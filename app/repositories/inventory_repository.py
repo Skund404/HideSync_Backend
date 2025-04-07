@@ -29,6 +29,52 @@ class InventoryRepository(BaseRepository[Inventory]):
         super().__init__(session, encryption_service)
         self.model = Inventory
 
+    def list_with_filters(
+            self,
+            *,
+            skip: int = 0,
+            limit: int = 100,
+            status: Optional[str] = None,
+            location: Optional[str] = None,
+            item_type: Optional[str] = None,
+            search_term: Optional[str] = None,
+    ) -> List[Inventory]:
+        """
+        Retrieves a list of inventory items with optional filtering and pagination.
+        """
+        query = self.session.query(self.model)
+
+        if status:
+            # Assuming status is passed as the string value of the enum
+            query = query.filter(self.model.status == status)
+        if location:
+            # Use ilike for case-insensitive partial match for location
+            query = query.filter(self.model.storageLocation.ilike(f'%{location}%'))
+        if item_type:
+            query = query.filter(self.model.itemType == item_type.lower())
+
+        if search_term:
+            # Basic search example: search within storageLocation or item_id (if text)
+            # A more robust search on item name would require JOINs (see previous explanation)
+            search_filter = or_(
+                self.model.storageLocation.ilike(f'%{search_term}%'),
+                # Add other searchable fields within Inventory model if applicable
+                # self.model.itemId.ilike(f'%{search_term}%') # If item_id is text searchable
+            )
+            query = query.filter(search_filter)
+            # NOTE: Searching item name requires joining with Material/Product/Tool tables,
+            # which adds complexity not shown in this basic example.
+
+        entities = query.order_by(self.model.id).offset(skip).limit(
+            limit).all()  # Added order_by for consistent pagination
+
+        # Apply decryption if necessary (assuming _decrypt_sensitive_fields exists)
+        if hasattr(self, '_decrypt_sensitive_fields'):
+            return [self._decrypt_sensitive_fields(entity) for entity in entities]
+        else:
+            # Handle case where decryption isn't needed or method doesn't exist
+            return entities
+
     def get_inventory_by_item_id(
         self, item_type: str, item_id: int
     ) -> Optional[Inventory]:

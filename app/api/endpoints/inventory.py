@@ -43,7 +43,8 @@ def list_inventory(
     limit: int = Query(
         100, ge=1, le=1000, description="Maximum number of records to return"
     ),
-    status: Optional[str] = Query(None, description="Filter by inventory status"),
+    # RENAMED PARAMETER with ALIAS
+    inventory_status: Optional[str] = Query(None, alias="status", description="Filter by inventory status"),
     location: Optional[str] = Query(None, description="Filter by storage location"),
     item_type: Optional[str] = Query(
         None, description="Filter by item type (material/product/tool)"
@@ -52,28 +53,35 @@ def list_inventory(
 ) -> List[Inventory]:
     """
     Retrieve inventory items with optional filtering and pagination.
-
-    Args:
-        db: Database session
-        current_user: Currently authenticated user
-        skip: Number of records to skip for pagination
-        limit: Maximum number of records to return
-        status: Optional filter by inventory status
-        location: Optional filter by storage location
-        item_type: Optional filter by item type
-        search: Optional search term for item name
-
-    Returns:
-        List of inventory records
     """
     search_params = InventorySearchParams(
-        status=status, location=location, item_type=item_type, search=search
+        status=inventory_status, # Use renamed parameter
+        location=location,
+        item_type=item_type,
+        search=search
     )
 
     inventory_service = InventoryService(db)
-    return inventory_service.get_inventory_items(
-        skip=skip, limit=limit, search_params=search_params
-    )
+
+    try:
+        # Ensure the service method calls the NEW repository method (e.g., list_with_filters)
+        items = inventory_service.list_inventory_items(
+            skip=skip, limit=limit, search_params=search_params
+        )
+        return items
+    except AttributeError as e:
+         # This exception should ideally not be hit if the repo method exists
+         # But if it does, the status code lookup should now work
+         raise HTTPException(
+             status_code=status.HTTP_501_NOT_IMPLEMENTED, # status now correctly refers to the imported module
+             detail=f"Inventory listing functionality is not fully implemented: {e}"
+         )
+    except Exception as e:
+        # logger.error(f"Error listing inventory: {e}", exc_info=True) # Optional logging
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred while retrieving inventory items."
+        )
 
 
 @router.get("/transactions", response_model=List[InventoryTransaction])

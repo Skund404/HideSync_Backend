@@ -234,91 +234,253 @@ class StorageLocationService(BaseService[StorageLocation]):
 
     # Improve get_storage_location in app/services/storage_location_service.py
 
-    def get_storage_location(self, location_id: str):
-        """
-        Get a single storage location by ID with improved error handling.
+    # File: app/services/storage_location_service.py
 
-        Args:
-            location_id: ID of the storage location to retrieve
+    # Make sure these imports are present at the top of the file
+    from typing import Dict, Any, List, Optional
+    from sqlalchemy.orm import Session
+    from sqlalchemy import func
+    import logging
+    from app.db.models.enums import StorageLocationType
+    from app.db.models.storage import StorageLocation, StorageAssignment  # Import StorageAssignment
 
-        Returns:
-            Storage location with properly formatted fields, or None if not found
+    logger = logging.getLogger(__name__)
 
-        Raises:
-            StorageLocationNotFoundException: If the location doesn't exist
-        """
-        logger.info(f"Getting storage location with ID: {location_id}")
+    class StorageLocationService:  # Assuming this class structure exists
+        # ... potentially other methods like __init__, _format_location_for_api etc. ...
 
-        try:
-            # Check cache first
-            if self.cache_service:
-                cache_key = f"StorageLocation:{location_id}"
-                cached = self.cache_service.get(cache_key)
-                if cached:
-                    return cached
+        # Ensure self.repository (StorageLocationRepository) and
+        # self.assignment_repository (StorageAssignmentRepository) are initialized
+        # in the __init__ method of StorageLocationService.
 
-            # Get location from repository - try different formats
-            location = None
+        def get_storage_occupancy_report(self, section: Optional[str] = None, location_type: Optional[str] = None) -> \
+        Dict[str, Any]:
+            """
+            Generate a storage occupancy report with accurate utilization calculations
+            and item counts by type.
 
-            # Try the ID as provided
-            location = self.repository.get_by_id(location_id)
+            Args:
+                section: Optional filter by section
+                location_type: Optional filter by location type
 
-            # If not found and it's a numeric string, try as integer
-            if not location and location_id.isdigit():
+            Returns:
+                Storage occupancy report dictionary matching the StorageOccupancyReport schema.
+            """
+            logger.info(f"Generating storage occupancy report. Filters: section={section}, type={location_type}")
+
+            # Initialize results dictionary matching the StorageOccupancyReport Pydantic schema
+            result = {
+                "total_locations": 0,
+                "total_capacity": 0.0,
+                "total_utilized": 0.0,  # This will be based on location.utilized field initially
+                "total_items": 0,  # Will be calculated from assignments
+                "utilization_percentage": 0.0,
+                "overall_usage_percentage": 0.0,  # Often same as utilization_percentage
+                "items_by_type": {},  # Calculated from assignments
+                "by_type": {},
+                "by_section": {},
+                "locations_by_type": {},
+                "locations_by_section": {},
+                "locations_at_capacity": 0,  # e.g., >= 95% utilized
+                "locations_nearly_empty": 0,  # e.g., <= 10% utilized
+                "most_utilized_locations": [],
+                "least_utilized_locations": [],
+                "recommendations": []
+            }
+
+            try:
+                # --- 1. Get Locations and Calculate Location-Based Stats ---
+                logger.debug("Fetching storage locations...")
+                filters = {}
+                if section: filters["section"] = section
+                if location_type:
+                    try:
+                        # Convert string type to enum if repository expects it
+                        filters["type"] = StorageLocationType[location_type.upper()]
+                    except KeyError:
+                        logger.warning(f"Invalid location type filter provided: {location_type}. Ignoring filter.")
+                        # Optionally raise an error or just ignore the filter
+
+                locations = self.repository.list(**filters)  # Assuming repository handles filtering
+                result["total_locations"] = len(locations)
+                logger.debug(f"Found {result['total_locations']} locations matching filters.")
+
+                if not locations:
+                    logger.warning("No storage locations found matching criteria. Returning empty report.")
+                    return result  # Return default empty report if no locations found
+
+                total_capacity = 0.0
+                total_utilized_loc_field = 0.0
+                by_type = {}
+                by_section = {}
+                locations_by_type = {}
+                locations_by_section = {}
+                location_utilization_details = {}  # Stores details for most/least lists
+                locations_at_capacity = 0
+                locations_nearly_empty = 0
+
+                # Process each location
+                for loc in locations:
+                    loc_id = str(getattr(loc, 'id', 'unknown'))
+                    capacity = float(getattr(loc, 'capacity', 0) or 0)
+                    utilized = float(getattr(loc, 'utilized', 0) or 0)  # Utilized from the location record
+
+                    total_capacity += capacity
+                    total_utilized_loc_field += utilized
+
+                    utilization_pct = (utilized / capacity * 100) if capacity > 0 else 0.0
+
+                    # Store details for sorting later
+                    location_utilization_details[loc_id] = {
+                        "id": loc_id,
+                        "name": getattr(loc, 'name', 'Unknown'),
+                        "capacity": int(capacity),
+                        "utilized": int(utilized),
+                        "utilization_percentage": round(utilization_pct, 1)
+                    }
+
+                    # Group counts/stats by Type
+                    loc_type_enum = getattr(loc, 'type', None)
+                    loc_type_str = str(loc_type_enum.name) if loc_type_enum else "OTHER"  # Default to OTHER
+                    locations_by_type[loc_type_str] = locations_by_type.get(loc_type_str, 0) + 1
+                    type_stats = by_type.setdefault(loc_type_str, {"capacity": 0.0, "utilized": 0.0, "locations": 0,
+                                                                   "utilization_percentage": 0.0})
+                    type_stats["capacity"] += capacity
+                    type_stats["utilized"] += utilized  # Aggregate location.utilized
+                    type_stats["locations"] += 1
+
+                    # Group counts/stats by Section
+                    loc_section_str = getattr(loc, 'section', "Unknown") or "Unknown"
+                    locations_by_section[loc_section_str] = locations_by_section.get(loc_section_str, 0) + 1
+                    section_stats = by_section.setdefault(loc_section_str,
+                                                          {"capacity": 0.0, "utilized": 0.0, "locations": 0,
+                                                           "utilization_percentage": 0.0})
+                    section_stats["capacity"] += capacity
+                    section_stats["utilized"] += utilized  # Aggregate location.utilized
+                    section_stats["locations"] += 1
+
+                    # Check capacity thresholds (using location.utilized based percentage)
+                    if capacity > 0:
+                        if utilization_pct >= 95:
+                            locations_at_capacity += 1
+                        elif utilization_pct <= 10:
+                            locations_nearly_empty += 1
+
+                result["total_capacity"] = total_capacity
+                result["total_utilized"] = total_utilized_loc_field  # Start with location field value
+                result["locations_at_capacity"] = locations_at_capacity
+                result["locations_nearly_empty"] = locations_nearly_empty
+
+                # --- 2. Calculate Item Counts by Type from Assignments ---
+                logger.debug("Calculating item counts by type from assignments...")
                 try:
-                    numeric_id = int(location_id)
-                    location = self.repository.get_by_id(numeric_id)
-                    logger.info(f"Found location using numeric ID: {numeric_id}")
+                    # Query assignments: group by material_type and count distinct material_id
+                    # This assumes 'material_type' on StorageAssignment is a string like 'leather', 'hardware'
+                    item_counts_query = self.session.query(
+                        StorageAssignment.material_type,
+                        func.count(StorageAssignment.material_id.distinct())  # Counts unique items per type
+                        # OR: func.sum(StorageAssignment.quantity) # If you need sum of quantities
+                    ).group_by(StorageAssignment.material_type).all()
+
+                    # Process the query results into a dictionary, lowercasing the type
+                    items_by_type_calc = {
+                        str(item_type).lower(): count
+                        for item_type, count in item_counts_query if item_type  # Ensure item_type is not None
+                    }
+
+                    # Ensure common types exist in the dictionary, even if count is 0
+                    for common_type in ["leather", "hardware", "supplies", "other", "unknown"]:
+                        items_by_type_calc.setdefault(common_type, 0)
+
+                    result["items_by_type"] = items_by_type_calc
+                    result["total_items"] = sum(items_by_type_calc.values())
+                    logger.info(f"Successfully calculated item counts by type: {result['items_by_type']}")
+
+                    # --- Optional Override Decision ---
+                    # Decide if the sum of distinct items should override the 'total_utilized'
+                    # This depends on whether 'location.utilized' is meant to track items or space.
+                    # If 'utilized' tracks distinct items, you might want to update it here:
+                    # if result["total_items"] != total_utilized_loc_field:
+                    #    logger.warning(f"Total utilized from locations ({total_utilized_loc_field}) differs from distinct item count ({result['total_items']}). Using item count.")
+                    #    result["total_utilized"] = float(result["total_items"])
+                    # else:
+                    #    result["total_utilized"] = total_utilized_loc_field # Keep location field value
+
+                    # For now, we'll keep result["total_utilized"] based on the location field sum
+                    # as it's more likely meant to track used slots/space rather than distinct items.
+                    result["total_utilized"] = total_utilized_loc_field
+
                 except Exception as e:
-                    logger.error(f"Error getting location with numeric ID {location_id}: {e}")
+                    logger.error(f"Error calculating items_by_type from assignments: {e}", exc_info=True)
+                    result["items_by_type"] = {"error": "Calculation failed"}  # Indicate error in result
+                    result["total_items"] = None  # Indicate calculation failed
+                    # Keep total_utilized based on location field as fallback
 
-            # If still not found, try by UUID field
-            if not location:
-                try:
-                    # Try to get by UUID field instead
-                    from sqlalchemy import or_
-                    from app.db.models.storage import StorageLocation
-                    location = self.session.query(StorageLocation).filter(
-                        or_(
-                            StorageLocation.id == location_id,
-                            StorageLocation.uuid == location_id
-                        )
-                    ).first()
-                    logger.info(f"Attempt to find by UUID field: {location is not None}")
-                except Exception as e:
-                    logger.error(f"Error getting location by UUID: {e}")
+                # --- 3. Final Calculations & Formatting ---
+                logger.debug("Performing final calculations for report...")
+                final_total_utilized = result["total_utilized"]  # Use the determined total utilized
 
-            if not location:
-                # Try one more approach - see if we can find by name
-                try:
-                    from app.db.models.storage import StorageLocation
-                    location = self.session.query(StorageLocation).filter(
-                        StorageLocation.name == location_id
-                    ).first()
-                    logger.info(f"Attempt to find by name: {location is not None}")
-                except Exception as e:
-                    logger.error(f"Error getting location by name: {e}")
+                if total_capacity > 0:
+                    usage_pct = (final_total_utilized / total_capacity) * 100
+                    result["utilization_percentage"] = round(usage_pct, 1)
+                    result["overall_usage_percentage"] = round(usage_pct, 1)  # Assign same value
 
-            if not location:
-                raise StorageLocationNotFoundException(location_id)
+                # Calculate final percentages for by_type and by_section breakdowns
+                # These percentages are based on the summed location.utilized values per group
+                for stats in by_type.values():
+                    cap = stats.get("capacity", 0.0)
+                    ut = stats.get("utilized", 0.0)  # Utilized from location field sum for this group
+                    stats["utilization_percentage"] = round((ut / cap) * 100, 1) if cap > 0 else 0.0
 
-            # Format location for API
-            formatted_location = self._format_location_for_api(location)
+                for stats in by_section.values():
+                    cap = stats.get("capacity", 0.0)
+                    ut = stats.get("utilized", 0.0)  # Utilized from location field sum for this group
+                    stats["utilization_percentage"] = round((ut / cap) * 100, 1) if cap > 0 else 0.0
 
-            # Add to cache
-            if self.cache_service:
-                self.cache_service.set(cache_key, formatted_location, ttl=3600)
+                result["by_type"] = by_type
+                result["by_section"] = by_section
+                result["locations_by_type"] = locations_by_type  # Just the counts
+                result["locations_by_section"] = locations_by_section  # Just the counts
 
-            logger.info(f"Retrieved storage location: {formatted_location['name']}")
-            return formatted_location
+                # Sort locations by utilization percentage for most/least utilized lists
+                sorted_locations = sorted(
+                    location_utilization_details.values(),
+                    key=lambda x: x["utilization_percentage"],
+                    reverse=True
+                )
 
-        except StorageLocationNotFoundException:
-            raise
-        except Exception as e:
-            logger.error(f"Error fetching storage location: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-            raise StorageLocationNotFoundException(location_id)
+                # Populate most/least utilized lists (ensure structure matches Pydantic schema)
+                result["most_utilized_locations"] = sorted_locations[:5]
+                result["least_utilized_locations"] = [
+                                                         loc for loc in reversed(sorted_locations) if
+                                                         loc["capacity"] > 0 and loc["utilization_percentage"] > 0
+                                                     ][:5]
+
+                # --- 4. Generate Recommendations ---
+                logger.debug("Generating recommendations...")
+                recommendations = []
+                usage_pct_final = result["utilization_percentage"]
+                if usage_pct_final > 85:
+                    recommendations.append(
+                        "Overall utilization is high. Consider expanding storage or optimizing existing space.")
+                elif usage_pct_final < 25:
+                    recommendations.append("Overall utilization is low. Consider consolidating storage.")
+                if result["locations_at_capacity"] > 0: recommendations.append(
+                    f"Address {result['locations_at_capacity']} locations at or near capacity (>=95%).")
+                if result["locations_nearly_empty"] > 0: recommendations.append(
+                    f"Review {result['locations_nearly_empty']} nearly empty locations (<=10%) for potential consolidation.")
+                # Add more recommendations based on by_type, by_section, etc. if needed
+                result["recommendations"] = recommendations
+
+                logger.info(f"Generated storage occupancy report successfully.")
+                return result
+
+            except Exception as e:
+                logger.error(f"Major error generating storage occupancy report: {e}", exc_info=True)
+                # Return the initialized result dictionary with defaults on major error
+                result["recommendations"] = ["Error generating report."]  # Add error message
+                return result
+
 
     # Just add this method to app/services/storage_location_service.py
     # Don't change any existing code - just add this new method

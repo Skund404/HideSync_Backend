@@ -26,6 +26,8 @@ from app.repositories.inventory_transaction_repository import (
     InventoryTransactionRepository,
 )
 from app.services.base_service import BaseService
+from app.schemas.inventory import InventorySearchParams
+from app.db.models.inventory import Inventory
 
 logger = logging.getLogger(__name__)
 
@@ -684,6 +686,28 @@ class InventoryService(BaseService[Inventory]):
 
         # Sort by percentage of reorder point (ascending)
         return sorted(result, key=lambda x: x["percentage_of_reorder"])
+
+    def list_inventory_items(
+            self, skip: int, limit: int, search_params: InventorySearchParams
+    ) -> List[Inventory]:
+        """
+        Retrieve a list of inventory items with filtering and pagination.
+        """
+        logger.info(f"Listing inventory items: skip={skip}, limit={limit}, params={search_params}")
+        # Assuming InventoryRepository has a method to handle this
+        # You might need to adapt the repository method call based on its actual implementation
+        items = self.repository.list_with_filters(
+            skip=skip,
+            limit=limit,
+            # Pass filters - adjust based on repository method signature
+            status=search_params.status,
+            location=search_params.location,
+            item_type=search_params.item_type,
+            search_term=search_params.search
+        )
+        logger.info(f"Found {len(items)} inventory items.")
+        return items
+
 
     def reconcile_inventory(
         self,
