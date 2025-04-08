@@ -15,7 +15,7 @@ from app.db.models.base import Base
 from app.db.models.enums import (
     SaleStatus,
     PaymentStatus,
-    PurchaseStatus,
+    PurchaseOrderStatus,
     CustomerStatus,
     CustomerTier,
     CustomerSource,

@@ -5,7 +5,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_, desc
 from datetime import datetime
 
-from app.db.models.pattern import Pattern, ProjectTemplate, ProjectTemplateComponent
+
+from app.db.models.pattern import Pattern
+from app.db.models.project import ProjectTemplate, ProjectTemplateComponent
 from app.db.models.enums import ProjectType, SkillLevel
 from app.repositories.base_repository import BaseRepository
 

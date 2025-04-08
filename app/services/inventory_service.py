@@ -30,9 +30,9 @@ from app.repositories.inventory_transaction_repository import (
 )
 # Import schemas used for input/output structuring if needed by public methods
 from app.schemas.inventory import (
-    InventoryAdjustment, # Use specific schema for adjustment input if defined
+    InventoryAdjustment,  # Use specific schema for adjustment input if defined
     InventorySearchParams,
-    InventoryTransactionCreate, # Use specific schema for transaction input if defined
+    InventoryTransactionCreate, InventorySummaryResponse,  # Use specific schema for transaction input if defined
 )
 from app.services.base_service import BaseService
 # Import other services needed for item details (ensure they are injected)
@@ -78,12 +78,11 @@ class InventoryService(BaseService[Inventory]):
         session: Session,
         repository: Optional[InventoryRepository] = None,
         transaction_repository: Optional[InventoryTransactionRepository] = None,
-        # << REMOVE product_service from constructor signature >>
+        # DO NOT inject ProductService here in __init__ to avoid circularity at init time
         security_context=None,
         event_bus=None,
         cache_service=None,
-        # Inject other needed services like MaterialService, ToolService here if needed
-        material_service = None,
+        material_service = None, # Keep other direct dependencies
         tool_service = None,
         storage_service = None,
         supplier_service = None,
@@ -98,15 +97,99 @@ class InventoryService(BaseService[Inventory]):
         self.storage_service = storage_service
         self.supplier_service = supplier_service
 
-        # Core services
         self.security_context = security_context
         self.event_bus = event_bus
         self.cache_service = cache_service
 
-        # Lazy load ProductService if needed
+        # --- Initialize the placeholder for lazy loading ---
         self._product_service_instance = None
 
+    def reevaluate_status(self, item_type: str, item_id: int) -> Optional[Inventory]:
+        """
+        Re-evaluates and potentially updates the status of an inventory item
+        based on its current quantity and the reorder point of the related item.
 
+        Args:
+            item_type: 'product', 'material', or 'tool'.
+            item_id: The ID of the item whose inventory status needs re-evaluation.
+
+        Returns:
+            The updated Inventory object if status changed, otherwise the original.
+            Returns None if the inventory record is not found.
+        """
+        item_type = item_type.lower()
+        logger.info(f"Service: Re-evaluating inventory status for {item_type} ID: {item_id}")
+
+        with self.transaction():
+            # 1. Get the inventory record
+            inventory = self.repository.get_inventory_by_item_id(item_type, item_id)
+            if not inventory:
+                logger.warning(f"Inventory record not found for {item_type} {item_id} during status re-evaluation.")
+                return None
+
+            # 2. Get related item details (especially reorder point)
+            item_details = self._get_item_details(item_type, item_id)
+            # Use 0 if details or reorder_point are missing
+            reorder_point = item_details.get('reorder_point', 0.0) if item_details else 0.0
+            if not isinstance(reorder_point, (int, float)):  # Handle non-numeric reorder points
+                logger.warning(
+                    f"Invalid reorder point type ({type(reorder_point)}) found for {item_type} {item_id}. Using 0.")
+                reorder_point = 0.0
+
+            # 3. Determine the correct status based on current quantity
+            current_quantity = inventory.quantity
+            correct_status = self._determine_inventory_status(current_quantity, reorder_point)
+
+            # 4. Update the inventory record ONLY if the status has changed
+            if inventory.status != correct_status:
+                logger.info(
+                    f"Inventory status changing for {item_type} {item_id} from {inventory.status} to {correct_status} (Qty: {current_quantity}, Reorder: {reorder_point})")
+                updated_inventory = self.repository.update(inventory.id, {"status": correct_status})
+                if not updated_inventory:
+                    logger.error(f"Failed to update inventory status for {item_type} {item_id} in DB.")
+                    # Raise or handle error appropriately
+                    raise HideSyncException(f"Failed to save updated status for inventory {inventory.id}")
+
+                # Optional: Publish an event about the status change
+                # if self.event_bus: ...
+
+                # Invalidate status cache
+                if self.cache_service:
+                    cache_key = self._get_cache_key(item_type, item_id, suffix=":status")
+                    self.cache_service.invalidate(cache_key)
+                    # Also invalidate general item cache as status is often included
+                    general_key = self._get_cache_key(item_type, item_id)
+                    self.cache_service.invalidate(general_key)
+
+                self.session.refresh(updated_inventory)  # Refresh to get latest state
+                return updated_inventory
+            else:
+                logger.debug(
+                    f"Inventory status for {item_type} {item_id} remains {inventory.status}. No update needed.")
+                return inventory  # Return original object if no change
+
+    @property
+    def product_service(self) -> 'ProductService':
+        """Lazy loads ProductService to avoid circular dependencies."""
+        if self._product_service_instance is None:
+            # Instantiate ProductService here when needed, passing the current session
+            # This requires ProductService constructor to be simple or use its own deps resolution
+            from app.services.product_service import ProductService
+            from app.api.deps import get_pattern_service, \
+                get_material_service  # Get dependencies needed by ProductService
+
+            # Instantiate dependencies for ProductService
+            pattern_service_instance = get_pattern_service(db=self.session)
+            material_service_instance = get_material_service(db=self.session)
+
+            self._product_service_instance = ProductService(
+                session=self.session,
+                inventory_service=self,  # Pass self if needed, but be cautious
+                pattern_service=pattern_service_instance,
+                material_service=material_service_instance
+                # Add other necessary args for ProductService constructor
+            )
+        return self._product_service_instance
 
     def _get_current_user_id(self) -> Optional[int]:
         """Helper to safely get current user ID."""
@@ -554,6 +637,60 @@ class InventoryService(BaseService[Inventory]):
             }
 
     # --- Read/Query Methods ---
+    def get_summary_data(self) -> InventorySummaryResponse:
+        """
+        Calculates and returns inventory summary statistics.
+        """
+        logger.info("Service: Calculating inventory summary data.")
+
+        try:
+            # 1. Use repository methods for counts by status
+            in_stock_count = self.repository.count_by_status(InventoryStatus.IN_STOCK)
+            low_stock_count = self.repository.count_by_status(InventoryStatus.LOW_STOCK)
+            out_of_stock_count = self.repository.count_by_status(InventoryStatus.OUT_OF_STOCK)
+
+            # 2. Count items needing reorder (products + materials)
+            needs_reorder_count = self.repository.count_needs_reorder()
+
+            # 3. Calculate total value (can be complex, use simplified approach for now)
+            #    This might require fetching all inventory items and their costs.
+            #    Using the existing calculate_inventory_value method is a good start.
+            value_data = self.calculate_inventory_value()  # Assuming this returns {'total_value': ...}
+            total_value = value_data.get("total_value", 0.0)
+
+            # 4. Get total number of distinct products tracked
+            #    This assumes ProductService exists and has a count method. Use lazy loading.
+            total_products_count = self.product_service.count_all_products()
+
+            # 5. Get average margin (requires ProductService)
+            #    Fetch all margins and calculate average.
+            margins = self.product_service.get_all_product_margins()
+            valid_margins = [m for m in margins if m is not None]
+            average_margin = round(sum(valid_margins) / len(valid_margins), 1) if valid_margins else 0.0
+
+            # 6. Construct the response object
+            summary = InventorySummaryResponse(
+                total_products=total_products_count,
+                in_stock=in_stock_count,  # Count of inventory *items* (prod/mat/tool) in this status
+                low_stock=low_stock_count,
+                out_of_stock=out_of_stock_count,
+                total_value=total_value,
+                average_margin=average_margin,
+                needs_reorder=needs_reorder_count,
+                generated_at=datetime.now()  # Add generation timestamp
+            )
+            logger.info("Service: Inventory summary data calculated successfully.")
+            return summary
+
+        except Exception as e:
+            logger.error(f"Error calculating inventory summary: {e}", exc_info=True)
+            # Re-raise or return a default/error state depending on desired behavior
+            # Returning default to avoid crashing the endpoint entirely
+            return InventorySummaryResponse(
+                total_products=0, in_stock=0, low_stock=0, out_of_stock=0,
+                total_value=0.0, average_margin=0.0, needs_reorder=0,
+                generated_at=datetime.now()
+            )
 
     def get_inventory_status(self, item_type: str, item_id: int) -> Optional[Dict[str, Any]]:
         """
@@ -698,34 +835,77 @@ class InventoryService(BaseService[Inventory]):
     #  as defined previously, ensuring they use _get_item_details correctly)
 
     def calculate_inventory_value(self, as_of_date: Optional[datetime] = None) -> Dict[str, Any]:
-        # ... (Implementation as before, relies on _get_item_details for costs) ...
         logger.info(f"Calculating inventory value as of {as_of_date or 'now'}")
-        if not as_of_date: as_of_date = datetime.now()
-        inventories = self.repository.list()
+        if not as_of_date: as_of_date = datetime.now(timezone.utc) # Use timezone aware now
+
+        # Fetch all inventory items (consider filtering if performance is an issue)
+        # Ensure the repository list method doesn't cause issues
+        try:
+            inventories = self.repository.list(limit=10000) # Fetch a large batch
+        except Exception as e:
+            logger.error(f"Failed to list inventory items for value calculation: {e}", exc_info=True)
+            return { # Return default on error fetching inventory
+                 "as_of_date": as_of_date.isoformat(), "total_value": 0.0,
+                 "item_count": 0, "by_type": {}, "items": []
+            }
+
         total_value = 0.0
         by_type = {"product": {"count": 0, "value": 0.0}, "material": {"count": 0, "value": 0.0}, "tool": {"count": 0, "value": 0.0}}
         items_detail = []
+        item_count = 0 # Use a separate counter
 
         for inventory in inventories:
-            if inventory.quantity <= 0: continue
+            # Skip if quantity is zero or less
+            if not inventory.quantity or inventory.quantity <= 0:
+                 continue
+
+            item_count += 1 # Count items with positive quantity
+
+            # Get details, which might return None
             item_details = self._get_item_details(inventory.item_type, inventory.item_id)
-            if not item_details: continue
-            unit_cost = item_details.get("cost", 0.0)
+
+            # --- SAFELY GET UNIT COST ---
+            # Default to 0.0 if details are missing or cost is None/invalid
+            unit_cost = 0.0
+            if item_details:
+                cost_value = item_details.get("cost") # Get cost value
+                if isinstance(cost_value, (int, float)): # Check if it's a number
+                    unit_cost = float(cost_value)
+                else:
+                    logger.warning(f"Invalid or missing cost for {inventory.item_type} ID {inventory.item_id}. Using 0.0 for value calculation.")
+            else:
+                 logger.warning(f"Could not get item details for {inventory.item_type} ID {inventory.item_id}. Using 0.0 cost.")
+            # --- END SAFELY GET UNIT COST ---
+
+            # Calculate item value (unit_cost is now guaranteed to be a float)
             item_value = inventory.quantity * unit_cost
             total_value += item_value
-            if inventory.item_type in by_type:
-                 by_type[inventory.item_type]["count"] += 1
-                 by_type[inventory.item_type]["value"] += item_value
+
+            # Aggregate by type
+            type_key = inventory.item_type.lower() # Use lowercase for consistency
+            if type_key in by_type:
+                 by_type[type_key]["count"] += 1 # Count distinct items being valued
+                 by_type[type_key]["value"] += item_value
+            else:
+                 # Handle unexpected item types if necessary
+                 if 'other' not in by_type: by_type['other'] = {"count": 0, "value": 0.0}
+                 by_type['other']["count"] += 1
+                 by_type['other']["value"] += item_value
+
+
             items_detail.append({
                 "inventory_id": inventory.id, "item_type": inventory.item_type, "item_id": inventory.item_id,
-                "name": item_details.get("name", f"Unknown {inventory.item_type}"),
-                "quantity": inventory.quantity, "unit": item_details.get("unit"),
+                "name": item_details.get("name", f"Unknown {inventory.item_type}") if item_details else f"Unknown {inventory.item_type}",
+                "quantity": inventory.quantity, "unit": item_details.get("unit", "unit") if item_details else "unit",
                 "unit_cost": unit_cost, "total_value": item_value, "location": inventory.storage_location,
             })
-        logger.info(f"Calculated total inventory value: {total_value:.2f}")
+
+        logger.info(f"Calculated total inventory value: {total_value:.2f} for {item_count} items.")
         return {
-            "as_of_date": as_of_date.isoformat(), "total_value": round(total_value, 2),
-            "item_count": sum(t["count"] for t in by_type.values()), "by_type": by_type,
+            "as_of_date": as_of_date.isoformat(),
+            "total_value": round(total_value, 2),
+            "item_count": item_count, # Return count of items included in value calc
+            "by_type": by_type,
             "items": sorted(items_detail, key=lambda x: x["total_value"], reverse=True),
         }
 
@@ -857,9 +1037,13 @@ class InventoryService(BaseService[Inventory]):
 
     def _determine_inventory_status(self, quantity: float, reorder_point: float) -> InventoryStatus:
         """Determines inventory status based on quantity and reorder point."""
+        # Ensure reorder_point is treated as a number
+        numeric_reorder_point = reorder_point if isinstance(reorder_point, (int, float)) else 0.0
+
         if quantity <= 0:
             return InventoryStatus.OUT_OF_STOCK
-        elif reorder_point > 0 and quantity <= reorder_point:
+        # Only consider low stock if reorder point is greater than 0
+        elif numeric_reorder_point > 0 and quantity <= numeric_reorder_point:
             return InventoryStatus.LOW_STOCK
         else:
             return InventoryStatus.IN_STOCK

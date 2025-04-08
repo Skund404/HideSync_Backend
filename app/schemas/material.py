@@ -17,7 +17,7 @@ from app.db.models.enums import (
     LeatherType,
     LeatherFinish,
     HardwareType,
-    HardwareMaterial,
+    HardwareMaterialEnum,
     HardwareFinish,
     MeasurementUnit,
 )
@@ -138,7 +138,7 @@ class HardwareMaterialBase(MaterialBase):
         MaterialType.HARDWARE, description="Type of material"
     )
     hardware_type: Optional[HardwareType] = Field(None, description="Type of hardware")
-    hardware_material: Optional[HardwareMaterial] = Field(
+    hardware_material: Optional[HardwareMaterialEnum] = Field(
         None, description="Material the hardware is made of"
     )
     finish: Optional[HardwareFinish] = Field(None, description="Finish of the hardware")
@@ -269,7 +269,7 @@ class HardwareMaterialUpdate(MaterialUpdate):
     """
 
     hardware_type: Optional[HardwareType] = Field(None, description="Type of hardware")
-    hardware_material: Optional[HardwareMaterial] = Field(
+    hardware_material: Optional[HardwareMaterialEnum] = Field(
         None, description="Material the hardware is made of"
     )
     finish: Optional[HardwareFinish] = Field(None, description="Finish of the hardware")

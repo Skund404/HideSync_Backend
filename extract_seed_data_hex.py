@@ -80,6 +80,7 @@ def convert_value(value):
 def extract_seed_data():
     """Extract seed data from SQLCipher database"""
     db_path = os.path.abspath(settings.DATABASE_PATH)
+    logger.info(f"SCRIPT USING DB PATH: {db_path}")
     key = KeyManager.get_database_encryption_key()
 
     # Establish connection

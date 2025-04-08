@@ -42,34 +42,34 @@ class ProductRepository(BaseRepository[Product]):
         skip: int = 0,
         limit: int = 100,
         filters: Optional[ProductFilter] = None,
-        # Optional: Add sorting parameters if needed
-        # sort_by: str = "id",
-        # sort_direction: str = "asc",
     ) -> Dict[str, Any]:
         """
         Retrieves a paginated list of products with filtering.
-
-        Handles JOINing with Inventory when filtering by status or location.
-
-        Args:
-            skip: Number of records to skip.
-            limit: Maximum number of records to return.
-            filters: An optional ProductFilter object containing filter criteria.
-
-        Returns:
-            A dictionary containing 'items' (list of products) and 'total' count.
+        Ensures Inventory is loaded for response serialization.
         """
         query = self.session.query(self.model)
-        inventory_joined = False # Track if we've joined Inventory
+        inventory_joined = False # Track if we need to explicitly join
+
+        # --- ALWAYS EAGER LOAD INVENTORY FOR RESPONSE ---
+        # ProductResponse requires quantity, status, etc. from Inventory
+        query = query.options(joinedload(self.model.inventory))
+        # --- END EAGER LOAD ---
 
         if filters:
-            # Determine if JOIN with Inventory is necessary based on filters
+            # Determine if explicit JOIN is necessary for *filtering*
             if filters.status or filters.storageLocation:
-                query = query.join(self.model.inventory)
-                inventory_joined = True
+                # Join only if not already implicitly joined by joinedload (SQLAlchemy might optimize)
+                # Or simply join anyway if filtering requires it explicitly.
+                # Using the relationship attribute directly often implies the join.
+                # Let's check if direct filtering works first.
+                # If filtering on Inventory fields fails without explicit .join(), add it back here.
+                 query = query.join(self.model.inventory) # Explicit join IF needed for filtering
+                 inventory_joined = True
+                 pass # JOIN handled implicitly by joinedload option or added if needed below
 
             # Apply text search filter (on Product fields)
             if filters.searchQuery:
+                # ... (search logic as before) ...
                 search_term = f"%{filters.searchQuery}%"
                 query = query.filter(
                     or_(
@@ -79,74 +79,83 @@ class ProductRepository(BaseRepository[Product]):
                     )
                 )
 
-            # Apply Product Type filter (on Product field)
+            # Apply Product Type filter
             if filters.productType:
-                 # Assuming productType in schema is List[str], convert to Enum if needed
-                 # If your Product model uses Enum:
+                # ... (type filter logic as before) ...
                  try:
                      enum_types = [ProjectType(ptype) for ptype in filters.productType]
                      query = query.filter(self.model.product_type.in_(enum_types))
                  except ValueError:
                      logger.warning(f"Invalid product type filter received: {filters.productType}")
-                     # Optionally raise an error or ignore invalid types
-                 # If your Product model uses string:
-                 # query = query.filter(self.model.product_type.in_(filters.productType))
 
 
-            # Apply Status filter (on Inventory field - requires JOIN)
+            # Apply Status filter (on Inventory field)
             if filters.status:
-                if not inventory_joined: # Ensure join if not already done
-                    query = query.join(self.model.inventory)
-                    inventory_joined = True
+                # No need for explicit join check here if joinedload works for filtering
+                # if not inventory_joined: query = query.join(self.model.inventory); inventory_joined = True
                 try:
                     enum_statuses = [InventoryStatus(stat) for stat in filters.status]
-                    query = query.filter(Inventory.status.in_(enum_statuses))
+                    # Filter using the relationship attribute
+                    query = query.filter(Product.inventory.has(Inventory.status.in_(enum_statuses)))
                 except ValueError:
                      logger.warning(f"Invalid status filter received: {filters.status}")
-                     # Optionally raise an error or ignore invalid statuses
 
-            # Apply Storage Location filter (on Inventory field - requires JOIN)
+            # Apply Storage Location filter (on Inventory field)
             if filters.storageLocation:
-                if not inventory_joined: # Ensure join if not already done
-                    query = query.join(self.model.inventory)
-                    inventory_joined = True
-                query = query.filter(Inventory.storageLocation == filters.storageLocation)
+                # if not inventory_joined: query = query.join(self.model.inventory); inventory_joined = True
+                # Filter using the relationship attribute
+                query = query.filter(Product.inventory.has(Inventory.storage_location == filters.storageLocation))
 
-            # Apply Price Range filter (on Product field)
+
+            # Apply Price Range filter
             if filters.priceRange:
+                # ... (price filter logic as before) ...
                 if filters.priceRange.min is not None:
                     query = query.filter(self.model.selling_price >= filters.priceRange.min)
                 if filters.priceRange.max is not None:
                     query = query.filter(self.model.selling_price <= filters.priceRange.max)
 
-            # Apply Date Added Range filter (on Product field - assuming createdAt)
+
+            # Apply Date Added Range filter
             if filters.dateAddedRange:
-                if filters.dateAddedRange.get("from"): # Use .get for safety
-                    try:
-                        from_date = datetime.fromisoformat(filters.dateAddedRange["from"])
-                        query = query.filter(self.model.createdAt >= from_date)
-                    except (ValueError, TypeError):
-                        logger.warning(f"Invalid date_from filter: {filters.dateAddedRange['from']}")
-                if filters.dateAddedRange.get("to"):
-                    try:
-                        # Add time component to include the whole day
-                        to_date_str = filters.dateAddedRange["to"]
-                        to_date = datetime.fromisoformat(f"{to_date_str}T23:59:59.999999")
-                        query = query.filter(self.model.createdAt <= to_date)
-                    except (ValueError, TypeError):
-                        logger.warning(f"Invalid date_to filter: {filters.dateAddedRange['to']}")
+                # ... (date filter logic as before) ...
+                 if filters.dateAddedRange.get("from"):
+                     try:
+                         from_date = datetime.fromisoformat(filters.dateAddedRange["from"])
+                         query = query.filter(self.model.createdAt >= from_date)
+                     except (ValueError, TypeError):
+                         logger.warning(f"Invalid date_from filter: {filters.dateAddedRange['from']}")
+                 if filters.dateAddedRange.get("to"):
+                     try:
+                         to_date_str = filters.dateAddedRange["to"]
+                         to_date = datetime.fromisoformat(f"{to_date_str}T23:59:59.999999")
+                         query = query.filter(self.model.createdAt <= to_date)
+                     except (ValueError, TypeError):
+                         logger.warning(f"Invalid date_to filter: {filters.dateAddedRange['to']}")
+
 
         # Get the total count *before* pagination
-        total = query.count()
+        # Be careful: count() after joinedload might be inefficient or behave unexpectedly
+        # depending on the relationship type. For one-to-one, it's usually fine.
+        # Consider a separate count query if performance issues arise.
+        # total_query = query.statement.with_only_columns([func.count()]).order_by(None)
+        # total = self.session.execute(total_query).scalar()
+        total = query.count() # Try simple count first
 
-        # Apply sorting (Example: by product name) - Add parameters for dynamic sort
-        query = query.order_by(self.model.name) # Or use sort_by, sort_direction
+        # Apply sorting
+        query = query.order_by(self.model.name)
 
         # Apply pagination
-        entities = query.offset(skip).limit(limit).all()
+        entities: List[Product] = query.offset(skip).limit(limit).all()
 
         # Decrypt if necessary
         items_list = [self._decrypt_sensitive_fields(entity) for entity in entities]
+
+        # Log inventory loading status for debugging
+        # for prod in items_list:
+        #     logger.debug(f"Product ID {prod.id}, Inventory Loaded: {hasattr(prod, 'inventory') and prod.inventory is not None}")
+        #     if hasattr(prod, 'inventory') and prod.inventory:
+        #         logger.debug(f"  Inventory ID: {prod.inventory.id}, Qty: {prod.inventory.quantity}")
 
         return {"items": items_list, "total": total}
 

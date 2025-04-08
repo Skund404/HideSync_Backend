@@ -45,7 +45,7 @@ from app.db.models.base import (
 )
 from app.db.models.enums import (
     HardwareFinish,
-    HardwareMaterial as HardwareMaterialEnum,
+    HardwareMaterialEnum,
     HardwareType,
     InventoryStatus,
     LeatherFinish,

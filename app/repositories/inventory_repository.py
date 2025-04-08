@@ -286,7 +286,7 @@ class InventoryRepository(BaseRepository[Inventory]):
         entity = (
             self.session.query(self.model)
             .filter(
-                and_(self.model.itemType == item_type, self.model.itemId == item_id)
+                and_(self.model.item_type == item_type, self.model.item_id == item_id)
             )
             .first()
         )

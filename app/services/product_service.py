@@ -23,7 +23,9 @@ from app.core.exceptions import (
 from app.db.models.enums import InventoryStatus, ProjectType, InventoryAdjustmentType # Added necessary enums
 from app.db.models import Product
 
-
+from app.services.inventory_service import InventoryService
+from app.services.pattern_service import PatternService
+from app.services.material_service import MaterialService
 from app.repositories.product_repository import ProductRepository
 from app.services.base_service import BaseService
 # Import dependent services (ensure they are injected in __init__)
@@ -75,30 +77,41 @@ class ProductService(BaseService[Product]):
 
     # Type hint dependencies for clarity
     inventory_service: InventoryService
-    # pattern_service: Optional[PatternService]
+    pattern_service: Optional[PatternService]
     # sale_service: Optional[SaleService]
-    # material_service: Optional[MaterialService]
+    material_service: Optional[MaterialService]
 
     def __init__(
-        self,
-        session: Session,
-        repository: Optional[ProductRepository] = None, # Allow repo injection
-        inventory_service: Optional[InventoryService] = None, # << ACCEPT inventory_service
-        security_context=None,
-        event_bus=None,
-        cache_service=None,
-        # ... other optional service args ...
+            self,
+            session: Session,
+            repository: Optional[ProductRepository] = None,
+            # --- ACCEPT INJECTED SERVICES ---
+            inventory_service: Optional[InventoryService] = None,
+            pattern_service: Optional[PatternService] = None,
+            material_service: Optional[MaterialService] = None,
+            # --- END ACCEPT ---
+            security_context=None,
+            event_bus=None,
+            cache_service=None,
+            # --- Remove other services if not needed directly by __init__ ---
+            # tool_service = None,
+            # storage_service = None,
+            # supplier_service = None,
     ):
         self.session = session
-        self.repository = repository or ProductRepository(session) # Instantiate repo if not provided
+        self.repository = repository or ProductRepository(session)
 
-        # --- Store Injected InventoryService ---
-        if not inventory_service: # Check if it was actually passed
-             logger.error("CRITICAL: InventoryService was not provided to ProductService constructor!")
-             raise ValueError("InventoryService is required for ProductService")
-        self.inventory_service = inventory_service # Store the injected instance
+        if not inventory_service:
+            logger.error("CRITICAL: InventoryService was not provided to ProductService constructor!")
+            raise ValueError("InventoryService is required for ProductService")
+        self.inventory_service = inventory_service
 
-        # Core services
+        # --- STORE INJECTED SERVICES ---
+        # Store them even if optional, methods will check for their existence
+        self.pattern_service = pattern_service
+        self.material_service = material_service
+        # --- END STORE ---
+
         self.security_context = security_context
         self.event_bus = event_bus
         self.cache_service = cache_service
@@ -116,56 +129,85 @@ class ProductService(BaseService[Product]):
     def create_product(self, product_in: ProductCreate, user_id: Optional[int] = None) -> Product:
         """
         Creates a new product and its associated inventory record.
-
-        Args:
-            product_in: Validated data for the new product (from endpoint).
-            user_id: ID of the user performing the action.
-
-        Returns:
-            The created Product ORM instance.
+        Generates SKU if not provided, validates uniqueness.
+        Refreshes the product to load the inventory relationship before returning.
         """
-        logger.info(f"Service: Creating product with SKU '{product_in.sku}' by user ID {user_id or 'Unknown'}")
+        logger.info(
+            f"Service: Creating product. User ID {user_id or 'Unknown'}. Provided SKU: '{product_in.sku or 'None'}'")
         user_id = user_id or self._get_current_user_id()
 
-        with self.transaction():
-            # 1. Validate SKU uniqueness
-            if self.repository.get_product_by_sku(product_in.sku):
-                logger.warning(f"SKU conflict during creation: '{product_in.sku}' already exists.")
-                raise BusinessRuleException(f"SKU '{product_in.sku}' already exists.", "PRODUCT_SKU_CONFLICT")
+        with self.transaction():  # Ensures atomicity
+            final_sku: str
+            product_data = product_in.model_dump(
+                exclude={'quantity', 'status', 'storage_location', 'sku'})  # Exclude SKU initially too
 
-            # 2. Prepare data for repository
-            product_data = product_in.model_dump(exclude={'quantity', 'status', 'storage_location'}) # Exclude stock fields
+            # --- SKU Handling Logic ---
+            if product_in.sku:
+                # 1a. Validate Provided SKU
+                provided_sku = product_in.sku.strip().upper()
+                if not provided_sku:
+                    raise ValidationException("Provided SKU cannot be empty.", {"sku": "Cannot be empty."})
+                if self.repository.get_product_by_sku(provided_sku):
+                    logger.warning(f"SKU conflict during creation: '{provided_sku}' already exists.")
+                    raise BusinessRuleException(f"SKU '{provided_sku}' already exists.", "PRODUCT_SKU_CONFLICT")
+                final_sku = provided_sku
+                logger.info(f"Using provided valid SKU: {final_sku}")
+            else:
+                # 1b. Generate SKU if not provided
+                max_retries = 3
+                for attempt in range(max_retries):
+                    # Make sure name is in product_data before generating
+                    if 'name' not in product_data:
+                        raise ValidationException("Product name is required to generate SKU.",
+                                                  {"name": "Required field."})
+                    generated_sku = self._generate_sku(product_data['name'], product_data.get('product_type'))
+                    if not self.repository.get_product_by_sku(generated_sku):
+                        final_sku = generated_sku
+                        logger.info(f"Generated unique SKU: {final_sku} (attempt {attempt + 1})")
+                        break
+                    logger.warning(f"Generated SKU '{generated_sku}' collided (attempt {attempt + 1}). Retrying...")
+                else:
+                    logger.error(f"Failed to generate a unique SKU after {max_retries} attempts.")
+                    raise HideSyncException("Failed to generate a unique SKU due to collisions.")
+            # --- End SKU Handling ---
 
-            # Ensure SKU generation if needed (repository might also do this)
-            if not product_data.get('sku'):
-                 product_data['sku'] = self._generate_sku(product_data['name'], product_data.get('product_type'))
-                 logger.info(f"Generated SKU '{product_data['sku']}' for new product.")
+            # Add the final SKU to the data before creating
+            product_data['sku'] = final_sku
 
-            # 3. Create Product record
+            # 2. Create Product record
             product = self.repository.create(product_data)
             logger.info(f"Service: Product record created with ID: {product.id}")
 
-            # 4. Create associated Inventory record via InventoryService
+            # 3. Create associated Inventory record via InventoryService
             try:
                 initial_quantity = product_in.quantity if product_in.quantity is not None else 0.0
-                # Let Inventory Service determine initial status based on quantity & reorder point
-                # initial_status = InventoryStatus.OUT_OF_STOCK if initial_quantity <= 0 else InventoryStatus.IN_STOCK
-                # No - pass quantity and let inventory service handle status logic
-
                 self.inventory_service.create_inventory(
                     item_type="product",
                     item_id=product.id,
                     quantity=initial_quantity,
-                    # status=initial_status, # Let InventoryService determine status
                     storage_location=product_in.storage_location,
                     user_id=user_id
                 )
                 logger.info(f"Service: Inventory record created via InventoryService for product ID: {product.id}")
             except Exception as e:
                 logger.error(f"Service: Failed to create inventory record for product {product.id}: {e}", exc_info=True)
-                raise HideSyncException(f"Failed to initialize inventory for product {product.id}") from e # Rollback transaction
+                # The transaction context manager will handle rollback
+                raise HideSyncException(f"Failed to initialize inventory for product {product.id}") from e
 
-            # 5. Publish Event
+            # --- REFRESH PRODUCT TO LOAD INVENTORY RELATIONSHIP ---
+            try:
+                self.session.flush()  # Ensure changes are sent to DB before refresh
+                self.session.refresh(product, attribute_names=['inventory'])
+                logger.debug(
+                    f"Refreshed product {product.id}, inventory loaded: {hasattr(product, 'inventory') and product.inventory is not None}")
+            except Exception as refresh_err:
+                logger.error(f"Failed to refresh product {product.id} to load inventory: {refresh_err}", exc_info=True)
+                # Raise an exception as the returned object might be incomplete
+                raise HideSyncException(
+                    f"Failed to load inventory details for newly created product {product.id}") from refresh_err
+            # --- END REFRESH ---
+
+            # 4. Publish Event (after successful creation and refresh)
             if self.event_bus:
                 self.event_bus.publish(
                     ProductCreated(
@@ -174,10 +216,8 @@ class ProductService(BaseService[Product]):
                     )
                 )
 
-            self.session.flush()
-            self.session.refresh(product, attribute_names=['inventory'])
-
             logger.info(f"Service: Product {product.id} '{product.name}' created successfully.")
+            # The product object now has its .inventory relationship populated
             return product
 
     def update_product(self, product_id: int, product_update: ProductUpdate, user_id: Optional[int] = None) -> Product:
@@ -495,161 +535,219 @@ class ProductService(BaseService[Product]):
         sku = f"{type_prefix}-{name_part}-{unique_part}"
         return sku
 
-    def calculate_cost_breakdown(self, product_id: int) -> Dict[str, Any]:
-        """
-        Calculates (or recalculates) the detailed cost breakdown for a product
-        based on its associated pattern's material requirements and potentially
-        configured labor/overhead costs. Updates the product record.
+    class ProductService(BaseService[Product]):
+        # ... (__init__ and other methods as defined previously) ...
 
-        Args:
-            product_id: The ID of the product.
+        def calculate_cost_breakdown(self, product_id: int) -> Dict[str, Any]:
+            """
+            Calculates (or recalculates) the detailed cost breakdown for a product
+            based on its associated pattern's material requirements and potentially
+            configured labor/overhead costs. Updates the product record.
 
-        Returns:
-            A dictionary representing the cost breakdown:
-            {
-                "material_costs": float,
-                "labor_costs": float,
-                "overhead_costs": float,
-                "total_calculated_cost": float, # Renamed for clarity
-                "materials_detail": [ # Added more detail
-                    { "material_id": int, "name": str, "type": str, "quantity": float, "unit": str, "cost_per_unit": float, "total_cost": float }, ...
-                ]
+            Requires PatternService and MaterialService to be injected during
+            ProductService initialization.
+
+            Args:
+                product_id: The ID of the product.
+
+            Returns:
+                A dictionary representing the cost breakdown, including any errors encountered:
+                {
+                    "material_costs": float,
+                    "labor_costs": float,         # Currently sourced from product or default 0.0
+                    "overhead_costs": float,      # Currently sourced from product or default 0.0
+                    "total_calculated_cost": float, # Sum of the above
+                    "materials_detail": [         # Detailed list of material costs
+                        { "material_id": int, "name": str, "type": str,
+                          "quantity_required": float, "unit_required": str,
+                          "cost_per_unit": float, "material_base_unit": str,
+                          "total_cost": float }, ...
+                    ],
+                    "calculation_timestamp": str, # ISO format timestamp
+                    "errors": List[str]           # List of errors encountered during calculation
+                }
+
+            Raises:
+                EntityNotFoundException: If the product itself is not found.
+                HideSyncException: If required services (PatternService, MaterialService)
+                                   were not injected or if a critical error occurs.
+                                   (Or returns breakdown dict with errors depending on preference)
+            """
+            logger.info(f"Service: Calculating cost breakdown for product ID: {product_id}")
+
+            # 1. --- CHECK FOR DEPENDENCIES ---
+            if not self.pattern_service or not self.material_service:
+                error_msg = f"Cannot calculate cost for product {product_id}: PatternService or MaterialService not available/injected."
+                logger.error(error_msg)
+                # Option 1: Raise exception to halt immediately
+                raise HideSyncException("Required services for cost calculation are not configured.")
+                # Option 2: Return a dict indicating failure (less disruptive but caller needs to check)
+                # return {
+                #     "material_costs": 0.0, "labor_costs": 0.0, "overhead_costs": 0.0,
+                #     "total_calculated_cost": 0.0, "materials_detail": [],
+                #     "calculation_timestamp": datetime.now().isoformat(),
+                #     "errors": ["Cost calculation services unavailable."]
+                # }
+            # --- END DEPENDENCY CHECK ---
+
+            # 2. Get Product
+            # Use the repository directly to ensure we get the latest DB state before calculation
+            product = self.repository.get_by_id(product_id, load_inventory=False)  # Don't need inventory loaded here
+            if not product:
+                raise EntityNotFoundException("Product", product_id)
+
+            # 3. Initialize Breakdown Structure
+            breakdown = {
+                "material_costs": 0.0,
+                "labor_costs": getattr(product, 'labor_cost', 0.0),  # Get from product or default
+                "overhead_costs": getattr(product, 'overhead_cost', 0.0),  # Get from product or default
+                "total_calculated_cost": 0.0,  # Will sum at the end
+                "materials_detail": [],
+                "calculation_timestamp": datetime.now().isoformat(),
+                "errors": []  # To log any issues during calculation
             }
 
-        Raises:
-            EntityNotFoundException: If the product or required pattern/materials are not found.
-            HideSyncException: If required services (PatternService, MaterialService) are not injected.
-        """
-        logger.info(f"Service: Calculating cost breakdown for product ID: {product_id}")
+            # 4. Calculate Material Costs (Requires Pattern & Material Services)
+            pattern_id = product.pattern_id
+            if not pattern_id:
+                logger.warning(f"Product {product_id} has no associated pattern_id. Cannot calculate material costs.")
+                breakdown["errors"].append("No pattern associated with product.")
+            else:
+                try:
+                    # --- Use injected services ---
+                    # Assume pattern service returns dict like: { "material_id": {"quantity_required": X, "unit": "Y", ...} }
+                    if not hasattr(self.pattern_service, 'get_material_requirements_for_pattern'):
+                        # This check might be overly defensive if types are hinted correctly
+                        raise NotImplementedError("PatternService needs 'get_material_requirements_for_pattern'")
 
-        # 1. Get Product
-        product = self.repository.get_by_id(product_id, load_inventory=False)
-        if not product:
-            raise EntityNotFoundException("Product", product_id)
+                    # Fetch requirements from PatternService
+                    material_reqs = self.pattern_service.get_material_requirements_for_pattern(pattern_id)
+                    logger.debug(f"Material requirements for pattern {pattern_id}: {material_reqs}")
 
-        # 2. Initialize Breakdown Structure
-        breakdown = {
-            "material_costs": 0.0,
-            "labor_costs": getattr(product, 'labor_cost', 0.0), # Get from product or default
-            "overhead_costs": getattr(product, 'overhead_cost', 0.0), # Get from product or default
-            "total_calculated_cost": 0.0, # Will sum at the end
-            "materials_detail": [],
-            "calculation_timestamp": datetime.now().isoformat(),
-            "errors": [] # To log any issues during calculation
-        }
+                    if not material_reqs:
+                        logger.warning(f"No material requirements found for pattern {pattern_id}.")
+                        breakdown["errors"].append(f"No materials defined for pattern {pattern_id}.")
+                    else:
+                        # Iterate through required materials
+                        for mat_id_str, req_data in material_reqs.items():
+                            try:
+                                mat_id = int(mat_id_str)  # Ensure ID is integer
+                                quantity_needed = float(req_data.get('quantity_required', 0.0))
+                                unit_needed = req_data.get('unit', 'unknown_unit')  # Unit required by the pattern
 
-        # 3. Calculate Material Costs (Requires Pattern & Material Services)
-        pattern_id = product.pattern_id
-        if not pattern_id:
-             logger.warning(f"Product {product_id} has no associated pattern_id. Cannot calculate material costs.")
-             breakdown["errors"].append("No pattern associated with product.")
-        elif not hasattr(self, 'pattern_service') or not self.pattern_service:
-            logger.error("PatternService not available. Cannot calculate material costs.")
-            breakdown["errors"].append("PatternService dependency missing.")
-            # Optionally raise HideSyncException here if this is critical
-        elif not hasattr(self, 'material_service') or not self.material_service:
-             logger.error("MaterialService not available. Cannot calculate material costs.")
-             breakdown["errors"].append("MaterialService dependency missing.")
-             # Optionally raise HideSyncException here
-        else:
+                                if quantity_needed <= 0:
+                                    continue  # Skip if no quantity needed
+
+                                # Fetch material details using MaterialService
+                                material = self.material_service.get_by_id(mat_id)
+                                if not material:
+                                    error_msg = f"Material ID {mat_id} required by pattern {pattern_id} not found."
+                                    logger.warning(error_msg)
+                                    breakdown["errors"].append(error_msg)
+                                    continue  # Skip this material
+
+                                # Extract details from the material object
+                                mat_cost_per_unit = getattr(material, 'cost', 0.0)  # Cost per material's base unit
+                                mat_name = getattr(material, 'name', f"Material {mat_id}")
+                                # Safely get enum names or string values
+                                mat_type_obj = getattr(material, 'material_type', 'UNKNOWN')
+                                mat_type = mat_type_obj.name if hasattr(mat_type_obj, 'name') else str(mat_type_obj)
+                                mat_unit_obj = getattr(material, 'unit', 'unknown_unit')
+                                mat_unit = mat_unit_obj.name if hasattr(mat_unit_obj, 'name') else str(mat_unit_obj)
+
+                                # --- Unit Conversion Logic Placeholder ---
+                                # TODO: Implement robust unit conversion if needed
+                                cost_multiplier = 1.0
+                                if unit_needed.lower() != mat_unit.lower():
+                                    logger.warning(
+                                        f"Unit mismatch for material {mat_id} ('{mat_name}'): Pattern requires '{unit_needed}', Material cost is per '{mat_unit}'. Cost calculation might be inaccurate without conversion logic.")
+                                    breakdown["errors"].append(
+                                        f"Unit mismatch for material {mat_id} ('{mat_name}'). Check pattern requirements vs material definition.")
+                                    # Example: If conversion is impossible, maybe skip or use multiplier 1?
+                                    # cost_multiplier = get_conversion_factor(mat_unit, unit_needed) # Hypothetical function
+
+                                # Calculate total cost for this material
+                                material_total_cost = quantity_needed * mat_cost_per_unit * cost_multiplier
+                                breakdown["material_costs"] += material_total_cost
+
+                                # Add detail to the breakdown
+                                breakdown["materials_detail"].append({
+                                    "material_id": mat_id,
+                                    "name": mat_name,
+                                    "type": mat_type,
+                                    "quantity_required": round(quantity_needed, 4),
+                                    "unit_required": unit_needed,
+                                    "cost_per_unit": round(mat_cost_per_unit, 4),  # Cost per material's base unit
+                                    "material_base_unit": mat_unit,
+                                    "total_cost": round(material_total_cost, 2)
+                                })
+
+                            except ValueError:
+                                logger.warning(
+                                    f"Invalid material ID format '{mat_id_str}' in requirements for pattern {pattern_id}.")
+                                breakdown["errors"].append(f"Invalid material ID format: {mat_id_str}")
+                            except EntityNotFoundException as enf_mat:
+                                # Catch if material_service.get_by_id raises this
+                                logger.warning(f"Material referenced by pattern not found: {enf_mat}")
+                                breakdown["errors"].append(f"Material ID {mat_id_str} not found.")
+                            except Exception as mat_err:
+                                logger.error(
+                                    f"Error processing material {mat_id_str} for product {product_id}: {mat_err}",
+                                    exc_info=True)
+                                breakdown["errors"].append(
+                                    f"Error processing material {mat_id_str}: {str(mat_err)[:100]}")  # Limit error message length
+
+                except EntityNotFoundException as e:
+                    # This catches if pattern_service.get_material_requirements... raises EntityNotFound for the pattern
+                    logger.warning(f"Pattern {pattern_id} not found for product {product_id} cost calculation: {e}")
+                    breakdown["errors"].append(f"Pattern {pattern_id} not found.")
+                except NotImplementedError as e:
+                    logger.error(f"Missing required service method for cost calculation: {e}")
+                    breakdown["errors"].append(f"Service method missing: {e}")
+                    # Optionally re-raise as HideSyncException if critical
+                    # raise HideSyncException("Internal configuration error for cost calculation.") from e
+                except Exception as e:
+                    logger.error(f"Error calculating material costs for product {product_id}: {e}", exc_info=True)
+                    breakdown["errors"].append(f"Unexpected error during material cost calculation: {str(e)}")
+                    # Decide if this should be a critical failure
+
+            # 5. --- Sum Total Calculated Cost ---
+            breakdown["total_calculated_cost"] = round(
+                breakdown["material_costs"] + breakdown["labor_costs"] + breakdown["overhead_costs"],
+                2
+            )
+
+            # 6. --- Update Product Record in Database ---
+            # Use a transaction to ensure atomicity if needed (though update is usually atomic)
             try:
-                # Assume pattern service returns dict like: { "material_id": {"quantity_required": X, "unit": "Y", ...} }
-                # This method might need adjustments based on actual PatternService implementation
-                if not hasattr(self.pattern_service, 'get_material_requirements_for_pattern'):
-                     raise NotImplementedError("PatternService needs 'get_material_requirements_for_pattern'")
+                with self.transaction():  # Use the service's transaction context manager
+                    # Prepare data for update, ensuring JSON serialization
+                    # Store the detailed breakdown as JSON string
+                    cost_update_data = {
+                        "cost_breakdown": json.dumps(breakdown, default=str),
+                        # Use default=str for non-serializable types like datetime
+                        "total_cost": breakdown["total_calculated_cost"]
+                    }
+                    # Use the repository's update method
+                    updated_product = self.repository.update(product_id, cost_update_data)
+                    if not updated_product:
+                        # This shouldn't happen if the product existed initially
+                        logger.error(f"Failed to update product {product_id} in DB after cost calculation.")
+                        breakdown["errors"].append("Failed to save calculated costs to product record.")
+                        # Raise an exception here if saving is critical
+                        raise HideSyncException(f"Failed to save calculated costs for product {product_id}")
+                    else:
+                        logger.info(
+                            f"Successfully updated cost breakdown and total cost for product ID {product_id}. New total cost: {breakdown['total_calculated_cost']}")
+                        # Invalidate cache only after successful update and commit
+                        self._invalidate_product_cache(product_id)
 
-                material_reqs = self.pattern_service.get_material_requirements_for_pattern(pattern_id)
-                logger.debug(f"Material requirements for pattern {pattern_id}: {material_reqs}")
+            except Exception as update_err:
+                # Catch errors during the update/commit phase
+                logger.error(f"Failed to save updated costs for product {product_id}: {update_err}", exc_info=True)
+                breakdown["errors"].append(f"Failed to save calculated costs to product record: {str(update_err)}")
+                # Decide if this should raise an exception or just be logged in the result
+                # raise HideSyncException(f"Failed to save calculated costs for product {product_id}") from update_err
 
-                if not material_reqs:
-                     logger.warning(f"No material requirements found for pattern {pattern_id}.")
-                     breakdown["errors"].append(f"No materials defined for pattern {pattern_id}.")
-
-                for mat_id_str, req_data in material_reqs.items():
-                    try:
-                        mat_id = int(mat_id_str) # Ensure ID is integer
-                        quantity_needed = float(req_data.get('quantity_required', 0.0))
-                        unit_needed = req_data.get('unit', 'unknown_unit')
-
-                        if quantity_needed <= 0:
-                            continue
-
-                        # Fetch material details for cost
-                        material = self.material_service.get_by_id(mat_id)
-                        if not material:
-                            error_msg = f"Material ID {mat_id} required by pattern {pattern_id} not found."
-                            logger.warning(error_msg)
-                            breakdown["errors"].append(error_msg)
-                            continue # Skip this material
-
-                        mat_cost_per_unit = getattr(material, 'cost', 0.0)
-                        mat_name = getattr(material, 'name', f"Material {mat_id}")
-                        mat_type = getattr(material, 'material_type', 'UNKNOWN').name if hasattr(getattr(material, 'material_type', None), 'name') else getattr(material, 'material_type', 'UNKNOWN')
-                        mat_unit = getattr(material, 'unit', 'unknown_unit').name if hasattr(getattr(material, 'unit', None), 'name') else getattr(material, 'unit', 'unknown_unit')
-
-
-                        # Basic Unit Conversion (Example - NEEDS ROBUST IMPLEMENTATION)
-                        # If required unit and material cost unit differ, attempt conversion
-                        cost_multiplier = 1.0
-                        if unit_needed.lower() != mat_unit.lower():
-                             # Add specific conversion logic here based on your units (e.g., sqft to hide piece)
-                             # This is complex and application specific!
-                             logger.warning(f"Unit mismatch for material {mat_id}: Required '{unit_needed}', Material cost unit '{mat_unit}'. Cost calculation might be inaccurate without conversion logic.")
-                             breakdown["errors"].append(f"Unit mismatch for material {mat_id} ('{mat_name}'). Check pattern requirements vs material definition.")
-                             # Example placeholder: Assume cost is per primary unit listed on material
-                             # cost_multiplier = get_conversion_factor(mat_unit, unit_needed)
-
-                        material_total_cost = quantity_needed * mat_cost_per_unit * cost_multiplier
-                        breakdown["material_costs"] += material_total_cost
-
-                        breakdown["materials_detail"].append({
-                            "material_id": mat_id,
-                            "name": mat_name,
-                            "type": mat_type,
-                            "quantity_required": round(quantity_needed, 4),
-                            "unit_required": unit_needed,
-                            "cost_per_unit": round(mat_cost_per_unit, 4), # Cost per material's base unit
-                            "material_base_unit": mat_unit,
-                            "total_cost": round(material_total_cost, 2)
-                        })
-
-                    except ValueError:
-                        logger.warning(f"Invalid material ID format '{mat_id_str}' in requirements for pattern {pattern_id}.")
-                        breakdown["errors"].append(f"Invalid material ID format: {mat_id_str}")
-                    except Exception as mat_err:
-                         logger.error(f"Error processing material {mat_id_str} for product {product_id}: {mat_err}", exc_info=True)
-                         breakdown["errors"].append(f"Error processing material {mat_id_str}: {str(mat_err)[:100]}") # Limit error message length
-
-            except EntityNotFoundException as e:
-                logger.warning(f"Pattern {pattern_id} not found for product {product_id} cost calculation: {e}")
-                breakdown["errors"].append(f"Pattern {pattern_id} not found.")
-            except NotImplementedError as e:
-                 logger.error(f"Missing required service method for cost calculation: {e}")
-                 breakdown["errors"].append(f"Service method missing: {e}")
-            except Exception as e:
-                 logger.error(f"Error calculating material costs for product {product_id}: {e}", exc_info=True)
-                 breakdown["errors"].append(f"Unexpected error during material cost calculation.")
-
-        # 4. Sum Total Calculated Cost
-        breakdown["total_calculated_cost"] = round(
-            breakdown["material_costs"] + breakdown["labor_costs"] + breakdown["overhead_costs"],
-            2
-        )
-
-        # 5. Update Product Record (only update costs, not details list)
-        # Use model_dump to serialize the breakdown dict correctly if needed by repo update
-        try:
-             cost_update_data = {
-                  "cost_breakdown": json.dumps(breakdown), # Store full breakdown as JSON
-                  "total_cost": breakdown["total_calculated_cost"]
-             }
-             self.repository.update(product_id, cost_update_data) # Use simple update
-             logger.info(f"Updated cost breakdown and total cost for product ID {product_id}. New total cost: {breakdown['total_calculated_cost']}")
-             # Invalidate cache after successful update
-             self._invalidate_product_cache(product_id)
-        except Exception as e:
-             logger.error(f"Failed to update product {product_id} with calculated costs: {e}", exc_info=True)
-             breakdown["errors"].append("Failed to save calculated costs to product record.")
-             # Decide if this should raise an exception or just be logged in the result
-
-        return breakdown # Return the detailed breakdown dictionary
+            # 7. Return the detailed breakdown dictionary (including any errors)
+            return breakdown

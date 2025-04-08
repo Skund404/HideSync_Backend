@@ -6,7 +6,7 @@ This module defines the Pattern model representing design templates for
 leatherworking projects. Patterns include design information, components,
 and metadata for project creation.
 """
-
+from datetime import datetime
 from typing import Dict, Any, ClassVar, Set
 import json  # Import json for handling tags
 
@@ -26,7 +26,8 @@ from app.db.models.base import AbstractBase, ValidationMixin, TimestampMixin
 
 # Import the necessary Enums
 from app.db.models.enums import ProjectType, SkillLevel, FileType  # <<< ADD FileType
-
+import logging
+logger = logging.getLogger(__name__)
 
 class Pattern(AbstractBase, ValidationMixin, TimestampMixin):
     """
