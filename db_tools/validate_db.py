@@ -34,17 +34,14 @@ except ImportError as e:
     sys.exit(1)
 
 # List of all expected tables in the database based on the ER diagram
-EXPECTED_TABLES = [
+EXPECTED_TABLES = sorted([
     # Core entities
     "users",
     "roles",
     "permissions",
     "customers",
     "suppliers",
-    "materials",
-    "leather_materials",
-    "hardware_materials",
-    "supplies_materials",
+    "materials", # Base table for STI
     "tools",
     "products",
     "components",
@@ -57,6 +54,7 @@ EXPECTED_TABLES = [
     "projects",
     "project_templates",
     "project_components",
+    "project_template_components", # Added
     "timeline_tasks",
     "recurring_projects",
     "recurrence_patterns",
@@ -69,7 +67,7 @@ EXPECTED_TABLES = [
     # Purchasing system
     "purchases",
     "purchase_items",
-    "purchase_timeline_items",
+    # "purchase_timeline_items", # Removed - No model provided
     # Tool management
     "tool_maintenance",
     "tool_checkouts",
@@ -79,6 +77,7 @@ EXPECTED_TABLES = [
     "picking_list_items",
     # Inventory management
     "inventory",
+    "inventory_transactions", # Added
     "component_materials",
     # Documentation system
     "documentation_categories",
@@ -89,12 +88,23 @@ EXPECTED_TABLES = [
     # Platform integration
     "platform_integrations",
     "sync_events",
+    "customer_platform_integration", # Added
     # Media system
     "media_assets",
-    "media_tags",
+    "tags", # Corrected from media_tags
     "media_asset_tags",
     "entity_media",
-]
+    # Auth / User related
+    "password_reset_tokens", # Added
+    "user_role", # Added
+    "role_permission", # Added
+    # Other
+    "annotations", # Added
+    "customer_communication", # Added
+    "file_meta_data", # Added
+    "supplier_history", # Added
+    "supplier_rating", # Added
+])
 
 
 def validate_database():
