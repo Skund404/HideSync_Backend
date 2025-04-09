@@ -23,7 +23,7 @@ from sqlalchemy import (
     Boolean,
     Index,
 )
-from sqlalchemy.orm import relationship, validates
+from sqlalchemy.orm import relationship, validates, Mapped
 from sqlalchemy.ext.hybrid import hybrid_property
 
 from app.db.models.base import AbstractBase, ValidationMixin, TimestampMixin
@@ -97,14 +97,14 @@ class Supplier(AbstractBase, ValidationMixin, TimestampMixin):
     min_order_amount = Column(String(50))
     lead_time = Column(String(50))
 
-    # Relationships
-    materials = relationship("Material", back_populates="supplier_rel")
-    purchases = relationship("Purchase", back_populates="supplier_rel")
-    tools = relationship("Tool", back_populates="supplier_rel")
-    status_history = relationship(
+    # Relationships - Updated for SQLAlchemy 2.0
+    materials: Mapped[List["Material"]] = relationship("Material", back_populates="supplier_rel")
+    purchases: Mapped[List["Purchase"]] = relationship("Purchase", back_populates="supplier_rel")
+    tools: Mapped[List["Tool"]] = relationship("Tool", back_populates="supplier_rel")
+    status_history: Mapped[List["SupplierHistory"]] = relationship(
         "SupplierHistory", back_populates="supplier", cascade="all, delete-orphan"
     )
-    rating_history = relationship(
+    rating_history: Mapped[List["SupplierRating"]] = relationship(
         "SupplierRating", back_populates="supplier", cascade="all, delete-orphan"
     )
 

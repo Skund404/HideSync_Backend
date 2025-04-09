@@ -23,6 +23,18 @@ class ToolSearchParams(BaseModel):
     supplier_id: Optional[int] = Field(None, description="Filter by supplier ID")
 
 
+class SupplierSummary(BaseModel):
+    """
+    Summary schema for supplier information when related to a tool.
+    """
+    id: int = Field(..., description="Supplier ID")
+    name: str = Field(..., description="Supplier name")
+    category: Optional[str] = Field(None, description="Supplier category")
+
+    class Config:
+        from_attributes = True
+
+
 class ToolMaintenanceBase(BaseModel):
     tool_id: int = Field(..., description="ID of the tool")
     tool_name: Optional[str] = Field(None, description="Name of the tool (denormalized)")
@@ -191,6 +203,10 @@ class ToolCheckout(ToolCheckoutBase):
     created_at: Any = Field(None, description="Creation timestamp")
     updated_at: Any = Field(None, description="Last update timestamp")
 
+    # Add hybrid properties from the model
+    is_overdue: Optional[bool] = Field(None, description="Whether the checkout is overdue")
+    days_overdue: Optional[int] = Field(None, description="Number of days overdue")
+
     @field_validator("returned_date", "created_at", "updated_at")
     @classmethod
     def validate_datetimes(cls, v, info):
@@ -225,6 +241,13 @@ class ToolBase(BaseModel):
         if v is not None and not isinstance(v, date):
             raise ValueError("Purchase date must be a valid date")
         return v
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v):
+        if not v or len(v.strip()) < 3:
+            raise ValueError("Tool name must be at least 3 characters")
+        return v.strip()
 
 
 class ToolCreate(ToolBase):
@@ -283,6 +306,13 @@ class ToolUpdate(BaseModel):
             raise ValueError(f"{field_name} must be a valid date")
         return v
 
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v):
+        if v is not None and (not v or len(v.strip()) < 3):
+            raise ValueError("Tool name must be at least 3 characters")
+        return v.strip() if v is not None else v
+
 
 class Tool(ToolBase):
     id: int = Field(..., description="Unique identifier")
@@ -293,6 +323,14 @@ class Tool(ToolBase):
     due_date: Any = Field(None, description="Date when the tool is due to be returned")
     created_at: Any = Field(None, description="Creation timestamp")
     updated_at: Any = Field(None, description="Last update timestamp")
+
+    # Add hybrid properties from the model
+    is_checked_out: bool = Field(False, description="Whether the tool is currently checked out")
+    maintenance_due: bool = Field(False, description="Whether maintenance is due")
+    days_since_purchase: Optional[int] = Field(None, description="Days since purchase")
+
+    # Add relationship to supplier
+    supplier_rel: Optional[SupplierSummary] = Field(None, description="Related supplier")
 
     @field_validator("last_maintenance", "next_maintenance")
     @classmethod
