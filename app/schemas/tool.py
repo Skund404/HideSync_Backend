@@ -3,15 +3,62 @@
 Tool schemas for the HideSync API.
 
 This module contains Pydantic models for tool management, including tools,
-maintenance, and checkouts. Date/time fields align with database types.
+maintenance, and checkouts. Uses Any for input date fields with 'before'
+validators and specific types for response models using from_attributes.
 """
 
 from datetime import datetime, date
 from typing import Dict, List, Optional, Any, Union
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict # Import ConfigDict for Pydantic v2+
+import logging
 
 from app.db.models.enums import ToolCategory
 
+logger = logging.getLogger(__name__)
+
+# --- Helper functions for parsing (Keep as before) ---
+def parse_date_string(value: Any, field_name: str) -> Optional[date]:
+    """Attempts to parse various inputs (str, date, datetime) into a date object."""
+    if value is None or value == "": return None
+    if isinstance(value, date): return value
+    if isinstance(value, datetime): return value.date()
+    if isinstance(value, str):
+        try: return date.fromisoformat(value)
+        except ValueError:
+            try:
+                date_part = value.split('T')[0].split(' ')[0]
+                return date.fromisoformat(date_part)
+            except ValueError:
+                 logger.warning(f"Pydantic validator failed date parse: '{value}' for '{field_name}'.")
+                 raise ValueError(f"Invalid date format for {field_name}. Expected YYYY-MM-DD.")
+    raise ValueError(f"Invalid type for {field_name}: {type(value)}. Expected date string or object.")
+
+def parse_datetime_string(value: Any, field_name: str) -> Optional[datetime]:
+    """Attempts to parse various inputs (str, date, datetime) into a datetime object."""
+    if value is None or value == "": return None
+    if isinstance(value, datetime): return value
+    if isinstance(value, date): return datetime.combine(value, datetime.min.time())
+    if isinstance(value, str):
+        try:
+            base_value = value.split('.')[0]
+            if 'Z' in base_value: clean_value = base_value.replace('Z', '+00:00')
+            elif '+' in base_value or '-' in base_value[1:]: clean_value = base_value
+            else: clean_value = base_value
+            iso_compliant_value = clean_value.replace(' ', 'T')
+            return datetime.fromisoformat(iso_compliant_value)
+        except ValueError:
+            try:
+                 date_part = value.split('T')[0].split(' ')[0]
+                 parsed_date = date.fromisoformat(date_part)
+                 logger.warning(f"Pydantic validator parsed only date part: '{value}' for '{field_name}'.")
+                 return datetime.combine(parsed_date, datetime.min.time())
+            except ValueError:
+                 logger.warning(f"Pydantic validator failed datetime parse: '{value}' for '{field_name}'.")
+                 raise ValueError(f"Invalid datetime format for {field_name}. Expected ISO 8601 format.")
+    raise ValueError(f"Invalid type for {field_name}: {type(value)}. Expected datetime string or object.")
+
+
+# --- Schemas ---
 
 class ToolSearchParams(BaseModel):
     category: Optional[str] = Field(None, description="Filter by tool category")
@@ -24,25 +71,18 @@ class ToolSearchParams(BaseModel):
 
 
 class SupplierSummary(BaseModel):
-    """
-    Summary schema for supplier information when related to a tool.
-    """
     id: int = Field(..., description="Supplier ID")
     name: str = Field(..., description="Supplier name")
     category: Optional[str] = Field(None, description="Supplier category")
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ToolMaintenanceBase(BaseModel):
+    # Use Any for input flexibility, validator handles conversion
     tool_id: int = Field(..., description="ID of the tool")
     tool_name: Optional[str] = Field(None, description="Name of the tool (denormalized)")
     maintenance_type: str = Field(..., description="Type of maintenance")
-
-    # Keep the type as Any but use Field() with description
-    date: Any = Field(None, description="Maintenance date")
-
+    date: Optional[Any] = Field(None, description="Maintenance date (YYYY-MM-DD)")
     performed_by: Optional[str] = Field(None, description="Person who performed the maintenance")
     cost: Optional[float] = Field(None, ge=0, description="Cost of maintenance")
     internal_service: Optional[bool] = Field(True, description="Whether service was done internally")
@@ -51,182 +91,150 @@ class ToolMaintenanceBase(BaseModel):
     condition_before: Optional[str] = Field(None, description="Tool condition before maintenance")
     condition_after: Optional[str] = Field(None, description="Tool condition after maintenance")
     status: str = Field("SCHEDULED", description="Maintenance status")
+    next_date: Optional[Any] = Field(None, description="Next scheduled maintenance date (YYYY-MM-DD)")
 
-    # Keep the type as Any but add description
-    next_date: Any = Field(None, description="Next scheduled maintenance date")
-
-    @field_validator("date")
+    @field_validator("date", "next_date", mode='before')
     @classmethod
-    def validate_date(cls, v):
-        if v is not None and not isinstance(v, date):
-            raise ValueError("Date must be a valid date type")
-        return v
-
-    @field_validator("next_date")
-    @classmethod
-    def validate_next_date(cls, v):
-        if v is not None and not isinstance(v, date):
-            raise ValueError("Next date must be a valid date type")
-        return v
+    def validate_maintenance_dates(cls, v: Any, info):
+        return parse_date_string(v, info.field_name)
 
 
 class ToolMaintenanceCreate(ToolMaintenanceBase):
-    # Require date for creation
-    date: Any = Field(..., description="Maintenance date")
-
+    date: Any = Field(..., description="Maintenance date (YYYY-MM-DD)")
     @field_validator("cost")
     @classmethod
-    def validate_cost(cls, v):
-        if v is not None and v < 0:
-            raise ValueError("Cost cannot be negative")
+    def validate_cost_positive(cls, v):
+        if v is not None and v < 0: raise ValueError("Cost cannot be negative")
         return v
 
 
 class ToolMaintenanceUpdate(BaseModel):
-    maintenance_type: Optional[str] = Field(None, description="Type of maintenance")
-    date: Any = Field(None, description="Maintenance date")
-    performed_by: Optional[str] = Field(None, description="Person who performed the maintenance")
-    cost: Optional[float] = Field(None, ge=0, description="Cost of maintenance")
-    internal_service: Optional[bool] = Field(None, description="Whether service was done internally")
-    details: Optional[str] = Field(None, description="Maintenance details")
-    parts: Optional[str] = Field(None, description="Parts used in maintenance")
-    condition_before: Optional[str] = Field(None, description="Tool condition before maintenance")
-    condition_after: Optional[str] = Field(None, description="Tool condition after maintenance")
-    status: Optional[str] = Field(None, description="Maintenance status")
-    next_date: Any = Field(None, description="Next scheduled maintenance date")
+    maintenance_type: Optional[str] = Field(None)
+    date: Optional[Any] = Field(None)
+    performed_by: Optional[str] = Field(None)
+    cost: Optional[float] = Field(None, ge=0)
+    internal_service: Optional[bool] = Field(None)
+    details: Optional[str] = Field(None)
+    parts: Optional[str] = Field(None)
+    condition_before: Optional[str] = Field(None)
+    condition_after: Optional[str] = Field(None)
+    status: Optional[str] = Field(None)
+    next_date: Optional[Any] = Field(None)
+
+    @field_validator("date", "next_date", mode='before')
+    @classmethod
+    def validate_maintenance_update_dates(cls, v: Any, info):
+        return parse_date_string(v, info.field_name)
 
     @field_validator("cost")
     @classmethod
-    def validate_cost(cls, v):
-        if v is not None and v < 0:
-            raise ValueError("Cost cannot be negative")
-        return v
-
-    @field_validator("date")
-    @classmethod
-    def validate_date(cls, v):
-        if v is not None and not isinstance(v, date):
-            raise ValueError("Date must be a valid date type")
-        return v
-
-    @field_validator("next_date")
-    @classmethod
-    def validate_next_date(cls, v):
-        if v is not None and not isinstance(v, date):
-            raise ValueError("Next date must be a valid date type")
+    def validate_cost_update(cls, v):
+        if v is not None and v < 0: raise ValueError("Cost cannot be negative")
         return v
 
 
+# --- CORRECTED RESPONSE SCHEMA ---
 class ToolMaintenance(ToolMaintenanceBase):
+    # Response model - Inherits non-date fields from Base
     id: int = Field(..., description="Unique identifier")
-    created_at: Any = Field(None, description="Creation timestamp")
-    updated_at: Any = Field(None, description="Last update timestamp")
 
-    @field_validator("created_at", "updated_at")
-    @classmethod
-    def validate_timestamps(cls, v, info):
-        if v is not None and not isinstance(v, datetime):
-            raise ValueError(f"{info.field_name} must be a valid datetime")
-        return v
+    # --- FIX: Use specific types WITHOUT Field() for response ---
+    date: Optional[date] # Field details inherited from Base, type overridden
+    next_date: Optional[date] # Field details inherited from Base, type overridden
+    created_at: Optional[datetime]
+    updated_at: Optional[datetime]
+    # --- END FIX ---
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ToolCheckoutBase(BaseModel):
+    # Use Any for input flexibility, validator handles conversion
     tool_id: int = Field(..., description="ID of the tool")
     tool_name: Optional[str] = Field(None, description="Name of the tool (denormalized)")
     checked_out_by: str = Field(..., description="Person checking out the tool")
-    checked_out_date: Any = Field(..., description="Date and time when the tool was checked out")
-    due_date: Any = Field(..., description="Date when the tool is due to be returned")
+    checked_out_date: Optional[Any] = Field(None, description="Date and time checked out (ISO Format)")
+    due_date: Optional[Any] = Field(None, description="Date due back (YYYY-MM-DD)")
     project_id: Optional[int] = Field(None, description="ID of associated project")
     project_name: Optional[str] = Field(None, description="Name of the project (denormalized)")
     notes: Optional[str] = Field(None, description="Additional notes")
     status: str = Field("CHECKED_OUT", description="Checkout status")
     condition_before: Optional[str] = Field(None, description="Tool condition at checkout")
 
-    @field_validator("checked_out_date")
+    @field_validator("checked_out_date", mode='before')
     @classmethod
-    def validate_checked_out_date(cls, v):
-        if not isinstance(v, datetime):
-            raise ValueError("Checked out date must be a valid datetime")
-        return v
+    def validate_checked_out_date(cls, v: Any, info):
+        if v is None: return None
+        return parse_datetime_string(v, info.field_name)
 
-    @field_validator("due_date")
+    @field_validator("due_date", mode='before')
     @classmethod
-    def validate_due_date_type(cls, v):
-        if not isinstance(v, date):
-            raise ValueError("Due date must be a valid date")
-        return v
+    def validate_due_date_type(cls, v: Any, info):
+        return parse_date_string(v, info.field_name)
 
 
 class ToolCheckoutCreate(ToolCheckoutBase):
+    checked_out_date: Any = Field(..., description="Date and time checked out (ISO Format)")
+    due_date: Any = Field(..., description="Date due back (YYYY-MM-DD)")
+
     @field_validator("due_date")
     @classmethod
-    def validate_due_date(cls, v, info):
-        values = info.data
-        if "checked_out_date" in values and isinstance(values["checked_out_date"], datetime):
-            checkout_dt = values["checked_out_date"]
-            if isinstance(v, date) and v < checkout_dt.date():
-                raise ValueError("Due date cannot be before checkout date")
+    def check_due_date_after_checkout(cls, v: Optional[date], info):
+        if v is not None and info.data.get('checked_out_date') is not None:
+            checkout_dt = info.data['checked_out_date']
+            if isinstance(checkout_dt, datetime) and v < checkout_dt.date():
+                 raise ValueError("Due date cannot be before checkout date")
         return v
 
 
 class ToolCheckoutUpdate(BaseModel):
-    due_date: Any = Field(None, description="Updated due date")
-    returned_date: Any = Field(None, description="Date and time when the tool was returned")
+    due_date: Optional[Any] = Field(None, description="Updated due date (YYYY-MM-DD)")
+    returned_date: Optional[Any] = Field(None, description="Date and time returned (ISO Format)")
     condition_after: Optional[str] = Field(None, description="Tool condition after return")
     notes: Optional[str] = Field(None, description="Updated notes")
     status: Optional[str] = Field(None, description="Updated status")
     issue_description: Optional[str] = Field(None, description="Description of any issues")
 
-    @field_validator("due_date")
+    @field_validator("due_date", mode='before')
     @classmethod
-    def validate_due_date(cls, v):
-        if v is not None and not isinstance(v, date):
-            raise ValueError("Due date must be a valid date")
-        return v
+    def validate_update_due_date(cls, v: Any, info):
+        return parse_date_string(v, info.field_name)
 
-    @field_validator("returned_date")
+    @field_validator("returned_date", mode='before')
     @classmethod
-    def validate_returned_date(cls, v):
-        if v is not None and not isinstance(v, datetime):
-            raise ValueError("Returned date must be a valid datetime")
-        return v
+    def validate_update_returned_date(cls, v: Any, info):
+        return parse_datetime_string(v, info.field_name)
 
 
+# --- CORRECTED RESPONSE SCHEMA ---
 class ToolCheckout(ToolCheckoutBase):
     id: int = Field(..., description="Unique identifier")
-    returned_date: Any = Field(None, description="Date and time when the tool was returned")
-    condition_after: Optional[str] = Field(None, description="Tool condition after return")
-    issue_description: Optional[str] = Field(None, description="Description of any issues")
-    created_at: Any = Field(None, description="Creation timestamp")
-    updated_at: Any = Field(None, description="Last update timestamp")
 
-    # Add hybrid properties from the model
-    is_overdue: Optional[bool] = Field(None, description="Whether the checkout is overdue")
-    days_overdue: Optional[int] = Field(None, description="Number of days overdue")
+    # --- FIX: Use specific types WITHOUT Field() for response ---
+    checked_out_date: Optional[datetime]
+    due_date: Optional[date]
+    returned_date: Optional[datetime] = None # Still optional
+    created_at: Optional[datetime]
+    updated_at: Optional[datetime]
+    # --- END FIX ---
 
-    @field_validator("returned_date", "created_at", "updated_at")
-    @classmethod
-    def validate_datetimes(cls, v, info):
-        if v is not None and not isinstance(v, datetime):
-            raise ValueError(f"{info.field_name} must be a valid datetime")
-        return v
+    # Inherited fields like condition_after, issue_description are already Optional[str]
+    is_overdue: Optional[bool] = None # Keep defaults as None or False as appropriate
+    days_overdue: Optional[int] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ToolBase(BaseModel):
-    name: str = Field(..., description="Tool name")
+    # Use Any for input flexibility, validator handles conversion
+    name: str = Field(..., min_length=3, description="Tool name")
     description: Optional[str] = Field(None, description="Tool description")
     category: ToolCategory = Field(..., description="Tool category")
     brand: Optional[str] = Field(None, description="Tool brand/manufacturer")
     model: Optional[str] = Field(None, description="Model number/name")
     serial_number: Optional[str] = Field(None, description="Serial number")
     purchase_price: Optional[float] = Field(None, ge=0, description="Purchase price")
-    purchase_date: Any = Field(None, description="Purchase date")
+    purchase_date: Optional[Any] = Field(None, description="Purchase date (YYYY-MM-DD)")
     specifications: Optional[str] = Field(None, description="Technical specifications")
     status: str = Field("IN_STOCK", description="Current status")
     location: Optional[str] = Field(None, description="Storage location")
@@ -235,148 +243,120 @@ class ToolBase(BaseModel):
     supplier: Optional[str] = Field(None, description="Supplier name (denormalized)")
     supplier_id: Optional[int] = Field(None, description="Supplier ID")
 
-    @field_validator("purchase_date")
+    @field_validator("purchase_date", mode='before')
     @classmethod
-    def validate_purchase_date(cls, v):
-        if v is not None and not isinstance(v, date):
-            raise ValueError("Purchase date must be a valid date")
-        return v
+    def validate_base_purchase_date(cls, v: Any, info):
+        return parse_date_string(v, info.field_name)
 
     @field_validator("name")
     @classmethod
-    def validate_name(cls, v):
-        if not v or len(v.strip()) < 3:
-            raise ValueError("Tool name must be at least 3 characters")
+    def validate_name_strip(cls, v: str):
+        if len(v.strip()) < 3: raise ValueError("Tool name must be at least 3 characters")
         return v.strip()
 
 
 class ToolCreate(ToolBase):
-    next_maintenance: Any = Field(None, description="Next maintenance date")
-    name: str = Field(..., description="Tool name")
+    name: str = Field(..., min_length=3, description="Tool name")
     category: ToolCategory = Field(..., description="Tool category")
-    status: str = Field("IN_STOCK", description="Current status")
     location: str = Field(..., description="Storage location")
+    status: str = Field("IN_STOCK", description="Current status")
+    next_maintenance: Optional[Any] = Field(None, description="Next maintenance date (YYYY-MM-DD)")
 
-    @field_validator("next_maintenance")
+    @field_validator("next_maintenance", mode='before')
     @classmethod
-    def validate_next_maintenance(cls, v):
-        if v is not None and not isinstance(v, date):
-            raise ValueError("Next maintenance date must be a valid date")
-        return v
+    def validate_create_next_maintenance(cls, v: Any, info):
+        return parse_date_string(v, info.field_name)
 
 
 class ToolUpdate(BaseModel):
-    name: Optional[str] = Field(None, description="Tool name")
+    # Use Any for input flexibility, validator handles conversion
+    name: Optional[str] = Field(None, min_length=3, description="Tool name")
     description: Optional[str] = Field(None, description="Tool description")
     category: Optional[ToolCategory] = Field(None, description="Tool category")
     brand: Optional[str] = Field(None, description="Tool brand/manufacturer")
     model: Optional[str] = Field(None, description="Model number/name")
     serial_number: Optional[str] = Field(None, description="Serial number")
     purchase_price: Optional[float] = Field(None, ge=0, description="Purchase price")
-    purchase_date: Any = Field(None, description="Purchase date")
+    purchase_date: Optional[Any] = Field(None, description="Purchase date (YYYY-MM-DD)")
     specifications: Optional[str] = Field(None, description="Technical specifications")
     status: Optional[str] = Field(None, description="Current status")
     location: Optional[str] = Field(None, description="Storage location")
     image: Optional[str] = Field(None, description="Image URL/path")
-    last_maintenance: Any = Field(None, description="Last maintenance date")
-    next_maintenance: Any = Field(None, description="Next maintenance date")
+    last_maintenance: Optional[Any] = Field(None, description="Last maintenance date (YYYY-MM-DD)")
+    next_maintenance: Optional[Any] = Field(None, description="Next maintenance date (YYYY-MM-DD)")
     maintenance_interval: Optional[int] = Field(None, gt=0, description="Maintenance interval in days")
     supplier: Optional[str] = Field(None, description="Supplier name")
     supplier_id: Optional[int] = Field(None, description="Supplier ID")
+    status_change_reason: Optional[str] = Field(None, description="Reason for status change")
+
+    @field_validator("purchase_date", "last_maintenance", "next_maintenance", mode='before')
+    @classmethod
+    def validate_update_dates(cls, v: Any, info):
+        return parse_date_string(v, info.field_name)
 
     @field_validator("purchase_price")
     @classmethod
     def validate_price(cls, v):
-        if v is not None and v < 0:
-            raise ValueError("Purchase price cannot be negative")
+        if v is not None and v < 0: raise ValueError("Purchase price cannot be negative")
         return v
 
     @field_validator("maintenance_interval")
     @classmethod
     def validate_maintenance_interval(cls, v):
-        if v is not None and v <= 0:
-            raise ValueError("Maintenance interval must be positive")
-        return v
-
-    @field_validator("purchase_date", "last_maintenance", "next_maintenance")
-    @classmethod
-    def validate_dates(cls, v, info):
-        field_name = info.field_name
-        if v is not None and not isinstance(v, date):
-            raise ValueError(f"{field_name} must be a valid date")
+        if v is not None and v <= 0: raise ValueError("Maintenance interval must be positive")
         return v
 
     @field_validator("name")
     @classmethod
-    def validate_name(cls, v):
-        if v is not None and (not v or len(v.strip()) < 3):
-            raise ValueError("Tool name must be at least 3 characters")
-        return v.strip() if v is not None else v
+    def validate_update_name(cls, v):
+        if v is not None:
+            if len(v.strip()) < 3: raise ValueError("Tool name must be at least 3 characters")
+            return v.strip()
+        return v
 
 
+# --- CORRECTED RESPONSE SCHEMA ---
 class Tool(ToolBase):
     id: int = Field(..., description="Unique identifier")
-    last_maintenance: Any = Field(None, description="Last maintenance date")
-    next_maintenance: Any = Field(None, description="Next maintenance date")
-    checked_out_to: Optional[str] = Field(None, description="Person who has the tool checked out")
-    checked_out_date: Any = Field(None, description="Date and time when the tool was checked out")
-    due_date: Any = Field(None, description="Date when the tool is due to be returned")
-    created_at: Any = Field(None, description="Creation timestamp")
-    updated_at: Any = Field(None, description="Last update timestamp")
 
-    # Add hybrid properties from the model
-    is_checked_out: bool = Field(False, description="Whether the tool is currently checked out")
-    maintenance_due: bool = Field(False, description="Whether maintenance is due")
-    days_since_purchase: Optional[int] = Field(None, description="Days since purchase")
+    # --- FIX: Use specific types WITHOUT Field() for response ---
+    purchase_date: Optional[date]
+    last_maintenance: Optional[date]
+    next_maintenance: Optional[date]
+    checked_out_date: Optional[datetime]
+    due_date: Optional[date]
+    created_at: Optional[datetime]
+    updated_at: Optional[datetime]
+    # --- END FIX ---
 
-    # Add relationship to supplier
-    supplier_rel: Optional[SupplierSummary] = Field(None, description="Related supplier")
+    # Other fields inherited or explicitly defined
+    checked_out_to: Optional[str] = None # Explicitly None default
 
-    @field_validator("last_maintenance", "next_maintenance")
-    @classmethod
-    def validate_dates(cls, v, info):
-        field_name = info.field_name
-        if v is not None and not isinstance(v, date):
-            raise ValueError(f"{field_name} must be a valid date")
-        return v
+    is_checked_out: Optional[bool] = False # Explicitly False default
+    maintenance_due: Optional[bool] = False # Explicitly False default
+    days_since_purchase: Optional[int] = None # Explicitly None default
+    supplier_rel: Optional[SupplierSummary] = None # Explicitly None default
 
-    @field_validator("checked_out_date", "created_at", "updated_at")
-    @classmethod
-    def validate_datetimes(cls, v, info):
-        field_name = info.field_name
-        if v is not None and not isinstance(v, datetime):
-            raise ValueError(f"{field_name} must be a valid datetime")
-        return v
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ToolWithHistory(Tool):
-    maintenance_history: List["ToolMaintenance"] = Field([], description="Maintenance history")
-    checkout_history: List["ToolCheckout"] = Field([], description="Checkout history")
-
-    class Config:
-        from_attributes = True
+    maintenance_history: List[ToolMaintenance] = Field([], description="Maintenance history")
+    checkout_history: List[ToolCheckout] = Field([], description="Checkout history")
+    model_config = ConfigDict(from_attributes=True)
 
 
 class MaintenanceScheduleItem(BaseModel):
     tool_id: int = Field(..., description="Tool ID")
     tool_name: str = Field(..., description="Tool name")
     maintenance_type: str = Field(..., description="Maintenance type")
-    scheduled_date: Any = Field(..., description="Scheduled date")
+    scheduled_date: date = Field(..., description="Scheduled date")
     category: ToolCategory = Field(..., description="Tool category")
     status: str = Field(..., description="Maintenance status (e.g., SCHEDULED)")
     location: Optional[str] = Field(None, description="Tool location")
     is_overdue: bool = Field(False, description="Whether maintenance is overdue")
     days_until_due: Optional[int] = Field(None, description="Days until maintenance is due")
-
-    @field_validator("scheduled_date")
-    @classmethod
-    def validate_scheduled_date(cls, v):
-        if not isinstance(v, date):
-            raise ValueError("Scheduled date must be a valid date")
-        return v
+    model_config = ConfigDict(from_attributes=True)
 
 
 class MaintenanceSchedule(BaseModel):
@@ -384,13 +364,6 @@ class MaintenanceSchedule(BaseModel):
     total_items: int = Field(..., description="Total number of scheduled maintenance items")
     overdue_items: int = Field(..., description="Number of overdue maintenance items")
     upcoming_items: int = Field(..., description="Number of upcoming maintenance items")
-    start_date: Any = Field(..., description="Start date of the schedule")
-    end_date: Any = Field(..., description="End date of the schedule")
-
-    @field_validator("start_date", "end_date")
-    @classmethod
-    def validate_dates(cls, v, info):
-        field_name = info.field_name
-        if not isinstance(v, date):
-            raise ValueError(f"{field_name} must be a valid date")
-        return v
+    start_date: date = Field(..., description="Start date of the schedule")
+    end_date: date = Field(..., description="End date of the schedule")
+    model_config = ConfigDict(from_attributes=True)

@@ -13,7 +13,7 @@ import re
 import logging
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Type
-from datetime import datetime
+from datetime import datetime, date # Import date
 from enum import Enum
 
 # Add project root to Python path
@@ -224,8 +224,9 @@ def seed_database(seed_data: Dict[str, List[Dict[str, Any]]], db_path: str) -> b
                 cursor.execute(f"PRAGMA table_info({entity_type});")
                 columns_info = cursor.fetchall()
                 valid_columns = {col[1] for col in columns_info}
+                # Store column type info (name -> upper case type)
                 column_types = {col[1]: col[2].upper() for col in columns_info}
-                logger.debug(f"Schema for {entity_type}: {valid_columns}")
+                logger.debug(f"Schema for {entity_type}: Columns={valid_columns}, Types={column_types}")
                 if not valid_columns: raise ValueError(f"Table '{entity_type}' not found or has no columns.")
             except Exception as e:
                 logger.error(f"Fatal: Error getting schema for {entity_type}: {e}. Aborting seed.")
@@ -270,16 +271,33 @@ def seed_database(seed_data: Dict[str, List[Dict[str, Any]]], db_path: str) -> b
                             # Boolean conversion
                             elif isinstance(value, bool) and column_types.get(key) in ("INTEGER", "BOOLEAN"):
                                 filtered_data[key] = 1 if value else 0
-                            # Date/Time conversion
-                            elif isinstance(value, str) and value and column_types.get(key) in ("DATETIME", "TIMESTAMP", "DATE"):
-                                try:
-                                    clean_value = value[:-1] + "+00:00" if value.endswith("Z") else value
-                                    dt_obj = datetime.fromisoformat(clean_value)
-                                    # Use ISO 8601 format which SQLite handles well in TEXT columns
-                                    filtered_data[key] = dt_obj.isoformat()
-                                except (ValueError, TypeError):
-                                    logger.warning(f"Date parse error '{value}' for {entity_type}.{key}. Storing as TEXT.", exc_info=False)
+
+                            # --- START: MODIFIED DATE/TIME HANDLING ---
+                            elif isinstance(value, str) and value:
+                                target_db_type = column_types.get(key)
+                                if target_db_type == "DATE":
+                                    try:
+                                        # Attempt to parse as YYYY-MM-DD
+                                        date_obj = date.fromisoformat(value.split('T')[0]) # Take only date part
+                                        filtered_data[key] = date_obj.isoformat() # Store as YYYY-MM-DD string
+                                    except (ValueError, TypeError):
+                                        logger.warning(f"DATE parse error '{value}' for {entity_type}.{key}. Storing as original TEXT.", exc_info=False)
+                                        filtered_data[key] = value # Store original string if parse fails
+                                elif target_db_type in ("DATETIME", "TIMESTAMP"):
+                                     try:
+                                        # Attempt to parse as full ISO datetime
+                                        clean_value = value[:-1] + "+00:00" if value.endswith("Z") else value
+                                        dt_obj = datetime.fromisoformat(clean_value)
+                                        # Store as full ISO 8601 string
+                                        filtered_data[key] = dt_obj.isoformat()
+                                     except (ValueError, TypeError):
+                                         logger.warning(f"DATETIME parse error '{value}' for {entity_type}.{key}. Storing as original TEXT.", exc_info=False)
+                                         filtered_data[key] = value # Store original string if parse fails
+                                else:
+                                    # Not a date/datetime column, keep original string
                                     filtered_data[key] = value
+                            # --- END: MODIFIED DATE/TIME HANDLING ---
+
                             # Enum conversion
                             elif isinstance(value, Enum): filtered_data[key] = value.value
                             # Default
@@ -288,14 +306,13 @@ def seed_database(seed_data: Dict[str, List[Dict[str, Any]]], db_path: str) -> b
                         elif logger.level <= logging.DEBUG and key != 'id':
                             logger.debug(f"Skipping key '{key}' for {entity_type} (not in schema: {valid_columns})")
 
-                    # 3. Map Foreign Keys
+                    # 3. Map Foreign Keys (No changes needed here)
                     for key in list(filtered_data.keys()):
                         if key.endswith("_id") and filtered_data[key] is not None:
-                            if key == 'id' and entity_type != 'permissions': continue # Skip self-referencing PK
+                            if key == 'id' and entity_type != 'permissions': continue
 
-                            fk_original_id_str = str(filtered_data[key]) # Value from JSON/Overrides
+                            fk_original_id_str = str(filtered_data[key])
                             fk_entity_type = None
-                            # --- Simplified FK Mapping (Add more as needed) ---
                             type_map = {
                                 "supplier_id": "suppliers", "customer_id": "customers", "project_id": "projects",
                                 "product_id": "products", "tool_id": "tools", "material_id": "materials",
@@ -308,9 +325,9 @@ def seed_database(seed_data: Dict[str, List[Dict[str, Any]]], db_path: str) -> b
                                 "media_asset_id": "media_assets", "tag_id": "tags",
                                 "recurrence_pattern_id": "recurrence_patterns", "recurring_project_id": "recurring_projects",
                                 "processed_by": "users", "assigned_by": "users", "checked_out_by": "users"
+                                # Add more mappings as needed
                             }
                             fk_entity_type = type_map.get(key)
-                            # --------------------------------------------
 
                             if fk_entity_type:
                                 try:
@@ -321,11 +338,9 @@ def seed_database(seed_data: Dict[str, List[Dict[str, Any]]], db_path: str) -> b
                                         logger.debug(f"Mapped FK {entity_type}.{key}: JSON ID {fk_original_lookup_id} -> DB ID {mapped_fk_id}")
                                     else:
                                         logger.warning(f"FK Mapping MISS for {entity_type}.{key}: Original JSON ID {fk_original_lookup_id} not in mapped IDs for {fk_entity_type}.")
-                                        # Decide: fail, set NULL if allowed, or keep original (will likely fail)
-                                        # For now, let the constraint failure happen if needed
                                 except (ValueError, TypeError):
                                      logger.warning(f"Invalid FK value '{fk_original_id_str}' for {entity_type}.{key}. Keeping original.")
-                                     filtered_data[key] = fk_original_id_str # Keep potentially invalid value
+                                     filtered_data[key] = fk_original_id_str
 
                     # 4. Insert Data
                     if not filtered_data:

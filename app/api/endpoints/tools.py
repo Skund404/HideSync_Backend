@@ -346,6 +346,27 @@ def update_tool(
         # FIX: Use integer status code
         raise HTTPException(status_code=HTTP_500_INTERNAL_SERVER_ERROR, detail="Error updating tool.")
 
+@router.delete("/maintenance/{maintenance_id}", status_code=HTTP_204_NO_CONTENT)
+def delete_maintenance(
+    *,
+    db: Session = Depends(get_db),
+    maintenance_id: int = Path(..., ge=1),
+    current_user: Any = Depends(get_current_active_user)
+) -> None:
+    logger.info(f"User {current_user.id} deleting maintenance ID {maintenance_id}")
+    tool_service = ToolService(db)
+    try:
+        tool_service.delete_maintenance_record(maintenance_id, current_user.id)
+        logger.info(f"Maintenance {maintenance_id} deleted")
+        # No return content needed
+    except (MaintenanceNotFoundException, EntityNotFoundException) as e:
+        raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail=str(e))
+    except BusinessRuleException as e:
+        raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.error(f"Unexpected error deleting maintenance {maintenance_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=HTTP_500_INTERNAL_SERVER_ERROR, detail="Error deleting maintenance.")
+
 
 @router.delete("/{tool_id}", status_code=HTTP_204_NO_CONTENT)
 def delete_tool(
