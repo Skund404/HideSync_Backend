@@ -30,6 +30,7 @@ from app.services.base_service import BaseService
 
 logger = logging.getLogger(__name__)
 
+
 class AnnotationService(BaseService):
     """
     Service for annotation operations.
@@ -52,8 +53,7 @@ class AnnotationService(BaseService):
 
         # Any AnnotationService-specific initialization can go here
         # e.g., self.some_other_service = SomeOtherService(db)
-        logger.info("AnnotationService initialized.") # Add logging if desired
-
+        logger.info("AnnotationService initialized.")  # Add logging if desired
 
     def get_annotations(
         self,

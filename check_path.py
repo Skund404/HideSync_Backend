@@ -17,11 +17,9 @@ else:
     print("PROBLEM: Project root directory is NOT in sys.path.")
 
 print("\nChecking for 'app' directory...")
-app_dir = os.path.join(os.getcwd(), 'app')
+app_dir = os.path.join(os.getcwd(), "app")
 if os.path.isdir(app_dir):
     print(f"OK: Directory '{app_dir}' exists.")
 else:
-     print(f"PROBLEM: Directory '{app_dir}' does NOT exist or is not a directory.")
+    print(f"PROBLEM: Directory '{app_dir}' does NOT exist or is not a directory.")
 print("--- End Check ---")
-
-

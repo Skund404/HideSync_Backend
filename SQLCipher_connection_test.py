@@ -12,8 +12,9 @@ def test_sqlcipher_connection(key, db_path):
     """
     Attempt to directly connect to and interact with a SQLCipher database
     """
-    logging.basicConfig(level=logging.DEBUG,
-                        format='%(asctime)s - %(levelname)s - %(message)s')
+    logging.basicConfig(
+        level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s"
+    )
     logger = logging.getLogger(__name__)
 
     logger.info(f"Testing connection to database: {db_path}")
@@ -28,7 +29,7 @@ def test_sqlcipher_connection(key, db_path):
         key_methods = [
             f"PRAGMA key = \"x'{key}'\";",  # Hex-encoded key
             f"PRAGMA key = '{key}';",  # Raw key
-            f"PRAGMA key = \"x'{key[:32]}'\";"  # First 32 chars of hex key
+            f"PRAGMA key = \"x'{key[:32]}'\";",  # First 32 chars of hex key
         ]
 
         successful_method = None
@@ -69,13 +70,17 @@ def test_sqlcipher_connection(key, db_path):
 
         # Attempt to create a test table
         try:
-            cursor.execute("""
+            cursor.execute(
+                """
                 CREATE TABLE IF NOT EXISTS diagnostic_test (
                     id INTEGER PRIMARY KEY,
                     test_value TEXT
                 )
-            """)
-            cursor.execute("INSERT OR REPLACE INTO diagnostic_test (id, test_value) VALUES (1, 'SQLCipher Test')")
+            """
+            )
+            cursor.execute(
+                "INSERT OR REPLACE INTO diagnostic_test (id, test_value) VALUES (1, 'SQLCipher Test')"
+            )
             conn.commit()
 
             # Verify insertion
@@ -93,13 +98,13 @@ def test_sqlcipher_connection(key, db_path):
         logger.error(f"Connection failed: {conn_error}")
         return False
     finally:
-        if 'conn' in locals():
+        if "conn" in locals():
             conn.close()
 
 
 def main():
     # Read key from file
-    with open('/home/zombie/PycharmProjects/HideSync_Backend/dev_db.key', 'r') as f:
+    with open("/home/zombie/PycharmProjects/HideSync_Backend/dev_db.key", "r") as f:
         key = f.read().strip()
 
     # Database path

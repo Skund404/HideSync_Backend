@@ -27,10 +27,14 @@ def normalize_enum_values():
             table, column = table_col.split(".")
 
             for wrong, correct in fixes:
-                sql = text(f"UPDATE {table} SET {column} = :correct WHERE {column} = :wrong")
+                sql = text(
+                    f"UPDATE {table} SET {column} = :correct WHERE {column} = :wrong"
+                )
                 result = conn.execute(sql, {"wrong": wrong, "correct": correct})
                 if result.rowcount > 0:
-                    logger.info(f"Fixed {result.rowcount} rows in {table}.{column}: '{wrong}' → '{correct}'")
+                    logger.info(
+                        f"Fixed {result.rowcount} rows in {table}.{column}: '{wrong}' → '{correct}'"
+                    )
 
     logger.info("Database enum normalization complete")
 

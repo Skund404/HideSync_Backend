@@ -25,19 +25,21 @@ try:
     import pysqlcipher3.dbapi2 as sqlcipher
     from app.core.config import settings
     from app.core.key_manager import KeyManager
+
     # Import Enums needed for defaults
     from app.db.models.enums import InventoryStatus
 except ImportError as e:
     print(f"Error importing necessary modules: {e}")
-    print("Please ensure you are in the project root directory, the virtual environment is activated,")
+    print(
+        "Please ensure you are in the project root directory, the virtual environment is activated,"
+    )
     print("and all requirements from requirements.txt are installed.")
     sys.exit(1)
 # --- End Imports ---
 
 # --- Configuration ---
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -45,10 +47,11 @@ DB_PATH = os.path.abspath(settings.DATABASE_PATH)
 
 # Default values for new inventory records
 DEFAULT_QUANTITY = 0.0
-DEFAULT_STATUS = InventoryStatus.OUT_OF_STOCK.value # Use the enum's value
+DEFAULT_STATUS = InventoryStatus.OUT_OF_STOCK.value  # Use the enum's value
 DEFAULT_LOCATION = "Unassigned"
 DEFAULT_IS_ACTIVE = 1
 # --- End Configuration ---
+
 
 def connect_db(db_path: str, key: str) -> Optional[sqlcipher.Connection]:
     """Establishes a connection to the SQLCipher database."""
@@ -70,6 +73,7 @@ def connect_db(db_path: str, key: str) -> Optional[sqlcipher.Connection]:
         logger.error(f"Failed to connect or unlock database: {e}", exc_info=True)
         return None
 
+
 def get_all_product_ids(conn: sqlcipher.Connection) -> Set[int]:
     """Retrieves all product IDs from the products table."""
     ids = set()
@@ -83,6 +87,7 @@ def get_all_product_ids(conn: sqlcipher.Connection) -> Set[int]:
         logger.error(f"Error fetching product IDs: {e}", exc_info=True)
     return ids
 
+
 def get_existing_inventory_product_ids(conn: sqlcipher.Connection) -> Set[int]:
     """Retrieves item_ids for existing 'product' type inventory records."""
     ids = set()
@@ -93,15 +98,18 @@ def get_existing_inventory_product_ids(conn: sqlcipher.Connection) -> Set[int]:
         ids = {row[0] for row in rows}
         logger.info(f"Found {len(ids)} existing 'product' inventory records.")
     except Exception as e:
-        logger.error(f"Error fetching existing inventory product IDs: {e}", exc_info=True)
+        logger.error(
+            f"Error fetching existing inventory product IDs: {e}", exc_info=True
+        )
     return ids
+
 
 def insert_missing_inventory(conn: sqlcipher.Connection, product_id: int) -> bool:
     """Inserts a default inventory record for a given product ID."""
     try:
         cursor = conn.cursor()
         # now_iso = datetime.now(timezone.utc).isoformat() # No longer needed
-        new_uuid = uuid.uuid4().hex # Generate hex UUID
+        new_uuid = uuid.uuid4().hex  # Generate hex UUID
 
         # --- CORRECTED SQL: Removed createdAt and updatedAt ---
         sql = """
@@ -110,7 +118,7 @@ def insert_missing_inventory(conn: sqlcipher.Connection, product_id: int) -> boo
         VALUES (?, ?, ?, ?, ?, ?, ?)
         """
         params = (
-            'product',
+            "product",
             product_id,
             DEFAULT_QUANTITY,
             DEFAULT_STATUS,
@@ -118,16 +126,22 @@ def insert_missing_inventory(conn: sqlcipher.Connection, product_id: int) -> boo
             # now_iso, # REMOVED
             # now_iso, # REMOVED
             new_uuid,
-            DEFAULT_IS_ACTIVE
+            DEFAULT_IS_ACTIVE,
         )
         # --- END CORRECTION ---
 
         cursor.execute(sql, params)
-        logger.info(f"Successfully inserted default inventory record for product ID: {product_id}")
+        logger.info(
+            f"Successfully inserted default inventory record for product ID: {product_id}"
+        )
         return True
     except Exception as e:
-        logger.error(f"Error inserting inventory record for product ID {product_id}: {e}", exc_info=True)
+        logger.error(
+            f"Error inserting inventory record for product ID {product_id}: {e}",
+            exc_info=True,
+        )
         return False
+
 
 def main():
     """Finds missing inventory records and inserts defaults."""
@@ -158,9 +172,13 @@ def main():
         missing_ids = all_product_ids - existing_inventory_ids
 
         if not missing_ids:
-            logger.info("All products have corresponding inventory records. No action needed.")
+            logger.info(
+                "All products have corresponding inventory records. No action needed."
+            )
         else:
-            logger.warning(f"Found {len(missing_ids)} products missing inventory records: {sorted(list(missing_ids))}")
+            logger.warning(
+                f"Found {len(missing_ids)} products missing inventory records: {sorted(list(missing_ids))}"
+            )
             logger.info("Attempting to insert default inventory records...")
 
             for prod_id in sorted(list(missing_ids)):
@@ -172,22 +190,31 @@ def main():
             if failed_count == 0 and inserted_count > 0:
                 logger.info("Committing changes...")
                 connection.commit()
-                logger.info(f"Successfully inserted {inserted_count} missing inventory records.")
+                logger.info(
+                    f"Successfully inserted {inserted_count} missing inventory records."
+                )
             elif inserted_count > 0:
-                logger.warning(f"Inserted {inserted_count} records, but {failed_count} insertions failed. Committing successful inserts.")
+                logger.warning(
+                    f"Inserted {inserted_count} records, but {failed_count} insertions failed. Committing successful inserts."
+                )
                 connection.commit()
             else:
-                logger.error("All insertions failed. Rolling back any potential changes (though none should have occurred).")
-                connection.rollback() # Explicit rollback on complete failure
+                logger.error(
+                    "All insertions failed. Rolling back any potential changes (though none should have occurred)."
+                )
+                connection.rollback()  # Explicit rollback on complete failure
 
     except Exception as e:
-        logger.error(f"An unexpected error occurred during the process: {e}", exc_info=True)
+        logger.error(
+            f"An unexpected error occurred during the process: {e}", exc_info=True
+        )
         if connection:
             connection.rollback()
     finally:
         if connection:
             connection.close()
             logger.info("Database connection closed.")
+
 
 if __name__ == "__main__":
     main()

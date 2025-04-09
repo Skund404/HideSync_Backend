@@ -24,15 +24,16 @@ from app.core.key_manager import KeyManager
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
 
 def extract_tables(cursor):
     """Extract all tables from the database"""
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';")
+    cursor.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';"
+    )
     tables = [row[0] for row in cursor.fetchall()]
     logger.info(f"Found {len(tables)} tables")
     return tables
@@ -51,7 +52,7 @@ def extract_table_info(cursor, table_name):
             "type": row[2],
             "notNull": bool(row[3]),
             "defaultValue": row[4],
-            "primaryKey": bool(row[5])
+            "primaryKey": bool(row[5]),
         }
         columns.append(column)
 
@@ -73,7 +74,7 @@ def extract_foreign_keys(cursor, table_name):
             "to": row[4],
             "onUpdate": row[5],
             "onDelete": row[6],
-            "match": row[7]
+            "match": row[7],
         }
         foreign_keys.append(foreign_key)
 
@@ -92,7 +93,7 @@ def extract_indexes(cursor, table_name):
             "name": row[1],
             "unique": bool(row[2]),
             "origin": row[3],
-            "partial": bool(row[4]) if len(row) > 4 else False
+            "partial": bool(row[4]) if len(row) > 4 else False,
         }
 
         # Get the columns in this index
@@ -101,11 +102,9 @@ def extract_indexes(cursor, table_name):
 
         for idx_col in cursor.fetchall():
             # seqno, cid, name
-            index_columns.append({
-                "seqno": idx_col[0],
-                "cid": idx_col[1],
-                "name": idx_col[2]
-            })
+            index_columns.append(
+                {"seqno": idx_col[0], "cid": idx_col[1], "name": idx_col[2]}
+            )
 
         index_info["columns"] = index_columns
         indexes.append(index_info)
@@ -115,14 +114,13 @@ def extract_indexes(cursor, table_name):
 
 def extract_triggers(cursor, table_name):
     """Extract triggers associated with a specific table"""
-    cursor.execute(f"SELECT name, sql FROM sqlite_master WHERE type='trigger' AND tbl_name='{table_name}';")
+    cursor.execute(
+        f"SELECT name, sql FROM sqlite_master WHERE type='trigger' AND tbl_name='{table_name}';"
+    )
     triggers = []
 
     for row in cursor.fetchall():
-        trigger = {
-            "name": row[0],
-            "sql": row[1]
-        }
+        trigger = {"name": row[0], "sql": row[1]}
         triggers.append(trigger)
 
     return triggers
@@ -134,10 +132,7 @@ def extract_views(cursor):
     views = []
 
     for row in cursor.fetchall():
-        view = {
-            "name": row[0],
-            "sql": row[1]
-        }
+        view = {"name": row[0], "sql": row[1]}
         views.append(view)
 
     return views
@@ -161,10 +156,7 @@ def extract_database_structure():
     cursor.execute("PRAGMA foreign_keys = ON;")
 
     # Extract database structure
-    db_structure = {
-        "tables": {},
-        "views": extract_views(cursor)
-    }
+    db_structure = {"tables": {}, "views": extract_views(cursor)}
 
     # Get all tables
     tables = extract_tables(cursor)
@@ -175,11 +167,13 @@ def extract_database_structure():
             "columns": extract_table_info(cursor, table_name),
             "foreignKeys": extract_foreign_keys(cursor, table_name),
             "indexes": extract_indexes(cursor, table_name),
-            "triggers": extract_triggers(cursor, table_name)
+            "triggers": extract_triggers(cursor, table_name),
         }
 
         # Get the CREATE TABLE statement
-        cursor.execute(f"SELECT sql FROM sqlite_master WHERE type='table' AND name='{table_name}';")
+        cursor.execute(
+            f"SELECT sql FROM sqlite_master WHERE type='table' AND name='{table_name}';"
+        )
         create_statement = cursor.fetchone()
         if create_statement:
             table_structure["createStatement"] = create_statement[0]
@@ -204,7 +198,9 @@ def print_table_structure(table_name, table_info):
         pk = "✓" if col["primaryKey"] else ""
         not_null = "✓" if col["notNull"] else ""
         default = str(col["defaultValue"]) if col["defaultValue"] is not None else ""
-        print(f"{col['name']:<20} {col['type']:<15} {pk:<5} {not_null:<10} {default:<20}")
+        print(
+            f"{col['name']:<20} {col['type']:<15} {pk:<5} {not_null:<10} {default:<20}"
+        )
 
     if table_info["foreignKeys"]:
         print("\nFOREIGN KEYS:")
@@ -213,7 +209,9 @@ def print_table_structure(table_name, table_info):
 
         for fk in table_info["foreignKeys"]:
             references = f"{fk['table']}({fk['to']})"
-            print(f"{fk['from']:<20} {references:<30} {fk['onUpdate']:<15} {fk['onDelete']:<15}")
+            print(
+                f"{fk['from']:<20} {references:<30} {fk['onUpdate']:<15} {fk['onDelete']:<15}"
+            )
 
     if table_info["indexes"]:
         print("\nINDEXES:")
@@ -232,20 +230,16 @@ def main():
     """Main function to extract and display database structure"""
     import argparse
 
-    parser = argparse.ArgumentParser(description="Extract and display database structure")
-    parser.add_argument(
-        "--output",
-        help="Path to save the extracted structure as JSON"
+    parser = argparse.ArgumentParser(
+        description="Extract and display database structure"
     )
-    parser.add_argument(
-        "--table",
-        help="Show structure for a specific table only"
-    )
+    parser.add_argument("--output", help="Path to save the extracted structure as JSON")
+    parser.add_argument("--table", help="Show structure for a specific table only")
     parser.add_argument(
         "--format",
         choices=["text", "json"],
         default="text",
-        help="Output format (text or json)"
+        help="Output format (text or json)",
     )
 
     args = parser.parse_args()
@@ -279,7 +273,7 @@ def main():
         output_path = os.path.abspath(args.output)
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
-        with open(output_path, 'w', encoding='utf-8') as f:
+        with open(output_path, "w", encoding="utf-8") as f:
             json.dump(db_structure, f, indent=2, ensure_ascii=False)
 
         logger.info(f"Database structure saved to {output_path}")

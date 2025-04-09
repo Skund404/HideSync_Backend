@@ -9,7 +9,9 @@ from app.db.models.inventory import Inventory
 from app.db.models.enums import InventoryStatus
 from app.repositories.base_repository import BaseRepository
 import logging
+
 logger = logging.getLogger(__name__)
+
 
 class InventoryRepository(BaseRepository[Inventory]):
     """
@@ -31,14 +33,14 @@ class InventoryRepository(BaseRepository[Inventory]):
         self.model = Inventory
 
     def list_with_filters(
-            self,
-            *,
-            skip: int = 0,
-            limit: int = 100,
-            status: Optional[str] = None,
-            location: Optional[str] = None,
-            item_type: Optional[str] = None,
-            search_term: Optional[str] = None,
+        self,
+        *,
+        skip: int = 0,
+        limit: int = 100,
+        status: Optional[str] = None,
+        location: Optional[str] = None,
+        item_type: Optional[str] = None,
+        search_term: Optional[str] = None,
     ) -> List[Inventory]:
         """
         Retrieves a list of inventory items with optional filtering and pagination.
@@ -50,7 +52,7 @@ class InventoryRepository(BaseRepository[Inventory]):
             query = query.filter(self.model.status == status)
         if location:
             # Use ilike for case-insensitive partial match for location
-            query = query.filter(self.model.storageLocation.ilike(f'%{location}%'))
+            query = query.filter(self.model.storageLocation.ilike(f"%{location}%"))
         if item_type:
             query = query.filter(self.model.itemType == item_type.lower())
 
@@ -58,7 +60,7 @@ class InventoryRepository(BaseRepository[Inventory]):
             # Basic search example: search within storageLocation or item_id (if text)
             # A more robust search on item name would require JOINs (see previous explanation)
             search_filter = or_(
-                self.model.storageLocation.ilike(f'%{search_term}%'),
+                self.model.storageLocation.ilike(f"%{search_term}%"),
                 # Add other searchable fields within Inventory model if applicable
                 # self.model.itemId.ilike(f'%{search_term}%') # If item_id is text searchable
             )
@@ -66,11 +68,12 @@ class InventoryRepository(BaseRepository[Inventory]):
             # NOTE: Searching item name requires joining with Material/Product/Tool tables,
             # which adds complexity not shown in this basic example.
 
-        entities = query.order_by(self.model.id).offset(skip).limit(
-            limit).all()  # Added order_by for consistent pagination
+        entities = (
+            query.order_by(self.model.id).offset(skip).limit(limit).all()
+        )  # Added order_by for consistent pagination
 
         # Apply decryption if necessary (assuming _decrypt_sensitive_fields exists)
-        if hasattr(self, '_decrypt_sensitive_fields'):
+        if hasattr(self, "_decrypt_sensitive_fields"):
             return [self._decrypt_sensitive_fields(entity) for entity in entities]
         else:
             # Handle case where decryption isn't needed or method doesn't exist
@@ -95,12 +98,18 @@ class InventoryRepository(BaseRepository[Inventory]):
         # Import models needed for JOINs within the method if not globally imported
         from app.db.models.product import Product
         from app.db.models.material import Material
+
         # Add Tool if tools have reorder points
 
         # Query for products needing reorder
         product_reorder_query = (
             self.session.query(func.count(self.model.id))
-            .join(Product, and_(self.model.item_type == 'product', self.model.item_id == Product.id))
+            .join(
+                Product,
+                and_(
+                    self.model.item_type == "product", self.model.item_id == Product.id
+                ),
+            )
             .filter(Product.reorder_point > 0)  # Ensure reorder point is set
             .filter(self.model.quantity <= Product.reorder_point)
         )
@@ -108,7 +117,13 @@ class InventoryRepository(BaseRepository[Inventory]):
         # Query for materials needing reorder
         material_reorder_query = (
             self.session.query(func.count(self.model.id))
-            .join(Material, and_(self.model.item_type == 'material', self.model.item_id == Material.id))
+            .join(
+                Material,
+                and_(
+                    self.model.item_type == "material",
+                    self.model.item_id == Material.id,
+                ),
+            )
             .filter(Material.reorder_point > 0)  # Ensure reorder point is set
             .filter(self.model.quantity <= Material.reorder_point)
         )
@@ -121,22 +136,27 @@ class InventoryRepository(BaseRepository[Inventory]):
 
         total_needs_reorder = product_count + material_count  # + tool_count
         logger.debug(
-            f"Found {total_needs_reorder} items needing reorder ({product_count} products, {material_count} materials).")
+            f"Found {total_needs_reorder} items needing reorder ({product_count} products, {material_count} materials)."
+        )
         return total_needs_reorder
 
-    def get_inventory_by_item_and_location(self, item_type: str, item_id: int, location: str) -> Optional[Inventory]:
+    def get_inventory_by_item_and_location(
+        self, item_type: str, item_id: int, location: str
+    ) -> Optional[Inventory]:
         """
         Gets a specific inventory record for an item at a specific location.
         Needed for the transfer logic.
         """
-        logger.debug(f"Fetching inventory for {item_type} ID {item_id} at location '{location}'")
+        logger.debug(
+            f"Fetching inventory for {item_type} ID {item_id} at location '{location}'"
+        )
         entity = (
             self.session.query(self.model)
             .filter(
                 and_(
                     self.model.item_type == item_type.lower(),
                     self.model.item_id == item_id,
-                    self.model.storage_location == location  # Filter by location too
+                    self.model.storage_location == location,  # Filter by location too
                 )
             )
             .first()
@@ -144,25 +164,29 @@ class InventoryRepository(BaseRepository[Inventory]):
         return self._decrypt_sensitive_fields(entity) if entity else None
 
     def get_low_stock_inventory_detailed(
-            self,
-            threshold_percentage: float = 100.0,
-            item_type: Optional[str] = None,
-            limit: int = 500
+        self,
+        threshold_percentage: float = 100.0,
+        item_type: Optional[str] = None,
+        limit: int = 500,
     ) -> List[Tuple[Inventory, Dict[str, Any]]]:
         """
         Fetches low stock inventory records along with essential item details.
         Returns tuples of (InventoryObject, ItemDetailsDict).
         """
-        logger.debug(f"Fetching detailed low stock items: threshold={threshold_percentage}%, type={item_type or 'All'}")
+        logger.debug(
+            f"Fetching detailed low stock items: threshold={threshold_percentage}%, type={item_type or 'All'}"
+        )
         # This is complex because details come from different tables (Product, Material, Tool)
         # Option 1: Fetch low stock inventory IDs first, then fetch details individually (less efficient)
         # Option 2: Use UNION or complex JOINs (more efficient but harder to write/maintain)
 
         # --- Using Option 1 (Simpler to implement) ---
-        low_stock_inventories = self.get_low_stock_inventory(  # Use the basic low stock method
-            item_type=item_type,
-            threshold_percentage=threshold_percentage,  # Pass threshold
-            limit=limit
+        low_stock_inventories = (
+            self.get_low_stock_inventory(  # Use the basic low stock method
+                item_type=item_type,
+                threshold_percentage=threshold_percentage,  # Pass threshold
+                limit=limit,
+            )
         )
 
         results = []
@@ -174,7 +198,9 @@ class InventoryRepository(BaseRepository[Inventory]):
             # This is a dependency violation if called directly from service.
             # Better: Service calls repo.get_low_stock_inventory(), then service loops and calls _get_item_details()
             # For now, assume logic is available here:
-            item_details = self._get_item_details_for_repo(inv.item_type, inv.item_id)  # Placeholder name
+            item_details = self._get_item_details_for_repo(
+                inv.item_type, inv.item_id
+            )  # Placeholder name
             if item_details:
                 results.append((inv, item_details))
         logger.debug(f"Found {len(results)} detailed low stock items.")
@@ -182,30 +208,49 @@ class InventoryRepository(BaseRepository[Inventory]):
 
     # Placeholder for the detail fetching logic needed by get_low_stock_inventory_detailed
     # This should ideally use injected services or be handled entirely in the service layer.
-    def _get_item_details_for_repo(self, item_type: str, item_id: int) -> Optional[Dict[str, Any]]:
+    def _get_item_details_for_repo(
+        self, item_type: str, item_id: int
+    ) -> Optional[Dict[str, Any]]:
         # WARNING: This introduces service dependencies into the repository, which is not ideal.
         # Consider refactoring this logic into the service layer.
         from app.db.models.product import Product
         from app.db.models.material import Material
+
         # from app.db.models.tool import Tool # If needed
 
         logger.debug(f"Repo: Getting item details for {item_type} {item_id}")
-        if item_type == 'product':
+        if item_type == "product":
             item = self.session.query(Product).filter(Product.id == item_id).first()
-            if item: return {"name": item.name, "cost": item.total_cost, "reorder_point": item.reorder_point,
-                             "unit": "piece", "sku": item.sku}
-        elif item_type == 'material':
+            if item:
+                return {
+                    "name": item.name,
+                    "cost": item.total_cost,
+                    "reorder_point": item.reorder_point,
+                    "unit": "piece",
+                    "sku": item.sku,
+                }
+        elif item_type == "material":
             item = self.session.query(Material).filter(Material.id == item_id).first()
-            if item: return {"name": item.name, "cost": item.cost, "reorder_point": item.reorder_point,
-                             "unit": item.unit.name if item.unit else None, "supplier_id": item.supplier_id}
+            if item:
+                return {
+                    "name": item.name,
+                    "cost": item.cost,
+                    "reorder_point": item.reorder_point,
+                    "unit": item.unit.name if item.unit else None,
+                    "supplier_id": item.supplier_id,
+                }
         # Add Tool logic if needed
         # elif item_type == 'tool': ...
         return None
 
     def get_low_stock_inventory(  # Basic version used by detailed one
-            self, item_type: Optional[str] = None, threshold_percentage: float = 100.0, skip: int = 0, limit: int = 100
+        self,
+        item_type: Optional[str] = None,
+        threshold_percentage: float = 100.0,
+        skip: int = 0,
+        limit: int = 100,
     ) -> List[Inventory]:
-        """ Gets inventory items at or below reorder threshold """
+        """Gets inventory items at or below reorder threshold"""
         from app.db.models.product import Product
         from app.db.models.material import Material
 
@@ -214,25 +259,31 @@ class InventoryRepository(BaseRepository[Inventory]):
 
         # Product condition
         product_cond = and_(
-            self.model.item_type == 'product',
+            self.model.item_type == "product",
             Product.reorder_point > 0,
-            self.model.quantity <= (Product.reorder_point * (threshold_percentage / 100.0))
+            self.model.quantity
+            <= (Product.reorder_point * (threshold_percentage / 100.0)),
         )
-        query_prod = query.join(Product, self.model.item_id == Product.id).filter(product_cond)
+        query_prod = query.join(Product, self.model.item_id == Product.id).filter(
+            product_cond
+        )
 
         # Material condition
         material_cond = and_(
-            self.model.item_type == 'material',
+            self.model.item_type == "material",
             Material.reorder_point > 0,
-            self.model.quantity <= (Material.reorder_point * (threshold_percentage / 100.0))
+            self.model.quantity
+            <= (Material.reorder_point * (threshold_percentage / 100.0)),
         )
-        query_mat = query.join(Material, self.model.item_id == Material.id).filter(material_cond)
+        query_mat = query.join(Material, self.model.item_id == Material.id).filter(
+            material_cond
+        )
 
         # Combine queries using UNION if filtering by item_type is not done,
         # or select the appropriate query if item_type is specified.
-        if item_type == 'product':
+        if item_type == "product":
             final_query = query_prod
-        elif item_type == 'material':
+        elif item_type == "material":
             final_query = query_mat
         elif item_type is None:
             # Combine results - UNION might be complex, fetching separately might be ok for moderate data
@@ -240,9 +291,12 @@ class InventoryRepository(BaseRepository[Inventory]):
             prod_ids = [p.id for p in query_prod.all()]
             mat_ids = [m.id for m in query_mat.all()]
             all_ids = list(set(prod_ids + mat_ids))  # Combine unique inventory IDs
-            if not all_ids: return []
+            if not all_ids:
+                return []
             # Fetch final inventory objects - apply pagination here
-            final_query = self.session.query(self.model).filter(self.model.id.in_(all_ids))
+            final_query = self.session.query(self.model).filter(
+                self.model.id.in_(all_ids)
+            )
         else:  # Invalid item_type or tool not handled
             return []
 
@@ -250,23 +304,35 @@ class InventoryRepository(BaseRepository[Inventory]):
         return [self._decrypt_sensitive_fields(entity) for entity in entities]
 
     # Add count_with_filters if needed for pagination in _generate_detail_report
-    def count_with_filters(self, status: Optional[str] = None, location: Optional[str] = None,
-                           item_type: Optional[str] = None, search_term: Optional[str] = None) -> int:
+    def count_with_filters(
+        self,
+        status: Optional[str] = None,
+        location: Optional[str] = None,
+        item_type: Optional[str] = None,
+        search_term: Optional[str] = None,
+    ) -> int:
         # Similar logic to list_with_filters but just does count()
         query = self.session.query(func.count(self.model.id))
         inventory_joined = False
-        if status or location: query = query.join(self.model.inventory); inventory_joined = True
+        if status or location:
+            query = query.join(self.model.inventory)
+            inventory_joined = True
         if search_term:
             search_filter = f"%{search_term}%"
             # Add JOINs if searching item names
-            query = query.filter(or_(self.model.storage_location.ilike(search_filter)))  # Simplified search
-        if item_type: query = query.filter(self.model.item_type == item_type.lower())
+            query = query.filter(
+                or_(self.model.storage_location.ilike(search_filter))
+            )  # Simplified search
+        if item_type:
+            query = query.filter(self.model.item_type == item_type.lower())
         if status:
             try:
-                enum_status = InventoryStatus(status); query = query.filter(Inventory.status == enum_status)
+                enum_status = InventoryStatus(status)
+                query = query.filter(Inventory.status == enum_status)
             except ValueError:
                 pass  # Ignore invalid status
-        if location: query = query.filter(Inventory.storage_location == location)
+        if location:
+            query = query.filter(Inventory.storage_location == location)
         count = query.scalar()
         return count or 0
 

@@ -21,46 +21,45 @@ from app.core.key_manager import KeyManager
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
 # Define tables to extract in order
 TABLES_TO_EXTRACT = [
-    'permissions',
-    'roles',
-    'users',
-    'documentation_categories',
-    'suppliers',
-    'customers',
-    'storage_locations',
-    'patterns',
-    'documentation_resources',
-    'storage_cells',
-    'materials',
-    'tools',
-    'components',
-    'project_templates',
-    'projects',
-    'project_components',
-    'timeline_tasks',
-    'sales',
-    'sale_items',
-    'purchases',
-    'purchase_items',
-    'picking_lists',
-    'picking_list_items',
-    'storage_assignments',
-    'tool_maintenance',
-    'tool_checkouts'
+    "permissions",
+    "roles",
+    "users",
+    "documentation_categories",
+    "suppliers",
+    "customers",
+    "storage_locations",
+    "patterns",
+    "documentation_resources",
+    "storage_cells",
+    "materials",
+    "tools",
+    "components",
+    "project_templates",
+    "projects",
+    "project_components",
+    "timeline_tasks",
+    "sales",
+    "sale_items",
+    "purchases",
+    "purchase_items",
+    "picking_lists",
+    "picking_list_items",
+    "storage_assignments",
+    "tool_maintenance",
+    "tool_checkouts",
 ]
 
 
 def snake_to_camel(snake_str):
     """Convert snake_case to camelCase"""
-    components = snake_str.split('_')
-    return components[0] + ''.join(x.title() for x in components[1:])
+    components = snake_str.split("_")
+    return components[0] + "".join(x.title() for x in components[1:])
 
 
 def convert_value(value):
@@ -69,10 +68,10 @@ def convert_value(value):
         return None
     if isinstance(value, bytes):
         try:
-            return value.decode('utf-8')
+            return value.decode("utf-8")
         except:
             return str(value)
-    if hasattr(value, 'isoformat'):
+    if hasattr(value, "isoformat"):
         return value.isoformat()
     return value
 
@@ -136,7 +135,7 @@ def main():
     parser.add_argument(
         "--output",
         default="app/db/seed_data_comparison.json",
-        help="Path to save the extracted seed data JSON"
+        help="Path to save the extracted seed data JSON",
     )
 
     args = parser.parse_args()
@@ -149,7 +148,7 @@ def main():
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
     # Save to JSON file
-    with open(output_path, 'w', encoding='utf-8') as f:
+    with open(output_path, "w", encoding="utf-8") as f:
         json.dump(seed_data, f, indent=2, ensure_ascii=False)
 
     logger.info(f"Seed data extracted and saved to {output_path}")

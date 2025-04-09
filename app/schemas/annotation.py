@@ -8,6 +8,7 @@ serialization, and documentation.
 
 from typing import Optional, List
 from datetime import datetime
+
 # Import necessary components from Pydantic v2
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 
@@ -96,7 +97,9 @@ class AnnotationSearchParams(BaseModel):
     entity_type: Optional[str] = None
     entity_id: Optional[int] = None
     created_by: Optional[int] = None
-    search: Optional[str] = None # Renamed from content_search for consistency? Check usage
+    search: Optional[str] = (
+        None  # Renamed from content_search for consistency? Check usage
+    )
     visibility: Optional[str] = None
     tags: Optional[List[str]] = None
 

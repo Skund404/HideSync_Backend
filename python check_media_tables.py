@@ -25,22 +25,16 @@ from app.core.key_manager import KeyManager
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
 # Define tables needed for media system
-MEDIA_SYSTEM_TABLES = [
-    'media_assets',
-    'entity_media',
-    'media_tags',
-    'media_asset_tags'
-]
+MEDIA_SYSTEM_TABLES = ["media_assets", "entity_media", "media_tags", "media_asset_tags"]
 
 # SQL statements to create missing tables if needed
 CREATE_TABLE_STATEMENTS = {
-    'entity_media': """
+    "entity_media": """
     CREATE TABLE entity_media (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         media_asset_id INTEGER NOT NULL,
@@ -56,7 +50,7 @@ CREATE_TABLE_STATEMENTS = {
         FOREIGN KEY (media_asset_id) REFERENCES media_assets(id) ON DELETE CASCADE
     );
     """,
-    'media_assets': """
+    "media_assets": """
     CREATE TABLE media_assets (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         filename TEXT NOT NULL,
@@ -79,7 +73,7 @@ CREATE_TABLE_STATEMENTS = {
         metadata TEXT
     );
     """,
-    'media_tags': """
+    "media_tags": """
     CREATE TABLE media_tags (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL UNIQUE,
@@ -88,7 +82,7 @@ CREATE_TABLE_STATEMENTS = {
         updated_at TIMESTAMP
     );
     """,
-    'media_asset_tags': """
+    "media_asset_tags": """
     CREATE TABLE media_asset_tags (
         media_asset_id INTEGER NOT NULL,
         tag_id INTEGER NOT NULL,
@@ -96,7 +90,7 @@ CREATE_TABLE_STATEMENTS = {
         FOREIGN KEY (media_asset_id) REFERENCES media_assets(id) ON DELETE CASCADE,
         FOREIGN KEY (tag_id) REFERENCES media_tags(id) ON DELETE CASCADE
     );
-    """
+    """,
 }
 
 
@@ -114,11 +108,7 @@ def get_table_structure(cursor, table_name):
     cursor.execute(f"PRAGMA index_list({table_name})")
     indexes = cursor.fetchall()
 
-    return {
-        "columns": columns,
-        "foreign_keys": foreign_keys,
-        "indexes": indexes
-    }
+    return {"columns": columns, "foreign_keys": foreign_keys, "indexes": indexes}
 
 
 def get_table_count(cursor, table_name):
@@ -190,7 +180,9 @@ def generate_db_report(output_format="text", output_file=None):
     cipher_version = cursor.fetchone()[0]
 
     # Get all tables in the database
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name;")
+    cursor.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name;"
+    )
     tables = [row[0] for row in cursor.fetchall()]
 
     # Get all views in the database
@@ -201,20 +193,22 @@ def generate_db_report(output_format="text", output_file=None):
     report_data = {
         "database_info": {
             "path": db_path,
-            "size_bytes": os.path.getsize(db_path) if os.path.exists(db_path) else "Unknown",
+            "size_bytes": (
+                os.path.getsize(db_path) if os.path.exists(db_path) else "Unknown"
+            ),
             "sqlite_version": sqlite_version,
             "cipher_version": cipher_version,
-            "report_generated": datetime.now().isoformat()
+            "report_generated": datetime.now().isoformat(),
         },
         "summary": {
             "total_tables": len(tables),
             "total_views": len(views),
             "tables": tables,
             "views": views,
-            "missing_media_tables": [t for t in MEDIA_SYSTEM_TABLES if t not in tables]
+            "missing_media_tables": [t for t in MEDIA_SYSTEM_TABLES if t not in tables],
         },
         "table_details": {},
-        "view_details": {}
+        "view_details": {},
     }
 
     # Collect detailed info for each table
@@ -226,28 +220,32 @@ def generate_db_report(output_format="text", output_file=None):
         # Format column details
         columns = []
         for col in structure["columns"]:
-            columns.append({
-                "cid": col[0],
-                "name": col[1],
-                "type": format_column_type(col[2]),
-                "notnull": bool(col[3]),
-                "default_value": col[4],
-                "is_primary_key": bool(col[5])
-            })
+            columns.append(
+                {
+                    "cid": col[0],
+                    "name": col[1],
+                    "type": format_column_type(col[2]),
+                    "notnull": bool(col[3]),
+                    "default_value": col[4],
+                    "is_primary_key": bool(col[5]),
+                }
+            )
 
         # Format foreign key details
         foreign_keys = []
         for fk in structure["foreign_keys"]:
-            foreign_keys.append({
-                "id": fk[0],
-                "seq": fk[1],
-                "table": fk[2],
-                "from": fk[3],
-                "to": fk[4],
-                "on_update": fk[5],
-                "on_delete": fk[6],
-                "match": fk[7]
-            })
+            foreign_keys.append(
+                {
+                    "id": fk[0],
+                    "seq": fk[1],
+                    "table": fk[2],
+                    "from": fk[3],
+                    "to": fk[4],
+                    "on_update": fk[5],
+                    "on_delete": fk[6],
+                    "match": fk[7],
+                }
+            )
 
         # Add to report
         report_data["table_details"][table] = {
@@ -256,13 +254,15 @@ def generate_db_report(output_format="text", output_file=None):
             "foreign_keys": foreign_keys,
             "sample_data": {
                 "columns": column_names,
-                "rows": [list(row) for row in sample_rows]
-            }
+                "rows": [list(row) for row in sample_rows],
+            },
         }
 
     # Collect info for views
     for view in views:
-        cursor.execute(f"SELECT sql FROM sqlite_master WHERE type='view' AND name='{view}'")
+        cursor.execute(
+            f"SELECT sql FROM sqlite_master WHERE type='view' AND name='{view}'"
+        )
         view_sql = cursor.fetchone()[0]
         column_names, sample_rows = get_sample_data(cursor, view)
 
@@ -270,8 +270,8 @@ def generate_db_report(output_format="text", output_file=None):
             "sql": view_sql,
             "sample_data": {
                 "columns": column_names,
-                "rows": [list(row) for row in sample_rows]
-            }
+                "rows": [list(row) for row in sample_rows],
+            },
         }
 
     conn.close()
@@ -292,13 +292,17 @@ def generate_db_report(output_format="text", output_file=None):
         # Text format (default)
         report_text = []
         report_text.append("=" * 80)
-        report_text.append(f"HIDESYNC DATABASE REPORT - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        report_text.append(
+            f"HIDESYNC DATABASE REPORT - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        )
         report_text.append("=" * 80)
 
         # Database info
         report_text.append("\nDATABASE INFORMATION:")
         report_text.append(f"Path: {db_path}")
-        report_text.append(f"Size: {report_data['database_info']['size_bytes'] / (1024 * 1024):.2f} MB")
+        report_text.append(
+            f"Size: {report_data['database_info']['size_bytes'] / (1024 * 1024):.2f} MB"
+        )
         report_text.append(f"SQLite Version: {sqlite_version}")
         report_text.append(f"SQLCipher Version: {cipher_version}")
 
@@ -330,7 +334,9 @@ def generate_db_report(output_format="text", output_file=None):
         report_text.append("\nTABLE DETAILS:")
         for table in tables:
             report_text.append("\n" + "-" * 80)
-            report_text.append(f"TABLE: {table} ({report_data['table_details'][table]['row_count']} rows)")
+            report_text.append(
+                f"TABLE: {table} ({report_data['table_details'][table]['row_count']} rows)"
+            )
             report_text.append("-" * 80)
 
             # Columns
@@ -338,14 +344,22 @@ def generate_db_report(output_format="text", output_file=None):
             for col in report_data["table_details"][table]["columns"]:
                 pk_flag = "PK" if col["is_primary_key"] else "  "
                 nn_flag = "NN" if col["notnull"] else "  "
-                default = f"DEFAULT {col['default_value']}" if col["default_value"] is not None else ""
-                report_text.append(f"  {col['name']:<20} {col['type']:<10} {pk_flag} {nn_flag} {default}")
+                default = (
+                    f"DEFAULT {col['default_value']}"
+                    if col["default_value"] is not None
+                    else ""
+                )
+                report_text.append(
+                    f"  {col['name']:<20} {col['type']:<10} {pk_flag} {nn_flag} {default}"
+                )
 
             # Foreign Keys
             if report_data["table_details"][table]["foreign_keys"]:
                 report_text.append("\nForeign Keys:")
                 for fk in report_data["table_details"][table]["foreign_keys"]:
-                    report_text.append(f"  {fk['from']} -> {fk['table']}({fk['to']}) ON DELETE {fk['on_delete']}")
+                    report_text.append(
+                        f"  {fk['from']} -> {fk['table']}({fk['to']}) ON DELETE {fk['on_delete']}"
+                    )
 
             # Sample Data
             cols = report_data["table_details"][table]["sample_data"]["columns"]
@@ -366,7 +380,9 @@ def generate_db_report(output_format="text", output_file=None):
                         else:
                             formatted_row.append(str(val))
 
-                    report_text.append("  " + " | ".join(f"{val:<15}" for val in formatted_row))
+                    report_text.append(
+                        "  " + " | ".join(f"{val:<15}" for val in formatted_row)
+                    )
 
         # Generate SQL for missing tables
         if missing_tables:
@@ -413,7 +429,9 @@ def apply_changes():
     existing_tables = [row[0] for row in cursor.fetchall()]
 
     # Find missing tables
-    missing_tables = [table for table in MEDIA_SYSTEM_TABLES if table not in existing_tables]
+    missing_tables = [
+        table for table in MEDIA_SYSTEM_TABLES if table not in existing_tables
+    ]
 
     if not missing_tables:
         print("✅ No missing tables to create")
@@ -436,7 +454,9 @@ def apply_changes():
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
     updated_tables = [row[0] for row in cursor.fetchall()]
 
-    still_missing = [table for table in MEDIA_SYSTEM_TABLES if table not in updated_tables]
+    still_missing = [
+        table for table in MEDIA_SYSTEM_TABLES if table not in updated_tables
+    ]
 
     if still_missing:
         print(f"\n⚠️ Some tables are still missing: {', '.join(still_missing)}")
@@ -450,21 +470,22 @@ def main():
     """Main function to generate database report or apply changes"""
     import argparse
 
-    parser = argparse.ArgumentParser(description="Generate a comprehensive database report or fix issues")
+    parser = argparse.ArgumentParser(
+        description="Generate a comprehensive database report or fix issues"
+    )
     parser.add_argument(
         "--format",
         choices=["text", "json"],
         default="text",
-        help="Output format (text or json)"
+        help="Output format (text or json)",
     )
     parser.add_argument(
-        "--output",
-        help="Output file path (if not specified, prints to console)"
+        "--output", help="Output file path (if not specified, prints to console)"
     )
     parser.add_argument(
         "--apply-changes",
         action="store_true",
-        help="Apply changes to create missing tables"
+        help="Apply changes to create missing tables",
     )
 
     args = parser.parse_args()

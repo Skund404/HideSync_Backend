@@ -41,8 +41,10 @@ from app.core.exceptions import (
 )
 from app.core.validation import validate_input, validate_entity
 from app.db.models.enums import ProjectType, SkillLevel, PatternFileType
+
 # Import Pattern model from its file
 from app.db.models.pattern import Pattern
+
 # Import ProjectTemplate models from the project model file
 from app.db.models.project import ProjectTemplate, ProjectTemplateComponent
 from app.repositories.pattern_repository import (

@@ -8,8 +8,9 @@ import sys
 import logging
 
 # Setup logging
-logging.basicConfig(level=logging.INFO,
-                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 # Add the project root to the Python path
@@ -62,7 +63,9 @@ if success:
         cursor.execute("SELECT id, email, username FROM users LIMIT 1;")
         user = cursor.fetchone()
         if user:
-            logger.info(f"First user: ID={user[0]}, Email={user[1]}, Username={user[2]}")
+            logger.info(
+                f"First user: ID={user[0]}, Email={user[1]}, Username={user[2]}"
+            )
     except Exception as e:
         logger.error(f"Error querying users table: {e}")
 
@@ -75,7 +78,9 @@ else:
     logger.info("Current encryption parameters:")
     logger.info(f"  - Key loaded: {key is not None}")
     logger.info(f"  - Key length: {len(key) if key else 'N/A'}")
-    logger.info(f"  - SQLCipher available: {EncryptionManager.is_sqlcipher_available()}")
+    logger.info(
+        f"  - SQLCipher available: {EncryptionManager.is_sqlcipher_available()}"
+    )
 
     # Try alternate cipher parameters
     logger.info("Trying alternate encryption parameters...")

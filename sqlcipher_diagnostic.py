@@ -17,8 +17,7 @@ if str(project_root) not in sys.path:
 
 # Configure logging
 logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -55,20 +54,25 @@ def direct_sqlite_write_test():
 
         # Test table creation and insertion
         logger.info("Creating test table...")
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE TABLE IF NOT EXISTS write_diagnostic_test (
                 id INTEGER PRIMARY KEY,
                 test_data TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
-        """)
+        """
+        )
 
         # Attempt insertion
         logger.info("Attempting to insert test data...")
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO write_diagnostic_test (test_data) 
             VALUES (?)
-        """, (f"Diagnostic write test at {datetime.datetime.now()}",))
+        """,
+            (f"Diagnostic write test at {datetime.datetime.now()}",),
+        )
 
         # Commit transaction
         conn.commit()
@@ -88,6 +92,7 @@ def direct_sqlite_write_test():
     except Exception as e:
         logger.error(f"Direct write test FAILED: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -110,13 +115,10 @@ def sqlalchemy_direct_write_test():
 
         # Manually create engine without default listeners
         engine = create_engine(
-            f'sqlite:///{db_path}',
+            f"sqlite:///{db_path}",
             module=sqlcipher,
             poolclass=None,  # Disable connection pooling
-            creator=lambda: sqlcipher.connect(
-                db_path,
-                check_same_thread=False
-            )
+            creator=lambda: sqlcipher.connect(db_path, check_same_thread=False),
         )
 
         # Override connection to apply SQLCipher configuration
@@ -135,11 +137,7 @@ def sqlalchemy_direct_write_test():
             return conn
 
         # Custom sessionmaker with manual connection management
-        Session = sessionmaker(
-            bind=engine,
-            autocommit=False,
-            autoflush=False
-        )
+        Session = sessionmaker(bind=engine, autocommit=False, autoflush=False)
         session = Session()
 
         try:
@@ -148,25 +146,29 @@ def sqlalchemy_direct_write_test():
                 cursor = conn.cursor()
 
                 # Create test table
-                cursor.execute("""
+                cursor.execute(
+                    """
                     CREATE TABLE IF NOT EXISTS sqlalchemy_write_test (
                         id INTEGER PRIMARY KEY,
                         test_data TEXT,
                         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                     )
-                """)
+                """
+                )
 
                 # Insert test data
                 cursor.execute(
                     "INSERT INTO sqlalchemy_write_test (test_data) VALUES (?)",
-                    (f"SQLAlchemy direct write test at {datetime.datetime.now()}",)
+                    (f"SQLAlchemy direct write test at {datetime.datetime.now()}",),
                 )
 
                 # Commit transaction
                 conn.commit()
 
                 # Verify insertion
-                cursor.execute("SELECT * FROM sqlalchemy_write_test ORDER BY id DESC LIMIT 1")
+                cursor.execute(
+                    "SELECT * FROM sqlalchemy_write_test ORDER BY id DESC LIMIT 1"
+                )
                 last_record = cursor.fetchone()
                 logger.info(f"SQLAlchemy direct write test record: {last_record}")
 
@@ -175,12 +177,14 @@ def sqlalchemy_direct_write_test():
         except Exception as inner_e:
             logger.error(f"SQLAlchemy write operation FAILED: {inner_e}")
             import traceback
+
             traceback.print_exc()
             return False
 
     except Exception as e:
         logger.error(f"SQLAlchemy direct write test SETUP FAILED: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 

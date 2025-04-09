@@ -1,3 +1,5 @@
+# File: app/core/events.py
+
 from typing import (
     Dict,
     Any,
@@ -13,7 +15,7 @@ from typing import (
 )
 from collections import defaultdict
 from dataclasses import dataclass, field, asdict
-from datetime import datetime
+from datetime import datetime, date
 import uuid
 import asyncio
 import logging
@@ -22,263 +24,347 @@ from fastapi import FastAPI
 
 logger = logging.getLogger(__name__)
 
-# Type definitions for better type hinting
-T = TypeVar("T", bound="DomainEvent")
-EventHandler = Callable[[T], None]
-AsyncEventHandler = Callable[[T], Coroutine[Any, Any, None]]
+# Type definitions
+T_event = TypeVar("T_event", bound="DomainEvent")
+EventHandler = Callable[[T_event], None]
+AsyncEventHandler = Callable[[T_event], Coroutine[Any, Any, None]]
 
 
+# --- Base DomainEvent with init=False to avoid parameter order problems ---
 @dataclass
 class DomainEvent:
-    """Base class for domain events."""
-
     event_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     timestamp: datetime = field(default_factory=datetime.now)
 
     def to_dict(self) -> Dict[str, Any]:
-        """
-        Convert event to dictionary representation.
-
-        Returns:
-            Dictionary representation of the event
-        """
         result = asdict(self)
-        # Convert timestamp to ISO format string
-        result["timestamp"] = self.timestamp.isoformat()
-        # Add event_type field
+        if isinstance(self.timestamp, datetime):
+            result["timestamp"] = self.timestamp.isoformat()
         result["event_type"] = self.__class__.__name__
         return result
 
 
+# --- Corrected Event Definitions ---
+@dataclass
+class EntityCreatedEvent(DomainEvent):
+    entity_id: Any = None
+    entity_type: str = ""
+    user_id: Optional[int] = None
+
+    def __post_init__(self):
+        if self.entity_id is None or self.entity_type == "":
+            raise ValueError("entity_id and entity_type are required")
+
+
+@dataclass
+class EntityUpdatedEvent(DomainEvent):
+    entity_id: Any = None
+    entity_type: str = ""
+    changes: Dict[str, Any] = field(default_factory=dict)
+    user_id: Optional[int] = None
+
+    def __post_init__(self):
+        if self.entity_id is None or self.entity_type == "":
+            raise ValueError("entity_id and entity_type are required")
+
+
+@dataclass
+class EntityDeletedEvent(DomainEvent):
+    entity_id: Any = None
+    entity_type: str = ""
+    user_id: Optional[int] = None
+
+    def __post_init__(self):
+        if self.entity_id is None or self.entity_type == "":
+            raise ValueError("entity_id and entity_type are required")
+
+
+@dataclass
+class ToolCreated(DomainEvent):
+    tool_id: int = 0
+    name: str = ""
+    category: str = ""
+    user_id: Optional[int] = None
+
+    def __post_init__(self):
+        if self.tool_id == 0 or self.name == "" or self.category == "":
+            raise ValueError("tool_id, name, and category are required")
+
+
+@dataclass
+class ToolStatusChanged(DomainEvent):
+    tool_id: int = 0
+    previous_status: str = ""
+    new_status: str = ""
+    reason: Optional[str] = None
+    user_id: Optional[int] = None
+
+    def __post_init__(self):
+        if self.tool_id == 0 or self.previous_status == "" or self.new_status == "":
+            raise ValueError("tool_id, previous_status, and new_status are required")
+
+
+@dataclass
+class ToolMaintenanceScheduled(DomainEvent):
+    maintenance_id: int = 0
+    tool_id: int = 0
+    maintenance_type: str = ""
+    date: str = ""
+    user_id: Optional[int] = None
+
+    def __post_init__(self):
+        if (
+            self.maintenance_id == 0
+            or self.tool_id == 0
+            or self.maintenance_type == ""
+            or self.date == ""
+        ):
+            raise ValueError(
+                "maintenance_id, tool_id, maintenance_type, and date are required"
+            )
+
+
+@dataclass
+class ToolMaintenanceCompleted(DomainEvent):
+    maintenance_id: int = 0
+    tool_id: int = 0
+    completion_date: str = ""
+    performed_by: Optional[str] = None
+    next_date: Optional[str] = None
+    user_id: Optional[int] = None
+
+    def __post_init__(self):
+        if self.maintenance_id == 0 or self.tool_id == 0 or self.completion_date == "":
+            raise ValueError(
+                "maintenance_id, tool_id, and completion_date are required"
+            )
+
+
+@dataclass
+class ToolCheckedOut(DomainEvent):
+    checkout_id: int = 0
+    tool_id: int = 0
+    checked_out_by: str = ""
+    project_id: Optional[int] = None
+    due_date: Optional[str] = None
+    user_id: Optional[int] = None
+
+    def __post_init__(self):
+        if self.checkout_id == 0 or self.tool_id == 0 or self.checked_out_by == "":
+            raise ValueError("checkout_id, tool_id, and checked_out_by are required")
+
+
+@dataclass
+class ToolReturned(DomainEvent):
+    checkout_id: int = 0
+    tool_id: int = 0
+    has_issues: bool = False
+    condition_after: Optional[str] = None
+    user_id: Optional[int] = None
+
+    def __post_init__(self):
+        if self.checkout_id == 0 or self.tool_id == 0:
+            raise ValueError("checkout_id and tool_id are required")
+
+
+# --- Event Bus Class (Expanded Methods) ---
 class EventBus:
     """Central event bus for domain events."""
 
     def __init__(self):
-        """Initialize the event bus with empty subscribers."""
         self.subscribers: Dict[str, List[Callable]] = defaultdict(list)
         self._lock = asyncio.Lock()
 
     def publish(self, event: DomainEvent) -> None:
-        """
-        Publish an event to all subscribers.
-
-        Args:
-            event: Domain event to publish
-        """
         event_type = type(event).__name__
-        logger.debug(f"Publishing event {event_type} with ID {event.event_id}")
+        logger.debug(f"Publishing sync event {event_type} ID {event.event_id}")
+        # Get handlers safely
+        subscribers_copy = list(self.subscribers.get(event_type, []))
+        for handler in subscribers_copy:
+            self._call_handler_sync(handler, event, event_type)
 
-        # Make a local copy of subscribers to avoid issues if the list is modified
-        subscribers = list(self.subscribers[event_type])
-
-        for subscriber in subscribers:
-            try:
-                # For synchronous handlers
-                subscriber(event)
-            except Exception as e:
-                logger.error(
-                    f"Error handling event {event_type} (ID: {event.event_id}): {str(e)}",
-                    exc_info=True,
+    def _call_handler_sync(
+        self, handler: Callable, event: DomainEvent, event_type: str
+    ):
+        try:
+            if asyncio.iscoroutinefunction(handler):
+                logger.warning(
+                    f"Sync call to async handler {handler.__name__} for {event_type}. Consider publish_async."
                 )
+                # Best effort, might block or fail if loop is running
+                try:
+                    loop = asyncio.get_running_loop()
+                    logger.error(
+                        "Cannot reliably run async handler synchronously inside running loop."
+                    )
+                    # Option: loop.create_task(handler(event)) # Fire and forget? Risky
+                except RuntimeError:  # No running loop
+                    asyncio.run(handler(event))
+            else:
+                handler(event)
+        except Exception as e:
+            logger.error(
+                f"Error in sync handler {handler.__name__} for {event_type} (ID: {event.event_id}): {e}",
+                exc_info=True,
+            )
 
     async def publish_async(self, event: DomainEvent) -> None:
-        """
-        Publish an event asynchronously to all subscribers.
-
-        Args:
-            event: Domain event to publish
-        """
         event_type = type(event).__name__
-        logger.debug(f"Publishing async event {event_type} with ID {event.event_id}")
-
+        logger.debug(f"Publishing async event {event_type} ID {event.event_id}")
         async with self._lock:
-            # Make a local copy of subscribers to avoid issues if the list is modified
-            subscribers = list(self.subscribers[event_type])
+            subscribers_copy = list(self.subscribers.get(event_type, []))
 
         tasks = []
-        for subscriber in subscribers:
-            if asyncio.iscoroutinefunction(subscriber):
-                tasks.append(asyncio.create_task(subscriber(event)))
-            else:
-                # Run synchronous handlers in executor
-                tasks.append(asyncio.to_thread(subscriber, event))
+        for handler in subscribers_copy:
+            task = self._create_handler_task(handler, event, event_type)
+            if task:
+                tasks.append(task)
 
         if tasks:
             results = await asyncio.gather(*tasks, return_exceptions=True)
-            # Log any exceptions
-            for i, result in enumerate(results):
-                if isinstance(result, Exception):
-                    logger.error(
-                        f"Error in async handler for {event_type} (ID: {event.event_id}): {str(result)}",
-                        exc_info=result,
-                    )
+            self._log_handler_errors(
+                results, subscribers_copy, event_type, event.event_id
+            )
+
+    def _create_handler_task(
+        self, handler: Callable, event: DomainEvent, event_type: str
+    ) -> Optional[asyncio.Task]:
+        try:
+            if asyncio.iscoroutinefunction(handler):
+                return asyncio.create_task(handler(event))
+            else:
+                return asyncio.to_thread(handler, event)
+        except Exception as e:
+            logger.error(
+                f"Error creating task for handler {handler.__name__} for {event_type}: {e}",
+                exc_info=True,
+            )
+            return None
+
+    def _log_handler_errors(
+        self,
+        results: List[Any],
+        subscribers: List[Callable],
+        event_type: str,
+        event_id: str,
+    ):
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                handler_name = "?"
+                if i < len(subscribers):
+                    try:
+                        handler_name = subscribers[i].__name__
+                    except AttributeError:
+                        pass
+                logger.error(
+                    f"Error in handler '{handler_name}' for {event_type} ID {event_id}: {result}",
+                    exc_info=result,
+                )
+
+    async def subscribe_async(
+        self, event_type: Union[str, Type[DomainEvent]], handler: Callable
+    ) -> None:
+        """Asynchronously subscribe a handler to an event type."""
+        event_type_name = (
+            event_type.__name__ if isinstance(event_type, type) else str(event_type)
+        )
+        async with self._lock:
+            self.subscribers[event_type_name].append(handler)
+        logger.debug(
+            f"Subscribed handler {handler.__name__} to event type {event_type_name}"
+        )
 
     def subscribe(
         self, event_type: Union[str, Type[DomainEvent]], handler: Callable
     ) -> None:
-        """
-        Subscribe a handler to an event type.
-
-        Args:
-            event_type: Event type name or class to subscribe to
-            handler: Callable to handle the event
-        """
-        # Allow subscribing with either event class or event name
-        if isinstance(event_type, type) and issubclass(event_type, DomainEvent):
-            event_type_name = event_type.__name__
-        else:
-            event_type_name = str(event_type)
-
+        """Subscribe a handler to an event type."""
+        event_type_name = (
+            event_type.__name__ if isinstance(event_type, type) else str(event_type)
+        )
+        # If thread safety needed for sync subscribe, add appropriate lock
         self.subscribers[event_type_name].append(handler)
         logger.debug(
             f"Subscribed handler {handler.__name__} to event type {event_type_name}"
         )
 
+    async def unsubscribe_async(
+        self, event_type: Union[str, Type[DomainEvent]], handler: Callable
+    ) -> bool:
+        """Asynchronously unsubscribe a handler from an event type."""
+        event_type_name = (
+            event_type.__name__ if isinstance(event_type, type) else str(event_type)
+        )
+        unsubscribed = False
+        async with self._lock:
+            if (
+                event_type_name in self.subscribers
+                and handler in self.subscribers[event_type_name]
+            ):
+                try:
+                    self.subscribers[event_type_name].remove(handler)
+                    unsubscribed = True
+                except ValueError:  # Handler might have been removed concurrently
+                    pass
+        if unsubscribed:
+            logger.debug(
+                f"Unsubscribed handler {handler.__name__} from event type {event_type_name}"
+            )
+        return unsubscribed
+
     def unsubscribe(
         self, event_type: Union[str, Type[DomainEvent]], handler: Callable
     ) -> bool:
-        """
-        Unsubscribe a handler from an event type.
-
-        Args:
-            event_type: Event type name or class to unsubscribe from
-            handler: Handler to unsubscribe
-
-        Returns:
-            True if handler was unsubscribed, False otherwise
-        """
-        # Allow unsubscribing with either event class or event name
-        if isinstance(event_type, type) and issubclass(event_type, DomainEvent):
-            event_type_name = event_type.__name__
-        else:
-            event_type_name = str(event_type)
-
+        """Unsubscribe a handler from an event type."""
+        event_type_name = (
+            event_type.__name__ if isinstance(event_type, type) else str(event_type)
+        )
+        # If thread safety needed for sync unsubscribe, add appropriate lock
         if (
             event_type_name in self.subscribers
             and handler in self.subscribers[event_type_name]
         ):
-            self.subscribers[event_type_name].remove(handler)
-            logger.debug(
-                f"Unsubscribed handler {handler.__name__} from event type {event_type_name}"
-            )
-            return True
+            try:
+                self.subscribers[event_type_name].remove(handler)
+                logger.debug(
+                    f"Unsubscribed handler {handler.__name__} from event type {event_type_name}"
+                )
+                return True
+            except ValueError:
+                return False  # Handler already removed
         return False
 
+    async def clear_subscriptions_async(self) -> None:
+        """Asynchronously clear all subscriptions."""
+        async with self._lock:
+            self.subscribers.clear()
+        logger.debug("Cleared all event subscriptions")
+
     def clear_subscriptions(self) -> None:
-        """Clear all subscriptions (useful for testing)."""
+        """Clear all subscriptions."""
+        # If thread safety needed, add appropriate lock
         self.subscribers.clear()
         logger.debug("Cleared all event subscriptions")
 
 
-# Global event bus instance
 global_event_bus = EventBus()
 
 
-# Common domain events
-class EntityCreatedEvent(DomainEvent):
-    """Base event for entity creation."""
-
-    def __init__(self, entity_id: Any, entity_type: str, user_id: Optional[int] = None):
-        """
-        Initialize entity created event.
-
-        Args:
-            entity_id: ID of the created entity
-            entity_type: Type of the created entity
-            user_id: Optional ID of the user who created the entity
-        """
-        super().__init__()
-        self.entity_id = entity_id
-        self.entity_type = entity_type
-        self.user_id = user_id
-
-
-class EntityUpdatedEvent(DomainEvent):
-    """Base event for entity updates."""
-
-    def __init__(
-        self,
-        entity_id: Any,
-        entity_type: str,
-        changes: Dict[str, Any],
-        user_id: Optional[int] = None,
-    ):
-        """
-        Initialize entity updated event.
-
-        Args:
-            entity_id: ID of the updated entity
-            entity_type: Type of the updated entity
-            changes: Dictionary of changed fields with old and new values
-            user_id: Optional ID of the user who updated the entity
-        """
-        super().__init__()
-        self.entity_id = entity_id
-        self.entity_type = entity_type
-        self.changes = changes
-        self.user_id = user_id
-
-
-class EntityDeletedEvent(DomainEvent):
-    """Base event for entity deletion."""
-
-    def __init__(self, entity_id: Any, entity_type: str, user_id: Optional[int] = None):
-        """
-        Initialize entity deleted event.
-
-        Args:
-            entity_id: ID of the deleted entity
-            entity_type: Type of the deleted entity
-            user_id: Optional ID of the user who deleted the entity
-        """
-        super().__init__()
-        self.entity_id = entity_id
-        self.entity_type = entity_type
-        self.user_id = user_id
-
-
+# --- FastAPI Event Handlers Setup (Keep as is) ---
 def setup_event_handlers(app: FastAPI) -> None:
-    """
-    Set up FastAPI application event handlers.
-
-    This function registers startup and shutdown event handlers
-    for the application to initialize and clean up resources.
-
-    Args:
-        app: The FastAPI application instance
-    """
-
     @app.on_event("startup")
     async def startup_event():
-        """
-        Handle application startup events.
-
-        Initializes necessary resources and connections.
-        """
         logger.info("Application starting up")
-        # Initialize resources here (database connections, caches, etc.)
 
     @app.on_event("shutdown")
     async def shutdown_event():
-        """
-        Handle application shutdown events.
-
-        Cleanly closes connections and resources.
-        """
         logger.info("Application shutting down")
-        # Clean up resources here (close connections, flush caches, etc.)
-
-        # Cancel any pending async tasks
         tasks = [
             t
             for t in asyncio.all_tasks()
             if t is not asyncio.current_task() and not t.done()
         ]
-
         if tasks:
-            logger.info(f"Cancelling {len(tasks)} pending tasks")
-            for task in tasks:
-                task.cancel()
-
+            logger.info(f"Cancelling {len(tasks)} tasks")
+            [t.cancel() for t in tasks]
             await asyncio.gather(*tasks, return_exceptions=True)
-            logger.info("All pending tasks cancelled")
+            logger.info("Tasks cancelled")

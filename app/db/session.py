@@ -23,9 +23,7 @@ import logging
 import threading
 import datetime
 import gc
-from typing import (
-    Generator, Any, Optional, Dict, List, TypeVar
-)
+from typing import Generator, Any, Optional, Dict, List, TypeVar
 
 from contextlib import contextmanager
 import functools
@@ -38,10 +36,7 @@ import sqlite3
 import sqlalchemy
 
 from app.core.key_manager import KeyManager
-from app.core.exceptions import (
-    SecurityException,
-    EncryptionKeyMissingException
-)
+from app.core.exceptions import SecurityException, EncryptionKeyMissingException
 from app.core.config import settings
 from app.db.models.base import Base
 
@@ -49,7 +44,7 @@ from app.db.models.base import Base
 logger = logging.getLogger(__name__)
 
 # Define a generic model type for type hints
-ModelT = TypeVar('ModelT', bound=Any)
+ModelT = TypeVar("ModelT", bound=Any)
 
 # Constants
 CONNECTION_RETRY_DELAY = 0.5  # seconds
@@ -57,15 +52,16 @@ CONNECTION_HEALTH_CHECK_INTERVAL = 60  # seconds
 CONNECTION_MAX_AGE = 1800  # 30 minutes
 CONNECTION_MAX_IDLE_TIME = 300  # 5 minutes
 CONNECTION_POOL_RECYCLE = 900  # 15 minutes
-CONNECTION_POOL_SIZE = getattr(settings, 'DB_POOL_SIZE', 5)
-CONNECTION_MAX_OVERFLOW = getattr(settings, 'DB_MAX_OVERFLOW', 10)
-CONNECTION_POOL_TIMEOUT = getattr(settings, 'DB_POOL_TIMEOUT', 30)
+CONNECTION_POOL_SIZE = getattr(settings, "DB_POOL_SIZE", 5)
+CONNECTION_MAX_OVERFLOW = getattr(settings, "DB_MAX_OVERFLOW", 10)
+CONNECTION_POOL_TIMEOUT = getattr(settings, "DB_POOL_TIMEOUT", 30)
 CONNECTION_POOL_PRE_PING = True
 
 
 # -----------------------------------------------------------------------------
 # Encryption Management
 # -----------------------------------------------------------------------------
+
 
 class EncryptionManager:
     """
@@ -74,6 +70,7 @@ class EncryptionManager:
     This class handles encryption key management, connection configuration,
     and provides a consistent interface for encrypted database operations.
     """
+
     _encryption_key: Optional[str] = None
     _sqlcipher_available: bool = False
     _sqlcipher_module = None
@@ -106,7 +103,9 @@ class EncryptionManager:
                 cls._initialized = True
                 logger.info("Encryption manager initialized successfully")
             except Exception as e:
-                logger.error(f"Failed to initialize encryption manager: {e}", exc_info=True)
+                logger.error(
+                    f"Failed to initialize encryption manager: {e}", exc_info=True
+                )
                 raise
 
     @classmethod
@@ -126,7 +125,9 @@ class EncryptionManager:
             Exception: If connection fails
         """
         if not cls.is_sqlcipher_available():
-            raise RuntimeError("SQLCipher is not available but an encrypted connection was requested")
+            raise RuntimeError(
+                "SQLCipher is not available but an encrypted connection was requested"
+            )
 
         encryption_key = cls.get_key()
         if not encryption_key:
@@ -154,7 +155,9 @@ class EncryptionManager:
                 cursor.close()
                 conn.close()
                 logger.error(f"Database key verification failed: {str(e)}")
-                raise ValueError(f"Database encryption key appears to be incorrect: {str(e)}")
+                raise ValueError(
+                    f"Database encryption key appears to be incorrect: {str(e)}"
+                )
 
             # Now apply other PRAGMA settings
             for pragma, value in cls._pragma_statements.items():
@@ -212,12 +215,16 @@ class EncryptionManager:
             cursor.execute("SELECT count(*) FROM sqlite_master;")
             result = cursor.fetchone()
 
-            logger.info(f"Key verification successful: database contains {result[0]} tables")
+            logger.info(
+                f"Key verification successful: database contains {result[0]} tables"
+            )
             return True
 
         except Exception as e:
             if "file is not a database" in str(e):
-                logger.error(f"Key verification failed: incorrect encryption key for {db_path}")
+                logger.error(
+                    f"Key verification failed: incorrect encryption key for {db_path}"
+                )
             else:
                 logger.error(f"Key verification failed: {str(e)}")
             return False
@@ -248,22 +255,32 @@ class EncryptionManager:
                 logger.debug("Encryption key loaded successfully")
             elif settings.USE_SQLCIPHER:
                 logger.error("KeyManager returned no key, but SQLCipher is enabled")
-                raise EncryptionKeyMissingException("Mandatory encryption key failed to load")
+                raise EncryptionKeyMissingException(
+                    "Mandatory encryption key failed to load"
+                )
             else:
                 logger.info("No encryption key loaded (SQLCipher disabled)")
         except SecurityException as e:
             logger.error(f"Failed to load encryption key via KeyManager: {e}")
             if settings.USE_SQLCIPHER:
-                raise EncryptionKeyMissingException(f"Mandatory encryption key failed to load: {e}") from e
+                raise EncryptionKeyMissingException(
+                    f"Mandatory encryption key failed to load: {e}"
+                ) from e
             else:
-                logger.warning("KeyManager failed, but SQLCipher is disabled. Proceeding without encryption")
+                logger.warning(
+                    "KeyManager failed, but SQLCipher is disabled. Proceeding without encryption"
+                )
                 cls._encryption_key = None
         except Exception as e:
             logger.exception(f"Unexpected error during encryption key loading: {e}")
             if settings.USE_SQLCIPHER:
-                raise RuntimeError(f"Mandatory encryption key failed to load: {e}") from e
+                raise RuntimeError(
+                    f"Mandatory encryption key failed to load: {e}"
+                ) from e
             else:
-                logger.warning("Key loading failed, but SQLCipher is disabled. Proceeding without encryption")
+                logger.warning(
+                    "Key loading failed, but SQLCipher is disabled. Proceeding without encryption"
+                )
                 cls._encryption_key = None
 
     @classmethod
@@ -277,18 +294,27 @@ class EncryptionManager:
         if settings.USE_SQLCIPHER:
             try:
                 import pysqlcipher3.dbapi2 as sqlcipher
+
                 cls._sqlcipher_available = True
                 cls._sqlcipher_module = sqlcipher
-                logger.info("SQLCipher libraries detected and will be used for database encryption")
+                logger.info(
+                    "SQLCipher libraries detected and will be used for database encryption"
+                )
             except ImportError:
                 cls._sqlcipher_available = False
                 cls._sqlcipher_module = None
-                logger.error("SQLCipher requested (USE_SQLCIPHER=true) but libraries (pysqlcipher3) not found")
-                raise ImportError("pysqlcipher3 library not found, but USE_SQLCIPHER is true")
+                logger.error(
+                    "SQLCipher requested (USE_SQLCIPHER=true) but libraries (pysqlcipher3) not found"
+                )
+                raise ImportError(
+                    "pysqlcipher3 library not found, but USE_SQLCIPHER is true"
+                )
         else:
             cls._sqlcipher_available = False
             cls._sqlcipher_module = None
-            logger.info("SQLCipher encryption disabled in settings (USE_SQLCIPHER=false)")
+            logger.info(
+                "SQLCipher encryption disabled in settings (USE_SQLCIPHER=false)"
+            )
 
     @classmethod
     def get_key(cls) -> Optional[str]:
@@ -367,7 +393,9 @@ class EncryptionManager:
                     if conn:
                         conn.close()
                     conn = None
-                    logger.debug(f"Attempting to remove potentially corrupted DB file: {path}")
+                    logger.debug(
+                        f"Attempting to remove potentially corrupted DB file: {path}"
+                    )
                     os.remove(path)
                 except Exception as remove_e:
                     logger.error(f"Failed to remove DB file during cleanup: {remove_e}")
@@ -410,7 +438,13 @@ class EncryptionManager:
 
         create_statements = []
         for table in metadata.sorted_tables:
-            create_statements.append(str(CreateTable(table).compile(dialect=sqlalchemy.dialects.sqlite.dialect())))
+            create_statements.append(
+                str(
+                    CreateTable(table).compile(
+                        dialect=sqlalchemy.dialects.sqlite.dialect()
+                    )
+                )
+            )
 
         conn = None
         cursor = None
@@ -428,7 +462,9 @@ class EncryptionManager:
 
             # Execute each CREATE TABLE statement
             for statement in create_statements:
-                logger.debug(f"Executing: {statement[:60]}...")  # Log just the beginning
+                logger.debug(
+                    f"Executing: {statement[:60]}..."
+                )  # Log just the beginning
                 cursor.execute(statement)
 
             conn.commit()
@@ -440,7 +476,7 @@ class EncryptionManager:
             logger.info(f"Created {len(table_names)} tables directly with SQLCipher")
 
             if logger.isEnabledFor(logging.DEBUG):
-                table_list = ', '.join(table_names[:5])
+                table_list = ", ".join(table_names[:5])
                 if len(table_names) > 5:
                     table_list += "..."
                 logger.debug(f"Tables created: {table_list}")
@@ -501,7 +537,9 @@ class EncryptionManager:
                 logger.error(f"Test query returned no result for {path}")
                 return False  # Should get at least 0
 
-            logger.info(f"Successfully tested encrypted database at {path} ({result[0]} tables found)")
+            logger.info(
+                f"Successfully tested encrypted database at {path} ({result[0]} tables found)"
+            )
             return True
 
         except Exception as e:
@@ -555,18 +593,25 @@ def get_database_path() -> str:
                 # For simplicity here, we make it absolute from CWD, adjust if needed
                 db_path = os.path.abspath(db_url_path)
                 logger.warning(
-                    f"DATABASE_URL uses relative path '{db_url_path}'. Resolving to absolute path: {db_path}")
+                    f"DATABASE_URL uses relative path '{db_url_path}'. Resolving to absolute path: {db_path}"
+                )
             else:
                 db_path = db_url_path
 
             logger.info(f"Extracted database path from URL: {db_path}")
             return db_path
         else:
-            logger.error(f"Non-SQLite URL not supported with SQLCipher/standard SQLite mode: {settings.DATABASE_URL}")
-            raise ValueError("Only SQLite URLs (sqlite:///...) are supported by this configuration")
+            logger.error(
+                f"Non-SQLite URL not supported with SQLCipher/standard SQLite mode: {settings.DATABASE_URL}"
+            )
+            raise ValueError(
+                "Only SQLite URLs (sqlite:///...) are supported by this configuration"
+            )
     else:
         # Consider providing a default path if none is specified, e.g., in user data directory
-        raise ValueError("No database path specified in settings (DATABASE_PATH or DATABASE_URL)")
+        raise ValueError(
+            "No database path specified in settings (DATABASE_PATH or DATABASE_URL)"
+        )
 
 
 # Get database path
@@ -589,7 +634,6 @@ if use_sqlcipher:
         pool_recycle=CONNECTION_POOL_RECYCLE,
     )
 
-
     # Add additional event listeners if needed
     @event.listens_for(engine, "connect")
     def _sqlcipher_on_connect(dbapi_connection, connection_record):
@@ -597,19 +641,24 @@ if use_sqlcipher:
         cursor.execute("PRAGMA foreign_keys=ON;")
         cursor.close()
 
-
     # Verify the engine works
     try:
         with engine.connect() as conn:
             result = conn.execute(text("SELECT 1")).scalar()
-            logger.info(f"SQLAlchemy SQLCipher engine connection test successful: {result}")
+            logger.info(
+                f"SQLAlchemy SQLCipher engine connection test successful: {result}"
+            )
     except Exception as e:
         logger.critical(f"Failed to initialize SQLCipher engine: {e}", exc_info=True)
-        raise RuntimeError(f"Could not initialize SQLCipher database connection: {e}") from e
+        raise RuntimeError(
+            f"Could not initialize SQLCipher database connection: {e}"
+        ) from e
 
 else:
     # Standard SQLite Mode (No encryption)
-    logger.info(f"Creating standard SQLAlchemy engine for non-encrypted database: {db_path}")
+    logger.info(
+        f"Creating standard SQLAlchemy engine for non-encrypted database: {db_path}"
+    )
     engine = create_engine(
         f"sqlite:///{db_path}",
         connect_args={"check_same_thread": False},
@@ -619,9 +668,8 @@ else:
         pool_timeout=CONNECTION_POOL_TIMEOUT,
         pool_pre_ping=CONNECTION_POOL_PRE_PING,
         pool_recycle=CONNECTION_POOL_RECYCLE,
-        echo=settings.DEBUG
+        echo=settings.DEBUG,
     )
-
 
     # Add event listener for standard SQLite connections
     @event.listens_for(engine, "connect")
@@ -630,15 +678,20 @@ else:
         cursor.execute("PRAGMA foreign_keys=ON;")
         cursor.close()
 
-
     # Verify the engine
     try:
         with engine.connect() as conn:
             result = conn.execute(text("SELECT 1")).scalar()
-            logger.info(f"Standard SQLAlchemy engine connection test successful: {result}")
+            logger.info(
+                f"Standard SQLAlchemy engine connection test successful: {result}"
+            )
     except Exception as e:
-        logger.critical(f"Failed to initialize standard SQLite engine: {e}", exc_info=True)
-        raise RuntimeError(f"Could not initialize standard SQLite database connection: {e}") from e
+        logger.critical(
+            f"Failed to initialize standard SQLite engine: {e}", exc_info=True
+        )
+        raise RuntimeError(
+            f"Could not initialize standard SQLite database connection: {e}"
+        ) from e
 
 # Create session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -647,6 +700,7 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 # -----------------------------------------------------------------------------
 # FastAPI Dependency
 # -----------------------------------------------------------------------------
+
 
 def get_db() -> Generator[Session, None, None]:
     """
@@ -677,6 +731,7 @@ def get_db() -> Generator[Session, None, None]:
 # -----------------------------------------------------------------------------
 # Transaction Support
 # -----------------------------------------------------------------------------
+
 
 @contextmanager
 def transaction(session=None):
@@ -715,7 +770,9 @@ def with_transaction(func):
     def wrapper(*args, **kwargs):
         # Check if session is already provided
         session_in_args = any(isinstance(arg, Session) for arg in args)
-        session_in_kwargs = 'session' in kwargs and isinstance(kwargs['session'], Session)
+        session_in_kwargs = "session" in kwargs and isinstance(
+            kwargs["session"], Session
+        )
 
         if session_in_args or session_in_kwargs:
             # Session already provided, just call the function
@@ -731,6 +788,7 @@ def with_transaction(func):
 # -----------------------------------------------------------------------------
 # Database Verification and Initialization
 # -----------------------------------------------------------------------------
+
 
 def verify_db_connection() -> bool:
     """
@@ -771,7 +829,9 @@ def init_db(reset: bool = False) -> bool:
                     return False
                 logger.info("New encrypted database created")
             elif not EncryptionManager.test_encrypted_database(db_path):
-                logger.error(f"Existing encrypted database test failed. Recreating database...")
+                logger.error(
+                    f"Existing encrypted database test failed. Recreating database..."
+                )
                 if not EncryptionManager.create_new_encrypted_database(db_path):
                     logger.error("Failed to recreate encrypted database")
                     return False
@@ -794,7 +854,9 @@ def init_db(reset: bool = False) -> bool:
 
         # Verify table creation
         with engine.connect() as conn:
-            table_count = conn.execute(text("SELECT count(*) FROM sqlite_master WHERE type='table';")).scalar()
+            table_count = conn.execute(
+                text("SELECT count(*) FROM sqlite_master WHERE type='table';")
+            ).scalar()
             logger.info(f"Database schema initialized with {table_count} tables")
 
         return True
@@ -808,6 +870,7 @@ def init_db(reset: bool = False) -> bool:
 # Database Utility Functions
 # -----------------------------------------------------------------------------
 
+
 def get_table_info() -> List[Dict[str, Any]]:
     """
     Get detailed information about all tables in the database.
@@ -817,38 +880,45 @@ def get_table_info() -> List[Dict[str, Any]]:
     """
     try:
         from sqlalchemy import inspect
+
         inspector = inspect(engine)
 
         result = []
         for table_name in inspector.get_table_names():
-            if table_name.startswith('sqlite_'):
+            if table_name.startswith("sqlite_"):
                 continue
 
             # Get columns
             columns = []
             for column in inspector.get_columns(table_name):
-                columns.append({
-                    "name": column['name'],
-                    "type": str(column['type']),
-                    "nullable": column['nullable'],
-                    "primary_key": column.get('primary_key', False)
-                })
+                columns.append(
+                    {
+                        "name": column["name"],
+                        "type": str(column["type"]),
+                        "nullable": column["nullable"],
+                        "primary_key": column.get("primary_key", False),
+                    }
+                )
 
             # Get indices
             indices = []
             for index in inspector.get_indexes(table_name):
-                indices.append(index['name'])
+                indices.append(index["name"])
 
             # Get row count
             with engine.connect() as conn:
-                row_count = conn.execute(text(f"SELECT COUNT(*) FROM {table_name}")).scalar()
+                row_count = conn.execute(
+                    text(f"SELECT COUNT(*) FROM {table_name}")
+                ).scalar()
 
-            result.append({
-                "name": table_name,
-                "columns": columns,
-                "row_count": row_count,
-                "indices": indices
-            })
+            result.append(
+                {
+                    "name": table_name,
+                    "columns": columns,
+                    "row_count": row_count,
+                    "indices": indices,
+                }
+            )
 
         return result
     except Exception as e:
@@ -869,7 +939,7 @@ def get_db_stats() -> Dict[str, Any]:
         "encryption_enabled": use_sqlcipher,
         "tables": [],
         "size_bytes": 0,
-        "connection_pool": {}
+        "connection_pool": {},
     }
 
     try:
@@ -884,12 +954,14 @@ def get_db_stats() -> Dict[str, Any]:
 
         tables = []
         for table in table_info:
-            tables.append({
-                "name": table["name"],
-                "rows": table["row_count"],
-                "column_count": len(table["columns"]),
-                "has_indices": len(table["indices"]) > 0
-            })
+            tables.append(
+                {
+                    "name": table["name"],
+                    "rows": table["row_count"],
+                    "column_count": len(table["columns"]),
+                    "has_indices": len(table["indices"]) > 0,
+                }
+            )
             total_rows += table["row_count"]
 
         stats["tables"] = tables
@@ -973,7 +1045,7 @@ def export_schema(output_file: str = None) -> str:
                 schema_sql += f"CREATE {'UNIQUE ' if index['unique'] else ''}INDEX {index['name']} ON {table.name} ({', '.join(index['column_names'])});\n\n"
 
         if output_file:
-            with open(output_file, 'w') as f:
+            with open(output_file, "w") as f:
                 f.write(schema_sql)
             logger.info(f"Schema exported to {output_file}")
             return output_file
@@ -1044,6 +1116,7 @@ def backup_db(backup_path: str, vacuum: bool = True) -> bool:
         else:
             # For standard SQLite, use simpler backup
             import shutil
+
             shutil.copy2(db_path, backup_path)
 
         logger.info(f"Database backed up to {backup_path}")
@@ -1056,6 +1129,7 @@ def backup_db(backup_path: str, vacuum: bool = True) -> bool:
 # -----------------------------------------------------------------------------
 # Encryption Status
 # -----------------------------------------------------------------------------
+
 
 def get_encryption_status() -> dict:
     """
@@ -1071,13 +1145,14 @@ def get_encryption_status() -> dict:
         "encryption_active": use_sqlcipher and key_loaded,
         "database_path": db_path,
         "uses_sqlalchemy_dialect": True,
-        "has_encryption_key_loaded": key_loaded
+        "has_encryption_key_loaded": key_loaded,
     }
 
 
 # -----------------------------------------------------------------------------
 # Database Migrations Support
 # -----------------------------------------------------------------------------
+
 
 class Migration:
     """Base class for database migrations."""
@@ -1114,14 +1189,18 @@ class Migration:
 def _create_migrations_table():
     """Create the migrations tracking table if it doesn't exist."""
     with engine.connect() as conn:
-        conn.execute(text("""
+        conn.execute(
+            text(
+                """
         CREATE TABLE IF NOT EXISTS migrations (
             id INTEGER PRIMARY KEY,
             version TEXT NOT NULL,
             description TEXT,
             applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
-        """))
+        """
+            )
+        )
         conn.commit()
 
 
@@ -1149,8 +1228,10 @@ def record_migration(version, description):
     """
     with engine.connect() as conn:
         conn.execute(
-            text("INSERT INTO migrations (version, description) VALUES (:version, :description)"),
-            {"version": version, "description": description}
+            text(
+                "INSERT INTO migrations (version, description) VALUES (:version, :description)"
+            ),
+            {"version": version, "description": description},
         )
         conn.commit()
 
@@ -1165,7 +1246,7 @@ def remove_migration(version):
     with engine.connect() as conn:
         conn.execute(
             text("DELETE FROM migrations WHERE version = :version"),
-            {"version": version}
+            {"version": version},
         )
         conn.commit()
 
@@ -1211,7 +1292,9 @@ def apply_migrations(migrations: List[Migration], target_version: str = None) ->
         db = SessionLocal()
         try:
             for migration in to_apply:
-                logger.info(f"Applying migration {migration.version}: {migration.description}")
+                logger.info(
+                    f"Applying migration {migration.version}: {migration.description}"
+                )
                 migration.up(db)
                 record_migration(migration.version, migration.description)
                 logger.info(f"Successfully applied migration {migration.version}")
@@ -1276,7 +1359,9 @@ def revert_migrations(migrations: List[Migration], target_version: str = None) -
         db = SessionLocal()
         try:
             for migration in to_revert:
-                logger.info(f"Reverting migration {migration.version}: {migration.description}")
+                logger.info(
+                    f"Reverting migration {migration.version}: {migration.description}"
+                )
                 migration.down(db)
                 remove_migration(migration.version)
                 logger.info(f"Successfully reverted migration {migration.version}")
@@ -1310,7 +1395,7 @@ def get_db_health():
             "memory": {},
             "connections": {},
             "query_stats": {},
-            "recommendations": []
+            "recommendations": [],
         }
 
         # Memory analysis
@@ -1327,7 +1412,9 @@ def get_db_health():
 
             # Add recommendations based on memory usage
             if health["memory"]["rss_mb"] > 1000:
-                health["recommendations"].append("High memory usage detected - consider reducing query batch sizes")
+                health["recommendations"].append(
+                    "High memory usage detected - consider reducing query batch sizes"
+                )
         except Exception as e:
             health["memory"]["error"] = str(e)
 
@@ -1342,10 +1429,15 @@ def get_db_health():
 
         # Add connection-related recommendations
         if health["connections"]["checkedout"] > pool.size() * 0.8:
-            health["recommendations"].append("Connection pool nearly full - check for leaks")
+            health["recommendations"].append(
+                "Connection pool nearly full - check for leaks"
+            )
 
         # Add overall status
-        if health["memory"].get("rss_mb", 0) > 1500 or len(health["recommendations"]) > 2:
+        if (
+            health["memory"].get("rss_mb", 0) > 1500
+            or len(health["recommendations"]) > 2
+        ):
             health["status"] = "warning"
 
         return health
@@ -1355,12 +1447,15 @@ def get_db_health():
             "status": "limited",
             "note": "psutil not available for memory analysis",
             "connections": {
-                "pool_size": engine.pool.size() if hasattr(engine.pool, "size") else "unknown",
-                "overflow": engine.pool.overflow() if hasattr(engine.pool, "overflow") else "unknown"
-            }
+                "pool_size": (
+                    engine.pool.size() if hasattr(engine.pool, "size") else "unknown"
+                ),
+                "overflow": (
+                    engine.pool.overflow()
+                    if hasattr(engine.pool, "overflow")
+                    else "unknown"
+                ),
+            },
         }
     except Exception as e:
-        return {
-            "status": "error",
-            "error": str(e)
-        }
+        return {"status": "error", "error": str(e)}

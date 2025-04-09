@@ -27,6 +27,7 @@ engine = create_engine(
 )  # Add check_same_thread for SQLite
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+
 # Override the database dependency
 def override_get_db():
     db = TestingSessionLocal()
@@ -35,15 +36,17 @@ def override_get_db():
     finally:
         db.close()
 
+
 # Store the test user ID globally for reuse in tests
 test_user_id = None
 test_user_email = "test_annotator@example.com"
+
 
 # Override the authentication dependency
 def override_get_current_active_user(
     db: Session = Depends(override_get_db),
 ) -> User:
-    global test_user_id # Reconsider using globals if possible
+    global test_user_id  # Reconsider using globals if possible
     user_service = UserService(db)
     user = user_service.get_by_email(email=test_user_email)
 
@@ -66,10 +69,9 @@ def override_get_current_active_user(
         #      pytest.fail(f"Failed to create test user in override: {e}")
         # --- REMOVE TRY...EXCEPT END ---
 
-
     if not user:
-         # If user is still None after trying to create, fail explicitly
-         pytest.fail("Test user could not be found or created.")
+        # If user is still None after trying to create, fail explicitly
+        pytest.fail("Test user could not be found or created.")
 
     return user
 
@@ -87,9 +89,7 @@ def test_app():
     app.dependency_overrides[get_current_active_user] = override_get_current_active_user
 
     # Include the annotations router
-    app.include_router(
-        annotations.router, prefix="/annotations", tags=["annotations"]
-    )
+    app.include_router(annotations.router, prefix="/annotations", tags=["annotations"])
 
     yield app
 
@@ -112,6 +112,7 @@ test_annotation_visibility = "private"
 
 
 # --- Test Functions ---
+
 
 def test_list_annotations_empty(client: TestClient):
     response = client.get("/annotations/")
@@ -295,7 +296,9 @@ def test_list_annotations_with_filters(client: TestClient):
         assert item["created_by"] == test_user_id
 
     # Filter by search term
-    response = client.get("/annotations/?search=specific annotation") # From test_create_entity_annotation
+    response = client.get(
+        "/annotations/?search=specific annotation"
+    )  # From test_create_entity_annotation
     assert response.status_code == 200
     data = response.json()
     assert isinstance(data, list)

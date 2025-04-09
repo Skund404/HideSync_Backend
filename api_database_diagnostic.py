@@ -17,10 +17,10 @@ if str(project_root) not in sys.path:
 
 # Configure logging
 logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
 
 def diagnose_api_database_interaction():
     """
@@ -50,7 +50,7 @@ def diagnose_api_database_interaction():
                 address="456 API Test St, Diagnostic City, DC 54321",
                 website="https://api-diagnostic-test.com",
                 status="ACTIVE",
-                notes="API diagnostic test supplier for debugging"
+                notes="API diagnostic test supplier for debugging",
             )
 
             logger.info("Prepared Supplier Create Payload:")
@@ -62,12 +62,16 @@ def diagnose_api_database_interaction():
             db.commit()
             db.refresh(new_supplier)
 
-            logger.info(f"Supplier created via direct DB session. ID: {new_supplier.id}")
+            logger.info(
+                f"Supplier created via direct DB session. ID: {new_supplier.id}"
+            )
 
             # Verify supplier was created
-            verify_supplier = db.query(Supplier).filter(
-                Supplier.email == "api-test@diagnostic.com"
-            ).first()
+            verify_supplier = (
+                db.query(Supplier)
+                .filter(Supplier.email == "api-test@diagnostic.com")
+                .first()
+            )
 
             if verify_supplier:
                 logger.info("Verification Successful:")
@@ -80,11 +84,14 @@ def diagnose_api_database_interaction():
             all_suppliers = db.query(Supplier).all()
             logger.info("\n--- ALL SUPPLIERS IN DATABASE ---")
             for supplier in all_suppliers:
-                logger.info(f"ID: {supplier.id}, Name: {supplier.name}, Email: {supplier.email}")
+                logger.info(
+                    f"ID: {supplier.id}, Name: {supplier.name}, Email: {supplier.email}"
+                )
 
         except Exception as create_error:
             logger.error(f"Supplier creation failed: {create_error}")
             import traceback
+
             traceback.print_exc()
             db.rollback()
 
@@ -95,13 +102,16 @@ def diagnose_api_database_interaction():
     except Exception as e:
         logger.error(f"Diagnostic script failed: {e}")
         import traceback
+
         traceback.print_exc()
+
 
 def main():
     """
     Main function to run API and database diagnostics
     """
     diagnose_api_database_interaction()
+
 
 if __name__ == "__main__":
     main()

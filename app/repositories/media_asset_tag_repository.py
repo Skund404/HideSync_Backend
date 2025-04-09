@@ -44,12 +44,14 @@ class MediaAssetTagRepository(BaseRepository[MediaAssetTag]):
             The created association
         """
         # Generate a UUID for the new association if not provided
-        if 'id' not in data:
-            data['id'] = str(uuid.uuid4())
+        if "id" not in data:
+            data["id"] = str(uuid.uuid4())
 
         return self.create(data)
 
-    def get_by_asset_and_tag(self, asset_id: str, tag_id: str) -> Optional[MediaAssetTag]:
+    def get_by_asset_and_tag(
+        self, asset_id: str, tag_id: str
+    ) -> Optional[MediaAssetTag]:
         """
         Get an association by asset ID and tag ID.
 
@@ -60,11 +62,11 @@ class MediaAssetTagRepository(BaseRepository[MediaAssetTag]):
         Returns:
             The association if found, None otherwise
         """
-        entity = self.session.query(self.model). \
-            filter(
-            self.model.media_asset_id == asset_id,
-            self.model.tag_id == tag_id
-        ).first()
+        entity = (
+            self.session.query(self.model)
+            .filter(self.model.media_asset_id == asset_id, self.model.tag_id == tag_id)
+            .first()
+        )
 
         return self._decrypt_sensitive_fields(entity) if entity else None
 
@@ -79,11 +81,11 @@ class MediaAssetTagRepository(BaseRepository[MediaAssetTag]):
         Returns:
             True if the association was deleted, False otherwise
         """
-        result = self.session.query(self.model). \
-            filter(
-            self.model.media_asset_id == asset_id,
-            self.model.tag_id == tag_id
-        ).delete(synchronize_session=False)
+        result = (
+            self.session.query(self.model)
+            .filter(self.model.media_asset_id == asset_id, self.model.tag_id == tag_id)
+            .delete(synchronize_session=False)
+        )
 
         return result > 0
 
@@ -97,9 +99,11 @@ class MediaAssetTagRepository(BaseRepository[MediaAssetTag]):
         Returns:
             List of associations for the media asset
         """
-        entities = self.session.query(self.model). \
-            filter(self.model.media_asset_id == asset_id). \
-            all()
+        entities = (
+            self.session.query(self.model)
+            .filter(self.model.media_asset_id == asset_id)
+            .all()
+        )
 
         return [self._decrypt_sensitive_fields(entity) for entity in entities]
 
@@ -113,9 +117,9 @@ class MediaAssetTagRepository(BaseRepository[MediaAssetTag]):
         Returns:
             List of associations for the tag
         """
-        entities = self.session.query(self.model). \
-            filter(self.model.tag_id == tag_id). \
-            all()
+        entities = (
+            self.session.query(self.model).filter(self.model.tag_id == tag_id).all()
+        )
 
         return [self._decrypt_sensitive_fields(entity) for entity in entities]
 
@@ -129,9 +133,11 @@ class MediaAssetTagRepository(BaseRepository[MediaAssetTag]):
         Returns:
             Number of associations deleted
         """
-        return self.session.query(self.model). \
-            filter(self.model.media_asset_id == asset_id). \
-            delete(synchronize_session=False)
+        return (
+            self.session.query(self.model)
+            .filter(self.model.media_asset_id == asset_id)
+            .delete(synchronize_session=False)
+        )
 
     def delete_by_tag(self, tag_id: str) -> int:
         """
@@ -143,6 +149,8 @@ class MediaAssetTagRepository(BaseRepository[MediaAssetTag]):
         Returns:
             Number of associations deleted
         """
-        return self.session.query(self.model). \
-            filter(self.model.tag_id == tag_id). \
-            delete(synchronize_session=False)
+        return (
+            self.session.query(self.model)
+            .filter(self.model.tag_id == tag_id)
+            .delete(synchronize_session=False)
+        )

@@ -3,6 +3,7 @@ def fix_storage_utilization():
 
     # Get session
     from app.db.session import SessionLocal
+
     session = SessionLocal()
 
     try:
@@ -10,9 +11,9 @@ def fix_storage_utilization():
         from app.db.models.material import Material
         from app.db.models.storage import StorageLocation
 
-        materials = session.query(Material).filter(
-            Material.storage_location.isnot(None)
-        ).all()
+        materials = (
+            session.query(Material).filter(Material.storage_location.isnot(None)).all()
+        )
 
         # Count materials per location
         location_counts = {}
@@ -22,9 +23,11 @@ def fix_storage_utilization():
 
         # Update each storage location
         for loc_id, count in location_counts.items():
-            location = session.query(StorageLocation).filter(
-                StorageLocation.id == loc_id
-            ).first()
+            location = (
+                session.query(StorageLocation)
+                .filter(StorageLocation.id == loc_id)
+                .first()
+            )
 
             if location:
                 location.utilized = count

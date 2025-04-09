@@ -35,14 +35,14 @@ class MediaAsset(AbstractBase, TimestampMixin, TrackingMixin):
     file_size_bytes = Column(Integer, nullable=False)
 
     # Upload information
-    uploaded_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    uploaded_at = Column(
+        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
+    )
     uploaded_by = Column(String(100), nullable=False)
 
     # Relationships
     tags = relationship(
-        "Tag",
-        secondary="media_asset_tags",
-        back_populates="media_assets"
+        "Tag", secondary="media_asset_tags", back_populates="media_assets"
     )
 
     def __repr__(self):

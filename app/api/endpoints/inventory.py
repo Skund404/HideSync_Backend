@@ -32,6 +32,7 @@ from app.core.exceptions import (
 )
 from app.schemas.inventory import InventorySummaryResponse
 import logging
+
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
@@ -46,7 +47,9 @@ def list_inventory(
         100, ge=1, le=1000, description="Maximum number of records to return"
     ),
     # RENAMED PARAMETER with ALIAS
-    inventory_status: Optional[str] = Query(None, alias="status", description="Filter by inventory status"),
+    inventory_status: Optional[str] = Query(
+        None, alias="status", description="Filter by inventory status"
+    ),
     location: Optional[str] = Query(None, description="Filter by storage location"),
     item_type: Optional[str] = Query(
         None, description="Filter by item type (material/product/tool)"
@@ -57,10 +60,10 @@ def list_inventory(
     Retrieve inventory items with optional filtering and pagination.
     """
     search_params = InventorySearchParams(
-        status=inventory_status, # Use renamed parameter
+        status=inventory_status,  # Use renamed parameter
         location=location,
         item_type=item_type,
-        search=search
+        search=search,
     )
 
     inventory_service = InventoryService(db)
@@ -72,18 +75,19 @@ def list_inventory(
         )
         return items
     except AttributeError as e:
-         # This exception should ideally not be hit if the repo method exists
-         # But if it does, the status code lookup should now work
-         raise HTTPException(
-             status_code=status.HTTP_501_NOT_IMPLEMENTED, # status now correctly refers to the imported module
-             detail=f"Inventory listing functionality is not fully implemented: {e}"
-         )
+        # This exception should ideally not be hit if the repo method exists
+        # But if it does, the status code lookup should now work
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,  # status now correctly refers to the imported module
+            detail=f"Inventory listing functionality is not fully implemented: {e}",
+        )
     except Exception as e:
         # logger.error(f"Error listing inventory: {e}", exc_info=True) # Optional logging
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred while retrieving inventory items."
+            detail="An unexpected error occurred while retrieving inventory items.",
         )
+
 
 @router.get(
     "/summary",
@@ -94,7 +98,9 @@ def list_inventory(
 )
 def get_inventory_summary(
     *,
-    inventory_service: InventoryService = Depends(get_inventory_service), # Use dependency getter
+    inventory_service: InventoryService = Depends(
+        get_inventory_service
+    ),  # Use dependency getter
     current_user: Any = Depends(get_current_active_user),
 ) -> InventorySummaryResponse:
     """
@@ -104,14 +110,15 @@ def get_inventory_summary(
         summary_data = inventory_service.get_summary_data()
         return summary_data
     except NotImplementedError as e:
-         logger.error(f"Summary endpoint failed: {e}", exc_info=True)
-         raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail=str(e))
+        logger.error(f"Summary endpoint failed: {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail=str(e))
     except Exception as e:
         logger.error(f"Unexpected error getting inventory summary: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An error occurred while calculating the inventory summary.",
         )
+
 
 @router.get("/transactions", response_model=List[InventoryTransaction])
 def list_inventory_transactions(

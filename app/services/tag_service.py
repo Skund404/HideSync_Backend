@@ -55,13 +55,13 @@ class TagService(BaseService[Tag]):
         return self.repository.get_by_id_with_assets(tag_id)
 
     def list_tags(
-            self,
-            skip: int = 0,
-            limit: int = 100,
-            search_params: Optional[Dict[str, Any]] = None,
-            sort_by: str = "name",
-            sort_dir: str = "asc",
-            estimate_count: bool = True,
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        search_params: Optional[Dict[str, Any]] = None,
+        sort_by: str = "name",
+        sort_dir: str = "asc",
+        estimate_count: bool = True,
     ) -> Tuple[List[Tag], int]:
         """
         List tags with filtering, sorting, and pagination.
@@ -83,16 +83,16 @@ class TagService(BaseService[Tag]):
             limit=limit,
             sort_by=sort_by,
             sort_dir=sort_dir,
-            estimate_count=estimate_count
+            estimate_count=estimate_count,
         )
 
         return tags, total
 
     def create_tag(
-            self,
-            name: str,
-            description: Optional[str] = None,
-            color: Optional[str] = None,
+        self,
+        name: str,
+        description: Optional[str] = None,
+        color: Optional[str] = None,
     ) -> Tag:
         """
         Create a new tag.
@@ -124,9 +124,9 @@ class TagService(BaseService[Tag]):
         return self.repository.create(tag_data)
 
     def update_tag(
-            self,
-            tag_id: str,
-            data: Dict[str, Any],
+        self,
+        tag_id: str,
+        data: Dict[str, Any],
     ) -> Optional[Tag]:
         """
         Update a tag.
@@ -150,7 +150,9 @@ class TagService(BaseService[Tag]):
         if "name" in data and data["name"] != tag.name:
             existing = self.repository.get_by_name(data["name"])
             if existing:
-                raise DuplicateEntityException(f"Tag with name '{data['name']}' already exists")
+                raise DuplicateEntityException(
+                    f"Tag with name '{data['name']}' already exists"
+                )
 
         # Update the tag
         return self.repository.update(tag_id, data)
@@ -202,10 +204,10 @@ class TagService(BaseService[Tag]):
         return self.repository.get_asset_count_by_tag(tag_id)
 
     def find_or_create_tag(
-            self,
-            name: str,
-            description: Optional[str] = None,
-            color: Optional[str] = None,
+        self,
+        name: str,
+        description: Optional[str] = None,
+        color: Optional[str] = None,
     ) -> Tag:
         """
         Find a tag by name or create it if it doesn't exist.

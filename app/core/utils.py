@@ -1,4 +1,3 @@
-
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Union, Tuple
 from enum import Enum
@@ -29,19 +28,19 @@ def normalize_material_type(value):
         return [normalize_material_type(item) for item in value]
 
     # Handle enum objects
-    if hasattr(value, 'value'):
+    if hasattr(value, "value"):
         return value.value
 
     # Handle string values - this is the key part
     if isinstance(value, str):
         # Map uppercase to lowercase - preserve the exact values as they appear in the enum
         material_type_mapping = {
-            'LEATHER': 'leather',
-            'HARDWARE': 'hardware',
-            'SUPPLIES': 'supplies',
-            'THREAD': 'thread',
-            'FABRIC': 'fabric',
-            'OTHER': 'other'
+            "LEATHER": "leather",
+            "HARDWARE": "hardware",
+            "SUPPLIES": "supplies",
+            "THREAD": "thread",
+            "FABRIC": "fabric",
+            "OTHER": "other",
         }
 
         # Case insensitive match
@@ -75,40 +74,40 @@ def normalize_material_data(data: Dict[str, Any]) -> Dict[str, Any]:
     result = {}
 
     # Copy fields that map directly
-    direct_fields = ['id', 'name', 'quantity', 'notes', 'sku', 'description']
+    direct_fields = ["id", "name", "quantity", "notes", "sku", "description"]
     for field in direct_fields:
         if field in data:
             result[field] = data[field]
 
     # Special handling for materialType
-    if 'materialType' in data:
-        result['materialType'] = normalize_material_type(data['materialType'])
+    if "materialType" in data:
+        result["materialType"] = normalize_material_type(data["materialType"])
 
     # Map price to sellPrice
-    if 'price' in data:
-        result['sellPrice'] = data['price']
-    elif 'cost' in data:
-        result['sellPrice'] = data['cost']
+    if "price" in data:
+        result["sellPrice"] = data["price"]
+    elif "cost" in data:
+        result["sellPrice"] = data["cost"]
 
     # Handle unit field
-    if 'unit' in data:
-        result['unit'] = data['unit']
+    if "unit" in data:
+        result["unit"] = data["unit"]
     else:
-        result['unit'] = 'piece'  # Default
+        result["unit"] = "piece"  # Default
 
     # Add required fields with defaults if missing
-    if 'status' not in data:
-        result['status'] = 'in_stock'
+    if "status" not in data:
+        result["status"] = "in_stock"
 
-    if 'quality' not in data:
-        result['quality'] = 'standard'
+    if "quality" not in data:
+        result["quality"] = "standard"
 
     # Add empty strings for optional fields if missing
     optional_fields = {
-        'supplierSku': '',
-        'storageLocation': '',
-        'notes': '',
-        'thumbnail': '',
+        "supplierSku": "",
+        "storageLocation": "",
+        "notes": "",
+        "thumbnail": "",
     }
 
     for field, default in optional_fields.items():
@@ -119,6 +118,7 @@ def normalize_material_data(data: Dict[str, Any]) -> Dict[str, Any]:
 
 
 # Update the serialize_for_response function in app/api/endpoints/materials.py
+
 
 def serialize_for_response(data: Any) -> Any:
     """
@@ -151,7 +151,7 @@ def serialize_for_response(data: Any) -> Any:
         # Convert to dictionary first
         raw_dict = {}
         for key, value in data.__dict__.items():
-            if not key.startswith('_'):  # Skip SQLAlchemy internal attributes
+            if not key.startswith("_"):  # Skip SQLAlchemy internal attributes
                 raw_dict[key] = value
 
         # Use our normalize_material_data function to handle all field mappings
@@ -168,4 +168,3 @@ def serialize_for_response(data: Any) -> Any:
 
     # Return regular values unchanged
     return data
-

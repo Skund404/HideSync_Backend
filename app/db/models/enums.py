@@ -1581,6 +1581,7 @@ class PatternFileType(Enum):
     PDF = ("PDF",)
     IMAGE = ("IMAGE",)
 
+
 def normalize_supplier_status(status: Union[str, SupplierStatus]) -> SupplierStatus:
     """
     Normalize supplier status to enum, handling various input formats
@@ -1608,8 +1609,10 @@ def normalize_supplier_status(status: Union[str, SupplierStatus]) -> SupplierSta
                 return enum_status
 
         # If no match found, raise a descriptive error
-        raise ValueError(f"Invalid supplier status: {status}. "
-                         f"Must be one of{[s.value for s in SupplierStatus]}")
+        raise ValueError(
+            f"Invalid supplier status: {status}. "
+            f"Must be one of{[s.value for s in SupplierStatus]}"
+        )
 
 
 class FileType(enum.Enum):

@@ -169,7 +169,9 @@ class Material(AbstractBase, ValidationMixin, CostingMixin, TimestampMixin):
         return quantity
 
     @validates("reorder_point")
-    def validate_reorder_point(self, key: str, value: Optional[float]) -> Optional[float]:
+    def validate_reorder_point(
+        self, key: str, value: Optional[float]
+    ) -> Optional[float]:
         """Validate reorder point (cannot be negative)."""
         if value is None:
             return value
@@ -244,7 +246,7 @@ class Material(AbstractBase, ValidationMixin, CostingMixin, TimestampMixin):
         else:
             # Fallback to material's field if no inventory record
             result["storage_location"] = self.storage_location
-            result["inventory_quantity"] = None # Indicate no separate inventory record
+            result["inventory_quantity"] = None  # Indicate no separate inventory record
             result["inventory_status"] = None
 
         return result

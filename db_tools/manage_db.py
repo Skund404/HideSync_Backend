@@ -20,8 +20,7 @@ if str(project_root) not in sys.path:
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -111,40 +110,25 @@ Examples:
   python -m db_tools.manage_db --create --seed
   python -m db_tools.manage_db --validate
   python -m db_tools.manage_db --reset --seed --seed-file custom_seed.json
-        """
+        """,
     )
 
+    parser.add_argument("--create", action="store_true", help="Create the database")
     parser.add_argument(
-        "--create",
-        action="store_true",
-        help="Create the database"
-    )
-    parser.add_argument(
-        "--seed",
-        action="store_true",
-        help="Seed the database with initial data"
+        "--seed", action="store_true", help="Seed the database with initial data"
     )
     parser.add_argument(
         "--validate",
         action="store_true",
-        help="Validate the database structure and content"
+        help="Validate the database structure and content",
     )
     parser.add_argument(
-        "--reset",
-        action="store_true",
-        help="Reset (delete and recreate) the database"
+        "--reset", action="store_true", help="Reset (delete and recreate) the database"
     )
     parser.add_argument(
-        "--seed-file",
-        type=str,
-        default=None,
-        help="Path to the seed data JSON file"
+        "--seed-file", type=str, default=None, help="Path to the seed data JSON file"
     )
-    parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Enable verbose output"
-    )
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
 
     args = parser.parse_args()
 
@@ -156,7 +140,9 @@ Examples:
     # Check if at least one action is specified
     if not (args.create or args.seed or args.validate or args.reset):
         parser.print_help()
-        logger.error("Please specify at least one action (--create, --seed, --validate, or --reset)")
+        logger.error(
+            "Please specify at least one action (--create, --seed, --validate, or --reset)"
+        )
         return False
 
     # Perform actions in the requested order

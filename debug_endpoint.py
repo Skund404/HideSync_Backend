@@ -41,7 +41,9 @@ def main():
 
         # Insert the import
         if import_section_end > 0:
-            lines.insert(import_section_end + 1, "from app.api.endpoints import entity_media")
+            lines.insert(
+                import_section_end + 1, "from app.api.endpoints import entity_media"
+            )
             print("Added entity_media import")
         else:
             print("WARNING: Could not find where to add the import")
@@ -64,8 +66,10 @@ def main():
 
         # Insert the router registration
         if router_section_end > 0:
-            lines.insert(router_section_end + 1,
-                         "api_router.include_router(entity_media.router, prefix=\"/entity-media\", tags=[\"entity-media\"])")
+            lines.insert(
+                router_section_end + 1,
+                'api_router.include_router(entity_media.router, prefix="/entity-media", tags=["entity-media"])',
+            )
             print("Added entity_media router registration")
         else:
             print("WARNING: Could not find where to add the router registration")

@@ -16,8 +16,7 @@ if str(project_root) not in sys.path:
 
 # Configure logging
 logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -54,7 +53,7 @@ def diagnose_database_operations():
                 address="123 Test St, Diagnostic City, DC 12345",
                 website="https://diagnostic-test.com",
                 status="ACTIVE",
-                notes="Diagnostic test supplier for debugging"
+                notes="Diagnostic test supplier for debugging",
             )
 
             # Add and commit the new supplier
@@ -64,7 +63,11 @@ def diagnose_database_operations():
 
             # Immediate read back
             logger.info("\n--- IMMEDIATE READ BACK ---")
-            read_supplier = db.query(Supplier).filter(Supplier.name == "Diagnostic Test Supplier").first()
+            read_supplier = (
+                db.query(Supplier)
+                .filter(Supplier.name == "Diagnostic Test Supplier")
+                .first()
+            )
 
             if read_supplier:
                 logger.info("Successfully read back the test supplier:")
@@ -72,18 +75,23 @@ def diagnose_database_operations():
                 logger.info(f"Supplier Name: {read_supplier.name}")
                 logger.info(f"Supplier Email: {read_supplier.email}")
             else:
-                logger.error("CRITICAL: Unable to read back the newly created supplier!")
+                logger.error(
+                    "CRITICAL: Unable to read back the newly created supplier!"
+                )
 
             # Verify all suppliers
             logger.info("\n--- ALL SUPPLIERS ---")
             all_suppliers = db.query(Supplier).all()
             logger.info(f"Total suppliers in database: {len(all_suppliers)}")
             for supplier in all_suppliers:
-                logger.info(f"ID: {supplier.id}, Name: {supplier.name}, Email: {supplier.email}")
+                logger.info(
+                    f"ID: {supplier.id}, Name: {supplier.name}, Email: {supplier.email}"
+                )
 
         except Exception as write_error:
             logger.error(f"Write/Read operation failed: {write_error}")
             import traceback
+
             traceback.print_exc()
             db.rollback()
 
@@ -94,6 +102,7 @@ def diagnose_database_operations():
     except Exception as e:
         logger.error(f"Diagnostic script failed: {e}")
         import traceback
+
         traceback.print_exc()
 
 

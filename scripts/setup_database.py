@@ -65,7 +65,13 @@ except Exception as e:
 
 # --- Imports (after path setup and patching) ---
 try:
-    from app.db.session import SessionLocal, engine, EncryptionManager, use_sqlcipher, init_db
+    from app.db.session import (
+        SessionLocal,
+        engine,
+        EncryptionManager,
+        use_sqlcipher,
+        init_db,
+    )
     from app.core.config import settings
     from app.db.models.base import Base
     from app.db import models
@@ -141,6 +147,7 @@ except ImportError as e:
 
 # --- Helper Functions ---
 
+
 def camel_to_snake(name: str) -> str:
     """Convert a camelCase string to snake_case."""
     s1 = re.sub(r"(.)([A-Z][a-z]+)", r"\1_\2", name)
@@ -204,6 +211,7 @@ def map_material_attributes(data: Dict[str, Any], material_type: str) -> Dict[st
 
 # --- Command Line Argument Parsing ---
 
+
 def parse_arguments():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
@@ -229,6 +237,7 @@ def parse_arguments():
 
 
 # --- Database Operations ---
+
 
 def reset_database():
     """Reset the database by deleting the existing database file."""
@@ -270,7 +279,9 @@ def initialize_database_schema():
     logger.info("Registered models (from Base.metadata):")
     table_names = sorted(Base.metadata.tables.keys())
     if not table_names:
-        logger.warning("No tables found in Base.metadata. Ensure models are imported correctly.")
+        logger.warning(
+            "No tables found in Base.metadata. Ensure models are imported correctly."
+        )
 
     for table_name in table_names:
         logger.info(f"- {table_name}")
@@ -295,11 +306,13 @@ def initialize_database_schema():
             logger.error(f"Error creating database tables: {str(e)}")
             logger.error(f"Detailed create_all error: {e}")
             import traceback
+
             logger.error(traceback.format_exc())
             return False
 
 
 # --- Database Seeding (Keep all your existing seeding functionality) ---
+
 
 def get_enum_class_for_field(entity_type: str, field_name: str) -> Optional[Type[Enum]]:
     """
@@ -588,13 +601,19 @@ def seed_with_direct_sqlcipher(seed_data, entities_order):
 
                     # 3. Convert date strings to datetime objects
                     for key, value in list(data.items()):
-                        if isinstance(value, str) and (key.endswith("_date") or key.endswith("_at") or key == "date"):
+                        if isinstance(value, str) and (
+                            key.endswith("_date")
+                            or key.endswith("_at")
+                            or key == "date"
+                        ):
                             try:
                                 if value.endswith("Z"):
                                     value = value[:-1] + "+00:00"
                                 data[key] = datetime.fromisoformat(value).isoformat()
                             except ValueError:
-                                logger.warning(f"Invalid date format for {key}: {value}")
+                                logger.warning(
+                                    f"Invalid date format for {key}: {value}"
+                                )
                                 data[key] = None
 
                     # 4. Handle enum values
@@ -642,10 +661,15 @@ def seed_with_direct_sqlcipher(seed_data, entities_order):
                                 fk_entity_type = "project_templates"
 
                             # If we know the referenced entity type and have an ID mapping
-                            if fk_entity_type and fk_entity_type in entity_ids and original_id in entity_ids[
-                                fk_entity_type]:
+                            if (
+                                fk_entity_type
+                                and fk_entity_type in entity_ids
+                                and original_id in entity_ids[fk_entity_type]
+                            ):
                                 data[key] = entity_ids[fk_entity_type][original_id]
-                                logger.debug(f"Mapped FK {key}: {original_id} -> {data[key]}")
+                                logger.debug(
+                                    f"Mapped FK {key}: {original_id} -> {data[key]}"
+                                )
 
                     # 6. Generate and execute INSERT statement
                     if data:
@@ -661,7 +685,9 @@ def seed_with_direct_sqlcipher(seed_data, entities_order):
                             if key in valid_columns:
                                 filtered_data[key] = value
                             else:
-                                logger.debug(f"Removed field '{key}' not in {entity_type} table schema")
+                                logger.debug(
+                                    f"Removed field '{key}' not in {entity_type} table schema"
+                                )
 
                         if filtered_data:
                             columns = list(filtered_data.keys())
@@ -683,9 +709,13 @@ def seed_with_direct_sqlcipher(seed_data, entities_order):
                             entity_ids[entity_type][idx] = new_id
 
                             entity_count += 1
-                            logger.debug(f"Inserted {entity_type} at index {idx} with ID {new_id}")
+                            logger.debug(
+                                f"Inserted {entity_type} at index {idx} with ID {new_id}"
+                            )
                         else:
-                            logger.warning(f"Skipping {entity_type} at index {idx}: no valid columns found")
+                            logger.warning(
+                                f"Skipping {entity_type} at index {idx}: no valid columns found"
+                            )
 
                 except Exception as e:
                     logger.error(f"Error creating {entity_type} at index {idx}: {e}")
@@ -731,26 +761,34 @@ def seed_with_sqlalchemy(seed_data, entities_order):
                 entities_data = seed_data[entity_type]
 
                 if not isinstance(entities_data, list):
-                    logger.warning(f"Seed data for '{entity_type}' is not a list. Skipping.")
+                    logger.warning(
+                        f"Seed data for '{entity_type}' is not a list. Skipping."
+                    )
                     continue
 
                 # Process each entity one at a time
                 for idx, item_data in enumerate(entities_data, 1):
                     if not isinstance(item_data, dict):
-                        logger.warning(f"Item at index {idx} for '{entity_type}' is not a dictionary. Skipping.")
+                        logger.warning(
+                            f"Item at index {idx} for '{entity_type}' is not a dictionary. Skipping."
+                        )
                         continue
 
                     try:
                         # 1. Get the model class
                         model = model_map.get(entity_type)
                         if not model:
-                            logger.warning(f"Unknown entity type '{entity_type}'. Skipping.")
+                            logger.warning(
+                                f"Unknown entity type '{entity_type}'. Skipping."
+                            )
                             continue
 
                         # 2. Decamelize keys and apply overrides
                         data = decamelize_keys(item_data)
                         if entity_type in overrides_by_entity:
-                            data = apply_overrides(data, overrides_by_entity[entity_type])
+                            data = apply_overrides(
+                                data, overrides_by_entity[entity_type]
+                            )
 
                         # 3. Create and add the entity
                         entity = model(**data)
@@ -765,7 +803,9 @@ def seed_with_sqlalchemy(seed_data, entities_order):
                         logger.debug(f"Created {entity_type} with ID {entity.id}")
 
                     except Exception as e:
-                        logger.error(f"Error creating {entity_type} at index {idx}: {e}")
+                        logger.error(
+                            f"Error creating {entity_type} at index {idx}: {e}"
+                        )
                         logger.error(f"Data: {item_data}")
                         logger.exception("Details:")
                         db.rollback()
@@ -857,9 +897,13 @@ def seed_with_direct_sqlcipher(seed_data):
                             entity_ids[entity_type] = {}
                         entity_ids[entity_type][idx] = new_id
 
-                        logger.debug(f"Inserted {entity_type} at index {idx} with ID {new_id}")
+                        logger.debug(
+                            f"Inserted {entity_type} at index {idx} with ID {new_id}"
+                        )
                     else:
-                        logger.warning(f"Skipping {entity_type} at index {idx}: data processing resulted in empty data")
+                        logger.warning(
+                            f"Skipping {entity_type} at index {idx}: data processing resulted in empty data"
+                        )
 
                 except Exception as e:
                     logger.error(f"Error creating {entity_type} at index {idx}: {e}")
@@ -901,7 +945,9 @@ def process_entity_data(entity_type, item_data, entity_ids):
 
     # 4. Convert date strings to datetime objects
     for key, value in list(data.items()):
-        if isinstance(value, str) and (key.endswith("_date") or key.endswith("_at") or key == "date"):
+        if isinstance(value, str) and (
+            key.endswith("_date") or key.endswith("_at") or key == "date"
+        ):
             try:
                 if value.endswith("Z"):
                     value = value[:-1] + "+00:00"
@@ -945,7 +991,11 @@ def process_entity_data(entity_type, item_data, entity_ids):
                 fk_entity_type = "project_templates"
 
             # If we know the referenced entity type and have an ID mapping
-            if fk_entity_type and fk_entity_type in entity_ids and original_id in entity_ids[fk_entity_type]:
+            if (
+                fk_entity_type
+                and fk_entity_type in entity_ids
+                and original_id in entity_ids[fk_entity_type]
+            ):
                 data[key] = entity_ids[fk_entity_type][original_id]
                 logger.debug(f"Mapped FK {key}: {original_id} -> {data[key]}")
 
@@ -976,7 +1026,9 @@ def seed_with_sqlalchemy(seed_data):
                 entities_data = seed_data[entity_type]
 
                 if not isinstance(entities_data, list):
-                    logger.warning(f"Seed data for '{entity_type}' is not a list. Skipping.")
+                    logger.warning(
+                        f"Seed data for '{entity_type}' is not a list. Skipping."
+                    )
                     continue
 
                 # ... rest of your original seeding code ...
@@ -993,6 +1045,7 @@ def seed_with_sqlalchemy(seed_data):
         return False
     finally:
         db.close()
+
 
 # --- Main Execution ---
 def main():

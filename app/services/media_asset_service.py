@@ -38,9 +38,9 @@ class MediaAssetService(BaseService[MediaAsset]):
     """
 
     def __init__(
-            self,
-            session: Session,
-            file_storage_service: Optional[FileStorageService] = None,
+        self,
+        session: Session,
+        file_storage_service: Optional[FileStorageService] = None,
     ):
         """
         Initialize the service with dependencies.
@@ -54,7 +54,6 @@ class MediaAssetService(BaseService[MediaAsset]):
         self.asset_tag_repository = MediaAssetTagRepository(session)
         self.file_storage_service = file_storage_service
 
-    
     def get_media_asset(self, asset_id: str) -> Optional[MediaAsset]:
         """
         Get a media asset by ID.
@@ -71,7 +70,9 @@ class MediaAssetService(BaseService[MediaAsset]):
         """Finds the actual file path on the server for an asset."""
         asset = self.repository.get_by_id(asset_id)
         if not asset or not asset.storage_location:
-            raise EntityNotFoundException(f"Media asset {asset_id} or its storage location not found.")
+            raise EntityNotFoundException(
+                f"Media asset {asset_id} or its storage location not found."
+            )
 
         # Try the stored path directly
         if os.path.exists(asset.storage_location):
@@ -95,17 +96,18 @@ class MediaAssetService(BaseService[MediaAsset]):
                 return path
 
         logger.error(
-            f"Could not find file for asset {asset_id} at any expected location based on storage: {asset.storage_location}")
+            f"Could not find file for asset {asset_id} at any expected location based on storage: {asset.storage_location}"
+        )
         return None  # Or raise FileNotFoundError
 
     def list_media_assets(
-            self,
-            skip: int = 0,
-            limit: int = 100,
-            search_params: Optional[Dict[str, Any]] = None,
-            sort_by: str = "uploaded_at",
-            sort_dir: str = "desc",
-            estimate_count: bool = True,
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        search_params: Optional[Dict[str, Any]] = None,
+        sort_by: str = "uploaded_at",
+        sort_dir: str = "desc",
+        estimate_count: bool = True,
     ) -> Tuple[List[MediaAsset], int]:
         """
         List media assets with filtering, sorting, and pagination.
@@ -127,18 +129,18 @@ class MediaAssetService(BaseService[MediaAsset]):
             limit=limit,
             sort_by=sort_by,
             sort_dir=sort_dir,
-            estimate_count=estimate_count
+            estimate_count=estimate_count,
         )
 
         return assets, total
 
     def create_media_asset(
-            self,
-            file_name: str,
-            file_type: str,
-            content_type: str,
-            uploaded_by: str,
-            tag_ids: Optional[List[str]] = None,
+        self,
+        file_name: str,
+        file_type: str,
+        content_type: str,
+        uploaded_by: str,
+        tag_ids: Optional[List[str]] = None,
     ) -> MediaAsset:
         """
         Create a new media asset record (metadata only).
@@ -180,19 +182,21 @@ class MediaAssetService(BaseService[MediaAsset]):
                         continue  # Skip invalid tags
 
                     # Create the association
-                    self.asset_tag_repository.create_with_id({
-                        "id": str(uuid.uuid4()),
-                        "media_asset_id": asset.id,
-                        "tag_id": tag_id,
-                    })
+                    self.asset_tag_repository.create_with_id(
+                        {
+                            "id": str(uuid.uuid4()),
+                            "media_asset_id": asset.id,
+                            "tag_id": tag_id,
+                        }
+                    )
 
             return self.repository.get_by_id_with_tags(asset.id)
 
     def upload_file(
-            self,
-            asset_id: str,
-            file_content: BinaryIO,
-            update_content_type: Optional[str] = None,
+        self,
+        asset_id: str,
+        file_content: BinaryIO,
+        update_content_type: Optional[str] = None,
     ) -> MediaAsset:
         """
         Upload file content for an existing media asset.
@@ -204,7 +208,9 @@ class MediaAssetService(BaseService[MediaAsset]):
         # Handle case when file_storage_service is not configured
         # This is a temporary workaround - just store the file path as if it was stored
         if self.file_storage_service is None:
-            logger.warning("FileStorageService not configured, using fallback storage method")
+            logger.warning(
+                "FileStorageService not configured, using fallback storage method"
+            )
 
             # Create directory if it doesn't exist
             storage_dir = "media_assets"
@@ -238,25 +244,27 @@ class MediaAssetService(BaseService[MediaAsset]):
             storage_path = f"media_assets/{asset_id}/{asset.file_name}"
 
             # Handle different FileStorageService implementations
-            if hasattr(self.file_storage_service, 'upload_file'):
+            if hasattr(self.file_storage_service, "upload_file"):
                 # Modern implementation
                 uploaded_file = self.file_storage_service.upload_file(
                     storage_path, file_content
                 )
                 storage_location = uploaded_file.storage_location
                 file_size = uploaded_file.size
-            elif hasattr(self.file_storage_service, 'store_file'):
+            elif hasattr(self.file_storage_service, "store_file"):
                 # Alternative implementation
                 file_data = file_content.read()
                 result = self.file_storage_service.store_file(
                     file_data=file_data,
                     filename=asset.file_name,
-                    content_type=asset.content_type
+                    content_type=asset.content_type,
                 )
-                storage_location = result.get('storage_path', storage_path)
-                file_size = result.get('size', len(file_data))
+                storage_location = result.get("storage_path", storage_path)
+                file_size = result.get("size", len(file_data))
             else:
-                raise BusinessRuleException("Incompatible FileStorageService implementation")
+                raise BusinessRuleException(
+                    "Incompatible FileStorageService implementation"
+                )
 
             # Update the asset with storage information
             update_data = {
@@ -276,17 +284,19 @@ class MediaAssetService(BaseService[MediaAsset]):
             raise FileStorageException(f"Failed to upload file: {str(e)}")
 
     def create_media_asset_with_content(
-            self,
-            file_name: str,
-            file_content: BinaryIO,
-            uploaded_by: str,
-            content_type: Optional[str] = None,
-            tag_ids: Optional[List[str]] = None,
+        self,
+        file_name: str,
+        file_content: BinaryIO,
+        uploaded_by: str,
+        content_type: Optional[str] = None,
+        tag_ids: Optional[List[str]] = None,
     ) -> MediaAsset:
         # Determine file type and generate asset ID
         file_type = os.path.splitext(file_name)[1].lower()
         if not content_type:
-            content_type = mimetypes.guess_type(file_name)[0] or 'application/octet-stream'
+            content_type = (
+                mimetypes.guess_type(file_name)[0] or "application/octet-stream"
+            )
 
         asset_id = str(uuid.uuid4())
 
@@ -325,19 +335,21 @@ class MediaAssetService(BaseService[MediaAsset]):
                 for tag_id in tag_ids:
                     tag = self.tag_repository.get_by_id(tag_id)
                     if tag:
-                        self.asset_tag_repository.create_with_id({
-                            "id": str(uuid.uuid4()),
-                            "media_asset_id": asset.id,
-                            "tag_id": tag_id,
-                        })
+                        self.asset_tag_repository.create_with_id(
+                            {
+                                "id": str(uuid.uuid4()),
+                                "media_asset_id": asset.id,
+                                "tag_id": tag_id,
+                            }
+                        )
 
             return self.repository.get_by_id_with_tags(asset.id)
 
     def update_media_asset(
-            self,
-            asset_id: str,
-            data: Dict[str, Any],
-            user_id: Optional[str] = None,
+        self,
+        asset_id: str,
+        data: Dict[str, Any],
+        user_id: Optional[str] = None,
     ) -> Optional[MediaAsset]:
         """
         Update a media asset.
@@ -418,34 +430,40 @@ class MediaAssetService(BaseService[MediaAsset]):
 
         # Direct file access fallback if file_storage_service is not available
         if self.file_storage_service is None:
-            logger.warning(f"FileStorageService not configured, using direct file access for {asset_id}")
+            logger.warning(
+                f"FileStorageService not configured, using direct file access for {asset_id}"
+            )
             try:
                 # Check if the path exists directly
                 if os.path.exists(asset.storage_location):
-                    return open(asset.storage_location, 'rb')
+                    return open(asset.storage_location, "rb")
 
                 # Check relative path from working directory
                 base_dir = "media_assets"
                 if os.path.exists(f"{base_dir}/{asset.storage_location}"):
-                    return open(f"{base_dir}/{asset.storage_location}", 'rb')
+                    return open(f"{base_dir}/{asset.storage_location}", "rb")
 
                 # Check if it might be just a filename
                 if os.path.exists(f"{base_dir}/{asset_id}_{asset.file_name}"):
-                    return open(f"{base_dir}/{asset_id}_{asset.file_name}", 'rb')
+                    return open(f"{base_dir}/{asset_id}_{asset.file_name}", "rb")
 
-                raise FileStorageException(f"File not found at {asset.storage_location}")
+                raise FileStorageException(
+                    f"File not found at {asset.storage_location}"
+                )
             except Exception as e:
                 logger.error(f"Failed to read file for asset {asset_id}: {str(e)}")
                 raise FileStorageException(f"Failed to read file: {str(e)}")
 
         try:
             # Try different methods depending on file_storage_service implementation
-            if hasattr(self.file_storage_service, 'get_file'):
+            if hasattr(self.file_storage_service, "get_file"):
                 return self.file_storage_service.get_file(asset.storage_location)
-            elif hasattr(self.file_storage_service, 'retrieve_file'):
+            elif hasattr(self.file_storage_service, "retrieve_file"):
                 return self.file_storage_service.retrieve_file(asset.storage_location)
             else:
-                raise BusinessRuleException("Incompatible FileStorageService implementation")
+                raise BusinessRuleException(
+                    "Incompatible FileStorageService implementation"
+                )
         except Exception as e:
             logger.error(f"Failed to retrieve file for asset {asset_id}: {str(e)}")
             raise FileStorageException(f"Failed to retrieve file: {str(e)}")
@@ -476,13 +494,17 @@ class MediaAssetService(BaseService[MediaAsset]):
                     raise EntityNotFoundException(f"Tag with ID {tag_id} not found")
 
                 # Check if the association already exists
-                existing = self.asset_tag_repository.get_by_asset_and_tag(asset_id, tag_id)
+                existing = self.asset_tag_repository.get_by_asset_and_tag(
+                    asset_id, tag_id
+                )
                 if not existing:
                     # Create the association
-                    self.asset_tag_repository.create_with_id({
-                        "media_asset_id": asset_id,
-                        "tag_id": tag_id,
-                    })
+                    self.asset_tag_repository.create_with_id(
+                        {
+                            "media_asset_id": asset_id,
+                            "tag_id": tag_id,
+                        }
+                    )
 
             return self.repository.get_by_id_with_tags(asset_id)
 
@@ -512,7 +534,7 @@ class MediaAssetService(BaseService[MediaAsset]):
             return self.repository.get_by_id_with_tags(asset_id)
 
     def get_assets_by_tag(
-            self, tag_id: str, skip: int = 0, limit: int = 100
+        self, tag_id: str, skip: int = 0, limit: int = 100
     ) -> List[MediaAsset]:
         """
         Get all media assets with a specific tag.
@@ -565,7 +587,9 @@ class MediaAssetService(BaseService[MediaAsset]):
 
         # Add new tag associations
         for tag_id in tags_to_add:
-            self.asset_tag_repository.create_with_id({
-                "media_asset_id": asset_id,
-                "tag_id": tag_id,
-            })
+            self.asset_tag_repository.create_with_id(
+                {
+                    "media_asset_id": asset_id,
+                    "tag_id": tag_id,
+                }
+            )

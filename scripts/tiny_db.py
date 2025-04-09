@@ -8,12 +8,13 @@ def create_encrypted_database(key, db_path):
     """
     Explicitly create an encrypted SQLCipher database with comprehensive initialization
     """
-    logging.basicConfig(level=logging.INFO,
-                        format='%(asctime)s - %(levelname)s - %(message)s')
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+    )
     logger = logging.getLogger(__name__)
 
     # Remove existing database files if they exist
-    for ext in ['', '-shm', '-wal']:
+    for ext in ["", "-shm", "-wal"]:
         full_path = db_path + ext
         if os.path.exists(full_path):
             os.remove(full_path)
@@ -34,12 +35,14 @@ def create_encrypted_database(key, db_path):
         cursor.execute("PRAGMA foreign_keys = ON;")
 
         # Create a test table to verify encryption works
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE TABLE test_encryption (
                 id INTEGER PRIMARY KEY,
                 value TEXT
             )
-        """)
+        """
+        )
 
         # Insert a test record
         cursor.execute("INSERT INTO test_encryption (value) VALUES ('Test Encryption')")
@@ -67,13 +70,14 @@ def create_encrypted_database(key, db_path):
     except Exception as e:
         logger.error(f"Error creating encrypted database: {e}")
         import traceback
+
         logger.error(traceback.format_exc())
         return False
 
 
 def main():
     # Read key from file
-    with open('/home/zombie/PycharmProjects/HideSync_Backend/dev_db.key', 'r') as f:
+    with open("/home/zombie/PycharmProjects/HideSync_Backend/dev_db.key", "r") as f:
         key = f.read().strip()
 
     # Database path

@@ -36,7 +36,7 @@ class EnumCompatMixin:
         fixed_values = dict(values)
 
         # Fields to check for enum-like values
-        enum_fields = ['status', 'unit', 'material_type', 'quality']
+        enum_fields = ["status", "unit", "material_type", "quality"]
 
         for field in enum_fields:
             if field in fixed_values:
@@ -51,15 +51,15 @@ class EnumCompatMixin:
                     fixed_values[field] = value[0]
 
                 # Handle objects with value attribute (Enum objects)
-                elif hasattr(value, 'value'):
+                elif hasattr(value, "value"):
                     fixed_values[field] = value.value
 
         # Ensure timestamps exist
-        if 'created_at' in fixed_values and fixed_values['created_at'] is None:
-            fixed_values['created_at'] = datetime.utcnow()
+        if "created_at" in fixed_values and fixed_values["created_at"] is None:
+            fixed_values["created_at"] = datetime.utcnow()
 
-        if 'updated_at' in fixed_values and fixed_values['updated_at'] is None:
-            fixed_values['updated_at'] = datetime.utcnow()
+        if "updated_at" in fixed_values and fixed_values["updated_at"] is None:
+            fixed_values["updated_at"] = datetime.utcnow()
 
         return fixed_values
 

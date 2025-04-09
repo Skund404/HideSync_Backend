@@ -544,7 +544,9 @@ class FileStorageService:
 
     # Add these methods to the StorageLocationService class
 
-    def get_storage_locations(self, skip: int = 0, limit: int = 100, search_params=None):
+    def get_storage_locations(
+        self, skip: int = 0, limit: int = 100, search_params=None
+    ):
         """
         Retrieve storage locations with pagination and filtering.
 
@@ -586,6 +588,7 @@ class FileStorageService:
         location = self.repository.get_by_id(location_id)
         if not location:
             from app.core.exceptions import EntityNotFoundException
+
             raise EntityNotFoundException("Storage location", location_id)
         return location
 
@@ -607,6 +610,7 @@ class FileStorageService:
         location = self.repository.get_by_id(location_id)
         if not location:
             from app.core.exceptions import EntityNotFoundException
+
             raise EntityNotFoundException("Storage location", location_id)
 
         # Get cells with filter if provided
@@ -635,10 +639,13 @@ class FileStorageService:
         location = self.repository.get_by_id(location_id)
         if not location:
             from app.core.exceptions import EntityNotFoundException
+
             raise EntityNotFoundException("Storage location", location_id)
 
         # Prepare cell data
-        cell_data_dict = cell_data.dict() if hasattr(cell_data, "dict") else dict(cell_data)
+        cell_data_dict = (
+            cell_data.dict() if hasattr(cell_data, "dict") else dict(cell_data)
+        )
         cell_data_dict["storage_id"] = location_id
 
         # Create cell
@@ -681,7 +688,11 @@ class FileStorageService:
             EntityNotFoundException: If related entities don't exist
         """
         # Extract data
-        assignment_dict = assignment_data.dict() if hasattr(assignment_data, "dict") else dict(assignment_data)
+        assignment_dict = (
+            assignment_data.dict()
+            if hasattr(assignment_data, "dict")
+            else dict(assignment_data)
+        )
 
         # Add assigned_by if provided
         if user_id and "assigned_by" not in assignment_dict:
@@ -690,6 +701,7 @@ class FileStorageService:
         # Set assigned date if not provided
         if "assigned_date" not in assignment_dict:
             from datetime import datetime
+
             assignment_dict["assigned_date"] = datetime.now().isoformat()
 
         # Make sure location exists
@@ -698,6 +710,7 @@ class FileStorageService:
             location = self.repository.get_by_id(storage_id)
             if not location:
                 from app.core.exceptions import EntityNotFoundException
+
                 raise EntityNotFoundException("Storage location", storage_id)
 
         return self.assign_material_to_location(assignment_dict)
@@ -763,10 +776,10 @@ class FileStorageService:
         # Set move date if not provided
         if "move_date" not in move_dict:
             from datetime import datetime
+
             move_dict["move_date"] = datetime.now().isoformat()
 
         return self.move_material_between_locations(move_dict)
-
 
     def _get_storage_path(self, file_id: str, extension: str) -> Path:
         """

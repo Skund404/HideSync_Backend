@@ -20,8 +20,7 @@ if str(project_root) not in sys.path:
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -30,7 +29,9 @@ def parse_arguments():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Set up the HideSync database.")
     parser.add_argument("--reset", action="store_true", help="Reset the database")
-    parser.add_argument("--seed", action="store_true", help="Seed the database with initial data")
+    parser.add_argument(
+        "--seed", action="store_true", help="Seed the database with initial data"
+    )
     parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
     return parser.parse_args()
 
@@ -51,7 +52,10 @@ def verify_database_schema():
 
         # Check for critical tables
         critical_tables = [
-            'entity_media', 'media_assets', 'media_asset_tags', 'suppliers'
+            "entity_media",
+            "media_assets",
+            "media_asset_tags",
+            "suppliers",
         ]
 
         missing_tables = [table for table in critical_tables if table not in tables]
@@ -63,15 +67,19 @@ def verify_database_schema():
             logger.info("All critical tables are present")
 
             # Check for entity_media specifically
-            if 'entity_media' in tables:
+            if "entity_media" in tables:
                 # Get column info
-                columns = inspector.get_columns('entity_media')
+                columns = inspector.get_columns("entity_media")
                 logger.info(f"entity_media table has {len(columns)} columns")
 
                 # Verify through a query
                 try:
-                    result = db.execute(text("SELECT COUNT(*) FROM entity_media")).scalar()
-                    logger.info(f"entity_media table query successful, contains {result} records")
+                    result = db.execute(
+                        text("SELECT COUNT(*) FROM entity_media")
+                    ).scalar()
+                    logger.info(
+                        f"entity_media table query successful, contains {result} records"
+                    )
                 except Exception as e:
                     logger.error(f"Error querying entity_media table: {e}")
                     return False
@@ -133,7 +141,11 @@ def seed_database():
 
         # Try to import seed module
         try:
-            from app.db.seed import create_initial_roles, create_admin_user, seed_master_data
+            from app.db.seed import (
+                create_initial_roles,
+                create_admin_user,
+                seed_master_data,
+            )
 
             # Create roles
             logger.info("Creating initial roles...")
@@ -142,8 +154,7 @@ def seed_database():
             # Create admin user
             logger.info("Creating admin user...")
             admin_user = create_admin_user(
-                email="admin@example.com",
-                password="AdminPassword123!"
+                email="admin@example.com", password="AdminPassword123!"
             )
             logger.info(f"Admin user created with ID: {admin_user.id}")
 

@@ -32,13 +32,13 @@ class MediaAssetTag(AbstractBase):
         String(36),
         ForeignKey("media_assets.id", ondelete="CASCADE"),
         nullable=False,
-        index=True
+        index=True,
     )
     tag_id = Column(
         String(36),
         ForeignKey("tags.id", ondelete="CASCADE"),
         nullable=False,
-        index=True
+        index=True,
     )
 
     # Ensure each tag is only applied once to each asset

@@ -55,12 +55,12 @@ class MaterialRepository(BaseRepository[Material]):
         return [self._decrypt_sensitive_fields(entity) for entity in entities]
 
     def find_materials_by_criteria(
-            self,
-            material_type: Optional[str] = None,
-            quality: Optional[str] = None,
-            in_stock: Optional[bool] = None,
-            skip: int = 0,
-            limit: int = 100
+        self,
+        material_type: Optional[str] = None,
+        quality: Optional[str] = None,
+        in_stock: Optional[bool] = None,
+        skip: int = 0,
+        limit: int = 100,
     ) -> List[Material]:
         """
         Find materials by various criteria.
@@ -109,10 +109,9 @@ class MaterialRepository(BaseRepository[Material]):
                 query = query.filter(self.model.status == InventoryStatus.IN_STOCK)
             else:
                 query = query.filter(
-                    self.model.status.in_([
-                        InventoryStatus.OUT_OF_STOCK,
-                        InventoryStatus.LOW_STOCK
-                    ])
+                    self.model.status.in_(
+                        [InventoryStatus.OUT_OF_STOCK, InventoryStatus.LOW_STOCK]
+                    )
                 )
 
         # Apply pagination
@@ -120,7 +119,8 @@ class MaterialRepository(BaseRepository[Material]):
 
         # Add debugging after fetching
         print(
-            f"DEBUG: Found {len(entities)} materials, sample types: {[e.materialType for e in entities[:3] if hasattr(e, 'materialType')]}")
+            f"DEBUG: Found {len(entities)} materials, sample types: {[e.materialType for e in entities[:3] if hasattr(e, 'materialType')]}"
+        )
 
         # Decrypt sensitive fields if applicable
         return [self._decrypt_sensitive_fields(entity) for entity in entities]

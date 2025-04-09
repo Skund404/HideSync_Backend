@@ -18,7 +18,9 @@ from app.db.models.tag import Tag
 from app.repositories.base_repository import BaseRepository
 from app.db.models.association_media import MediaAssetTag
 import logging
+
 logger = logging.getLogger(__name__)
+
 
 class MediaAssetRepository(BaseRepository[MediaAsset]):
     """
@@ -50,8 +52,8 @@ class MediaAssetRepository(BaseRepository[MediaAsset]):
             The created media asset
         """
         # Generate a UUID for the new asset if not provided
-        if 'id' not in data:
-            data['id'] = str(uuid.uuid4())
+        if "id" not in data:
+            data["id"] = str(uuid.uuid4())
 
         return self.create(data)
 
@@ -75,9 +77,11 @@ class MediaAssetRepository(BaseRepository[MediaAsset]):
         try:
             # Make sure we're using the correct column names based on your database schema
             # Check if the association table uses 'tag_id' (most likely) or 'tags_id'
-            tag_records = self.session.query(MediaAssetTag).filter(
-                MediaAssetTag.media_asset_id == id
-            ).all()
+            tag_records = (
+                self.session.query(MediaAssetTag)
+                .filter(MediaAssetTag.media_asset_id == id)
+                .all()
+            )
 
             if tag_records:
                 # Get the tag IDs
@@ -99,13 +103,13 @@ class MediaAssetRepository(BaseRepository[MediaAsset]):
             return self._decrypt_sensitive_fields(asset)
 
     def search_assets(
-            self,
-            search_params: Dict[str, Any],
-            skip: int = 0,
-            limit: int = 100,
-            sort_by: str = "uploaded_at",
-            sort_dir: str = "desc",
-            estimate_count: bool = False,
+        self,
+        search_params: Dict[str, Any],
+        skip: int = 0,
+        limit: int = 100,
+        sort_by: str = "uploaded_at",
+        sort_dir: str = "desc",
+        estimate_count: bool = False,
     ) -> Tuple[List[MediaAsset], int]:
         """
         Search for media assets with filtering, sorting, and pagination.
@@ -125,35 +129,36 @@ class MediaAssetRepository(BaseRepository[MediaAsset]):
 
         # Apply filters based on search parameters
         if search_params:
-            if file_name := search_params.get('file_name'):
+            if file_name := search_params.get("file_name"):
                 query = query.filter(self.model.file_name.ilike(f"%{file_name}%"))
 
-            if file_type := search_params.get('file_type'):
+            if file_type := search_params.get("file_type"):
                 query = query.filter(self.model.file_type == file_type)
 
-            if uploaded_by := search_params.get('uploaded_by'):
+            if uploaded_by := search_params.get("uploaded_by"):
                 query = query.filter(self.model.uploaded_by == uploaded_by)
 
-            if uploaded_after := search_params.get('uploaded_after'):
+            if uploaded_after := search_params.get("uploaded_after"):
                 query = query.filter(self.model.uploaded_at >= uploaded_after)
 
-            if uploaded_before := search_params.get('uploaded_before'):
+            if uploaded_before := search_params.get("uploaded_before"):
                 query = query.filter(self.model.uploaded_at <= uploaded_before)
 
-            if tag_ids := search_params.get('tag_ids'):
+            if tag_ids := search_params.get("tag_ids"):
                 # Get assets that have all the specified tags
                 for tag_id in tag_ids:
-                    subquery = self.session.query(MediaAssetTag.media_asset_id). \
-                        filter(MediaAssetTag.tag_id == tag_id)
+                    subquery = self.session.query(MediaAssetTag.media_asset_id).filter(
+                        MediaAssetTag.tag_id == tag_id
+                    )
                     query = query.filter(self.model.id.in_(subquery))
 
-            if search := search_params.get('search'):
+            if search := search_params.get("search"):
                 # Search across multiple fields
                 query = query.filter(
                     or_(
                         self.model.file_name.ilike(f"%{search}%"),
                         self.model.file_type.ilike(f"%{search}%"),
-                        self.model.uploaded_by.ilike(f"%{search}%")
+                        self.model.uploaded_by.ilike(f"%{search}%"),
                     )
                 )
 
@@ -178,7 +183,7 @@ class MediaAssetRepository(BaseRepository[MediaAsset]):
 
         # Apply sorting
         if hasattr(self.model, sort_by):
-            if sort_dir.lower() == 'desc':
+            if sort_dir.lower() == "desc":
                 query = query.order_by(desc(getattr(self.model, sort_by)))
             else:
                 query = query.order_by(asc(getattr(self.model, sort_by)))
@@ -215,18 +220,19 @@ class MediaAssetRepository(BaseRepository[MediaAsset]):
 
         for tag_id in tag_ids:
             # Check if the association already exists
-            existing = self.session.query(MediaAssetTag). \
-                filter(
-                MediaAssetTag.media_asset_id == asset_id,
-                MediaAssetTag.tag_id == tag_id
-            ).first()
+            existing = (
+                self.session.query(MediaAssetTag)
+                .filter(
+                    MediaAssetTag.media_asset_id == asset_id,
+                    MediaAssetTag.tag_id == tag_id,
+                )
+                .first()
+            )
 
             if not existing:
                 # Create new association
                 association = MediaAssetTag(
-                    id=str(uuid.uuid4()),
-                    media_asset_id=asset_id,
-                    tag_id=tag_id
+                    id=str(uuid.uuid4()), media_asset_id=asset_id, tag_id=tag_id
                 )
                 self.session.add(association)
 
@@ -242,13 +248,13 @@ class MediaAssetRepository(BaseRepository[MediaAsset]):
             Exception: If a database error occurs
         """
         # Delete the associations
-        self.session.query(MediaAssetTag). \
-            filter(
-            MediaAssetTag.media_asset_id == asset_id,
-            MediaAssetTag.tag_id.in_(tag_ids)
+        self.session.query(MediaAssetTag).filter(
+            MediaAssetTag.media_asset_id == asset_id, MediaAssetTag.tag_id.in_(tag_ids)
         ).delete(synchronize_session=False)
 
-    def get_assets_by_tag(self, tag_id: str, skip: int = 0, limit: int = 100) -> List[MediaAsset]:
+    def get_assets_by_tag(
+        self, tag_id: str, skip: int = 0, limit: int = 100
+    ) -> List[MediaAsset]:
         """
         Get all media assets with a specific tag.
 
@@ -260,10 +266,13 @@ class MediaAssetRepository(BaseRepository[MediaAsset]):
         Returns:
             List of media assets with the specified tag
         """
-        query = self.session.query(self.model). \
-            join(MediaAssetTag, MediaAssetTag.media_asset_id == self.model.id). \
-            filter(MediaAssetTag.tag_id == tag_id). \
-            offset(skip).limit(limit)
+        query = (
+            self.session.query(self.model)
+            .join(MediaAssetTag, MediaAssetTag.media_asset_id == self.model.id)
+            .filter(MediaAssetTag.tag_id == tag_id)
+            .offset(skip)
+            .limit(limit)
+        )
 
         assets = query.all()
 

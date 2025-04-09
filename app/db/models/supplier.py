@@ -20,7 +20,8 @@ from sqlalchemy import (
     ForeignKey,
     DateTime,
     JSON,
-    Boolean, Index,
+    Boolean,
+    Index,
 )
 from sqlalchemy.orm import relationship, validates
 from sqlalchemy.ext.hybrid import hybrid_property
@@ -59,9 +60,9 @@ class Supplier(AbstractBase, ValidationMixin, TimestampMixin):
     __tablename__ = "suppliers"
     __validated_fields__: ClassVar[Set[str]] = {"name", "email", "phone"}
     __table_args__ = (
-        Index('idx_supplier_name', 'name'),
-        Index('idx_supplier_category', 'category'),
-        Index('idx_supplier_status', 'status'),
+        Index("idx_supplier_name", "name"),
+        Index("idx_supplier_category", "category"),
+        Index("idx_supplier_status", "status"),
         # Add other indexes as needed
     )
     # Basic information
@@ -72,7 +73,7 @@ class Supplier(AbstractBase, ValidationMixin, TimestampMixin):
     phone = Column(
         String(20),  # Adjust length as needed
         nullable=True,  # Or False if phone is required
-        info={'validator': validate_phone}
+        info={"validator": validate_phone},
     )
     address = Column(String(500))
     website = Column(String(255))
@@ -80,9 +81,9 @@ class Supplier(AbstractBase, ValidationMixin, TimestampMixin):
     # Performance metrics
     rating = Column(Integer)  # 1-5 scale
     status = Column(
-        Enum(SupplierStatus, name='supplier_status_enum'),
+        Enum(SupplierStatus, name="supplier_status_enum"),
         nullable=False,
-        default=SupplierStatus.ACTIVE
+        default=SupplierStatus.ACTIVE,
     )
     notes = Column(Text)
 

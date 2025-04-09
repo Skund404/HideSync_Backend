@@ -28,6 +28,7 @@ class CaseInsensitiveEnum(TypeDecorator):
         class MyModel(Base):
             status = Column(CaseInsensitiveEnum(SomeEnum), default=SomeEnum.ACTIVE)
     """
+
     impl = Enum
     cache_ok = True
 
@@ -49,10 +50,7 @@ class CaseInsensitiveEnum(TypeDecorator):
     def _build_lookup_maps(self):
         """Build case-insensitive lookup dictionaries for faster matching."""
         # Map for lowercase enum names to actual enum members
-        self._name_map = {
-            member.name.lower(): member
-            for member in self.enum_class
-        }
+        self._name_map = {member.name.lower(): member for member in self.enum_class}
 
         # Map for lowercase enum values to actual enum members (for string values)
         self._value_map = {}

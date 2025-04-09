@@ -26,6 +26,7 @@ from app.services.base_service import BaseService
 
 logger = logging.getLogger(__name__)
 
+
 class SupplierDeleted(DomainEvent):
     """Event emitted when a supplier is deleted."""
 
@@ -47,6 +48,7 @@ class SupplierDeleted(DomainEvent):
         self.supplier_id = supplier_id
         self.supplier_name = supplier_name
         self.user_id = user_id
+
 
 class SupplierCreated(DomainEvent):
     """Event emitted when a supplier is created."""
@@ -156,8 +158,6 @@ class SupplierRatingChanged(DomainEvent):
 validate_supplier = validate_entity(Supplier)
 
 
-
-
 class SupplierService(BaseService[Supplier]):
     """
     Service for managing suppliers in the HideSync system.
@@ -170,16 +170,16 @@ class SupplierService(BaseService[Supplier]):
     """
 
     def __init__(
-            self,
-            session: Session,
-            repository=None,
-            security_context=None,
-            event_bus=None,
-            cache_service=None,
-            purchase_service=None,
-            material_service=None,
-            supplier_history_repository=None,
-            supplier_rating_repository=None,
+        self,
+        session: Session,
+        repository=None,
+        security_context=None,
+        event_bus=None,
+        cache_service=None,
+        purchase_service=None,
+        material_service=None,
+        supplier_history_repository=None,
+        supplier_rating_repository=None,
     ):
         """
         Initialize SupplierService with dependencies.
@@ -214,7 +214,9 @@ class SupplierService(BaseService[Supplier]):
         self.supplier_rating_repository = supplier_rating_repository
 
     @validate_input(validate_supplier)
-    def create_supplier(self, data: Dict[str, Any], user_id: Optional[int] = None) -> Supplier:
+    def create_supplier(
+        self, data: Dict[str, Any], user_id: Optional[int] = None
+    ) -> Supplier:
         """
         Create a new supplier.
 
@@ -273,17 +275,22 @@ class SupplierService(BaseService[Supplier]):
             if not supplier:
                 # Explicitly raise the correct exception if needed
                 # from app.core.exceptions import SupplierNotFoundException
-                raise SupplierNotFoundException(supplier_id=supplier_id) # Pass keyword argument
+                raise SupplierNotFoundException(
+                    supplier_id=supplier_id
+                )  # Pass keyword argument
 
             # Validate input data keys against model fields if needed (optional enhancement)
             valid_keys = {c.name for c in Supplier.__table__.columns}
-            invalid_keys = set(data.keys()) - valid_keys - {'id'} # Allow 'id' temporarily if present
+            invalid_keys = (
+                set(data.keys()) - valid_keys - {"id"}
+            )  # Allow 'id' temporarily if present
             if invalid_keys:
-                 logger.warning(f"Received unexpected keys in update data for supplier {supplier_id}: {invalid_keys}")
-                 # Optionally remove invalid keys or raise an error
-                 # for key in invalid_keys:
-                 #     data.pop(key, None)
-
+                logger.warning(
+                    f"Received unexpected keys in update data for supplier {supplier_id}: {invalid_keys}"
+                )
+                # Optionally remove invalid keys or raise an error
+                # for key in invalid_keys:
+                #     data.pop(key, None)
 
             # Check for duplicate name if changing name
             if "name" in data and data["name"] != supplier.name:
@@ -311,7 +318,9 @@ class SupplierService(BaseService[Supplier]):
             # self._handle_field_variations(data, "material_categories", "materialCategories")
 
             # Log the data being processed for debugging - BEFORE calculating changes
-            logger.debug(f"Processing update for supplier {supplier_id} with snake_case data: {data}")
+            logger.debug(
+                f"Processing update for supplier {supplier_id} with snake_case data: {data}"
+            )
 
             # Capture changes for event (based on snake_case keys)
             changes = {}
@@ -321,20 +330,21 @@ class SupplierService(BaseService[Supplier]):
                     old_value = getattr(supplier, key)
                     # Handle potential type differences (e.g., enum vs string)
                     if isinstance(old_value, SupplierStatus):
-                         old_value_cmp = old_value.value
+                        old_value_cmp = old_value.value
                     else:
-                         old_value_cmp = old_value
+                        old_value_cmp = old_value
 
                     if isinstance(new_value, SupplierStatus):
-                         new_value_cmp = new_value.value
+                        new_value_cmp = new_value.value
                     else:
-                         new_value_cmp = new_value
+                        new_value_cmp = new_value
 
                     if old_value_cmp != new_value_cmp:
                         changes[key] = {"old": old_value_cmp, "new": new_value_cmp}
-                elif key != 'id': # Ignore 'id' if it sneaks in
-                     logger.warning(f"Key '{key}' from update data not found in Supplier model.")
-
+                elif key != "id":  # Ignore 'id' if it sneaks in
+                    logger.warning(
+                        f"Key '{key}' from update data not found in Supplier model."
+                    )
 
             # Set updated timestamp
             data["updated_at"] = datetime.now()
@@ -384,7 +394,9 @@ class SupplierService(BaseService[Supplier]):
     #     if camel_case in data:
     #         data.pop(camel_case)
 
-    def _handle_field_variations(self, data: Dict[str, Any], snake_case: str, camel_case: str) -> None:
+    def _handle_field_variations(
+        self, data: Dict[str, Any], snake_case: str, camel_case: str
+    ) -> None:
         """
         Handle variations in field naming between snake_case and camelCase.
         Ensures that the snake_case version is always present in data if either variant exists.
@@ -397,7 +409,9 @@ class SupplierService(BaseService[Supplier]):
         # If camelCase exists but snake_case doesn't, copy the value
         if camel_case in data and snake_case not in data:
             data[snake_case] = data[camel_case]
-            logger.debug(f"Copied value from {camel_case} to {snake_case}: {data[camel_case]}")
+            logger.debug(
+                f"Copied value from {camel_case} to {snake_case}: {data[camel_case]}"
+            )
 
         # Remove the camelCase version to avoid confusion
         if camel_case in data:
@@ -769,7 +783,7 @@ class SupplierService(BaseService[Supplier]):
         """
         try:
             # Get count from repository
-            if hasattr(self.repository, 'count'):
+            if hasattr(self.repository, "count"):
                 # Use repository's count method if available
                 return self.repository.count(**filters)
             else:
@@ -781,6 +795,7 @@ class SupplierService(BaseService[Supplier]):
         except Exception as e:
             logger.error(f"Error counting suppliers: {e}")
             import traceback
+
             logger.error(traceback.format_exc())
             # Return a default value instead of raising an exception
             # This makes the API more resilient
@@ -808,34 +823,49 @@ class SupplierService(BaseService[Supplier]):
             processed_suppliers = []
             for supplier in suppliers:
                 # Convert to dict to make field manipulation easier
-                supplier_dict = supplier.__dict__ if hasattr(supplier, '__dict__') else supplier
+                supplier_dict = (
+                    supplier.__dict__ if hasattr(supplier, "__dict__") else supplier
+                )
 
                 # Ensure created_at and updated_at are either valid datetime objects or None
-                if 'created_at' in supplier_dict and supplier_dict['created_at'] is not None:
+                if (
+                    "created_at" in supplier_dict
+                    and supplier_dict["created_at"] is not None
+                ):
                     # If it's a string, try to parse it to datetime
-                    if isinstance(supplier_dict['created_at'], str):
+                    if isinstance(supplier_dict["created_at"], str):
                         try:
                             from datetime import datetime
-                            supplier_dict['created_at'] = datetime.fromisoformat(supplier_dict['created_at'])
-                        except ValueError:
-                            supplier_dict['created_at'] = None
 
-                if 'updated_at' in supplier_dict and supplier_dict['updated_at'] is not None:
+                            supplier_dict["created_at"] = datetime.fromisoformat(
+                                supplier_dict["created_at"]
+                            )
+                        except ValueError:
+                            supplier_dict["created_at"] = None
+
+                if (
+                    "updated_at" in supplier_dict
+                    and supplier_dict["updated_at"] is not None
+                ):
                     # If it's a string, try to parse it to datetime
-                    if isinstance(supplier_dict['updated_at'], str):
+                    if isinstance(supplier_dict["updated_at"], str):
                         try:
                             from datetime import datetime
-                            supplier_dict['updated_at'] = datetime.fromisoformat(supplier_dict['updated_at'])
+
+                            supplier_dict["updated_at"] = datetime.fromisoformat(
+                                supplier_dict["updated_at"]
+                            )
                         except ValueError:
-                            supplier_dict['updated_at'] = None
+                            supplier_dict["updated_at"] = None
 
                 # If using SQLAlchemy models, recreate the model instance
-                if hasattr(supplier, '__class__'):
+                if hasattr(supplier, "__class__"):
                     from app.db.models.supplier import Supplier
+
                     processed_supplier = Supplier()
                     for key, value in supplier_dict.items():
                         # Skip SQLAlchemy internal attributes
-                        if not key.startswith('_'):
+                        if not key.startswith("_"):
                             setattr(processed_supplier, key, value)
                     processed_suppliers.append(processed_supplier)
                 else:
@@ -848,6 +878,7 @@ class SupplierService(BaseService[Supplier]):
         except Exception as e:
             logger.error(f"Error getting suppliers: {e}")
             import traceback
+
             logger.error(traceback.format_exc())
             raise
 
@@ -1019,7 +1050,10 @@ class SupplierService(BaseService[Supplier]):
             supplier = self.get_by_id(supplier_id)
             if not supplier:
                 from app.core.exceptions import EntityNotFoundException
-                raise EntityNotFoundException(f"Supplier with ID {supplier_id} not found")
+
+                raise EntityNotFoundException(
+                    f"Supplier with ID {supplier_id} not found"
+                )
 
             # Check if supplier can be deleted (e.g., no active purchases)
             # This would be a business rule validation
@@ -1027,14 +1061,17 @@ class SupplierService(BaseService[Supplier]):
                 active_purchases = self._check_active_purchases(supplier_id)
                 if active_purchases:
                     from app.core.exceptions import BusinessRuleException
+
                     raise BusinessRuleException(
                         f"Cannot delete supplier with {len(active_purchases)} active purchases",
                         "SUPPLIER_DELETE_001",
-                        {"active_purchases": len(active_purchases)}
+                        {"active_purchases": len(active_purchases)},
                     )
 
             # Get user ID for events
-            user_id = self.security_context.current_user.id if self.security_context else None
+            user_id = (
+                self.security_context.current_user.id if self.security_context else None
+            )
 
             # Delete the supplier
             result = self.repository.delete(supplier_id)
@@ -1045,7 +1082,7 @@ class SupplierService(BaseService[Supplier]):
                     SupplierDeleted(
                         supplier_id=supplier_id,
                         supplier_name=supplier.name,
-                        user_id=user_id
+                        user_id=user_id,
                     )
                 )
 
@@ -1073,7 +1110,9 @@ class SupplierService(BaseService[Supplier]):
             # This would call a method on the purchase service
             return self.purchase_service.get_active_purchases_by_supplier(supplier_id)
         except Exception as e:
-            logger.warning(f"Error checking active purchases for supplier {supplier_id}: {str(e)}")
+            logger.warning(
+                f"Error checking active purchases for supplier {supplier_id}: {str(e)}"
+            )
             return []
 
     def _validate_status_transition(self, current_status: str, new_status: str) -> None:

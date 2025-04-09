@@ -21,8 +21,7 @@ if str(project_root) not in sys.path:
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -107,7 +106,9 @@ def import_all_models():
             logger.warning(f"Failed to import model module {module_name}: {e}")
             logger.debug(traceback.format_exc())
 
-    logger.info(f"Successfully imported {imported_modules} of {len(MODEL_MODULES)} model modules")
+    logger.info(
+        f"Successfully imported {imported_modules} of {len(MODEL_MODULES)} model modules"
+    )
     return imported_modules > 0
 
 
@@ -121,12 +122,12 @@ def create_database_with_sqlalchemy(db_path, encryption_key):
         engine = create_engine(
             get_sqlalchemy_url(db_path, encryption_key),
             connect_args={
-                'check_same_thread': False,
-                'cipher_page_size': 4096,
-                'kdf_iter': 256000,
-                'cipher_hmac_algorithm': 'HMAC_SHA512',
-                'cipher_kdf_algorithm': 'PBKDF2_HMAC_SHA512'
-            }
+                "check_same_thread": False,
+                "cipher_page_size": 4096,
+                "kdf_iter": 256000,
+                "cipher_hmac_algorithm": "HMAC_SHA512",
+                "cipher_kdf_algorithm": "PBKDF2_HMAC_SHA512",
+            },
         )
 
         # Test connection
@@ -201,7 +202,9 @@ def create_database_with_raw_sql(db_path, encryption_key):
                     logger.warning(f"Error creating table {table_name}: {e}")
 
         # Then create tables with foreign keys (multiple passes)
-        remaining_tables = {name: table for name, table in tables_dict.items() if table.foreign_keys}
+        remaining_tables = {
+            name: table for name, table in tables_dict.items() if table.foreign_keys
+        }
         max_passes = 5  # Avoid infinite loops with circular dependencies
 
         for i in range(max_passes):
@@ -227,7 +230,9 @@ def create_database_with_raw_sql(db_path, encryption_key):
                         logger.warning(f"Error creating table {table_name}: {e}")
 
             if tables_created_in_pass == 0:
-                logger.warning(f"No tables created in pass {i + 1}, aborting dependency resolution")
+                logger.warning(
+                    f"No tables created in pass {i + 1}, aborting dependency resolution"
+                )
                 break
 
         # Log failed tables
@@ -253,10 +258,18 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="Create HideSync database")
-    parser.add_argument("--force", action="store_true", help="Force creation even if database exists")
-    parser.add_argument("--method", choices=["sqlalchemy", "raw", "auto"], default="auto",
-                        help="Method to create database (sqlalchemy, raw SQL, or auto-detect)")
-    parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose logging")
+    parser.add_argument(
+        "--force", action="store_true", help="Force creation even if database exists"
+    )
+    parser.add_argument(
+        "--method",
+        choices=["sqlalchemy", "raw", "auto"],
+        default="auto",
+        help="Method to create database (sqlalchemy, raw SQL, or auto-detect)",
+    )
+    parser.add_argument(
+        "--verbose", "-v", action="store_true", help="Enable verbose logging"
+    )
 
     args = parser.parse_args()
 

@@ -39,8 +39,9 @@ from app.db.models.enums import (
 )
 
 import json
-import logging # Add logging import if not already present
-logger = logging.getLogger(__name__) # Define logger for the warning
+import logging  # Add logging import if not already present
+
+logger = logging.getLogger(__name__)  # Define logger for the warning
 # Forward declaration for type hinting if models are in the same file or circular imports
 # class Inventory: pass
 # class Pattern: pass
@@ -167,42 +168,67 @@ class Product(AbstractBase, ValidationMixin, CostingMixin, TimestampMixin):
         inv_record = self.inventory
 
         current_status = None
-        quantity = 0.0 # Default quantity
-        storage_location = None # Default location
+        quantity = 0.0  # Default quantity
+        storage_location = None  # Default location
         if inv_record:
-            quantity = getattr(inv_record, 'quantity', 0.0)
+            quantity = getattr(inv_record, "quantity", 0.0)
             # Handle status potentially being None or not having a name
-            status_obj = getattr(inv_record, 'status', None)
-            current_status = status_obj.name if status_obj and hasattr(status_obj, 'name') else None
-            storage_location = getattr(inv_record, 'storage_location', None)
+            status_obj = getattr(inv_record, "status", None)
+            current_status = (
+                status_obj.name if status_obj and hasattr(status_obj, "name") else None
+            )
+            storage_location = getattr(inv_record, "storage_location", None)
 
         # --- FIX: Use snake_case for timestamp attributes ---
-        created_at_iso = self.created_at.isoformat() if hasattr(self, 'created_at') and self.created_at else None
-        updated_at_iso = self.updated_at.isoformat() if hasattr(self, 'updated_at') and self.updated_at else None
-        last_sold_iso = self.last_sold.isoformat() if hasattr(self, 'last_sold') and self.last_sold else None
+        created_at_iso = (
+            self.created_at.isoformat()
+            if hasattr(self, "created_at") and self.created_at
+            else None
+        )
+        updated_at_iso = (
+            self.updated_at.isoformat()
+            if hasattr(self, "updated_at") and self.updated_at
+            else None
+        )
+        last_sold_iso = (
+            self.last_sold.isoformat()
+            if hasattr(self, "last_sold") and self.last_sold
+            else None
+        )
         # --- END FIX ---
 
         # --- FIX: Handle potential None for product_type ---
-        product_type_name = self.product_type.name if hasattr(self, 'product_type') and self.product_type and hasattr(self.product_type, 'name') else None
+        product_type_name = (
+            self.product_type.name
+            if hasattr(self, "product_type")
+            and self.product_type
+            and hasattr(self.product_type, "name")
+            else None
+        )
         # --- END FIX ---
 
         # --- FIX: Safely access cost breakdown ---
         cost_breakdown_dict = None
-        if hasattr(self, 'cost_breakdown') and self.cost_breakdown:
+        if hasattr(self, "cost_breakdown") and self.cost_breakdown:
             try:
-                 # Assuming cost_breakdown is stored as JSON string
-                 cost_breakdown_dict = json.loads(self.cost_breakdown) if isinstance(self.cost_breakdown, str) else self.cost_breakdown
+                # Assuming cost_breakdown is stored as JSON string
+                cost_breakdown_dict = (
+                    json.loads(self.cost_breakdown)
+                    if isinstance(self.cost_breakdown, str)
+                    else self.cost_breakdown
+                )
             except (json.JSONDecodeError, TypeError):
-                 logger.warning(f"Could not parse cost_breakdown JSON for product {self.id}")
-                 cost_breakdown_dict = {} # Or None, or keep original string?
+                logger.warning(
+                    f"Could not parse cost_breakdown JSON for product {self.id}"
+                )
+                cost_breakdown_dict = {}  # Or None, or keep original string?
         # --- END FIX ---
-
 
         return {
             "id": self.id,
             "name": self.name,
             "sku": self.sku,
-            "productType": product_type_name, # Use safe variable
+            "productType": product_type_name,  # Use safe variable
             "description": self.description,
             "color": self.color,
             "dimensions": self.dimensions,
@@ -213,27 +239,30 @@ class Product(AbstractBase, ValidationMixin, CostingMixin, TimestampMixin):
             "storage_location": storage_location,
             "reorder_point": self.reorder_point,
             # Pricing and Metrics
-            "sellingPrice": self.selling_price, # Use camelCase keys for consistency with frontend/schema if needed
+            "sellingPrice": self.selling_price,  # Use camelCase keys for consistency with frontend/schema if needed
             "totalCost": self.total_cost,
             "profitMargin": self.profit_margin,  # Use hybrid property
-            "lastSold": last_sold_iso, # Use safe variable
+            "lastSold": last_sold_iso,  # Use safe variable
             "salesVelocity": self.sales_velocity,
             # Metadata
             "thumbnail": self.thumbnail,
             "notes": self.notes,
             "batchNumber": self.batch_number,
-            "customizations": self.customizations, # Assume already JSON serializable or list/dict
-            "materials": self.materials,          # Assume already JSON serializable or list/dict
-            "costBreakdown": cost_breakdown_dict, # Use parsed dict
+            "customizations": self.customizations,  # Assume already JSON serializable or list/dict
+            "materials": self.materials,  # Assume already JSON serializable or list/dict
+            "costBreakdown": cost_breakdown_dict,  # Use parsed dict
             # Timestamps and FKs
-            "createdAt": created_at_iso, # Use camelCase key for API consistency
-            "updatedAt": updated_at_iso, # Use camelCase key for API consistency
+            "createdAt": created_at_iso,  # Use camelCase key for API consistency
+            "updatedAt": updated_at_iso,  # Use camelCase key for API consistency
             "patternId": self.pattern_id,
             "projectId": self.project_id,
-             # Add any other fields required by ProductResponse schema
-             "is_active": getattr(self, 'is_active', None), # Example if is_active exists
-             "uuid": getattr(self, 'uuid', None),           # Example if uuid exists
+            # Add any other fields required by ProductResponse schema
+            "is_active": getattr(
+                self, "is_active", None
+            ),  # Example if is_active exists
+            "uuid": getattr(self, "uuid", None),  # Example if uuid exists
         }
+
     def __repr__(self) -> str:
         """Return string representation of the Product."""
         return f"<Product(id={self.id}, sku='{self.sku}', name='{self.name}')>"

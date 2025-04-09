@@ -1,4 +1,4 @@
-# File: services/tool_service.py
+# File: app/services/tool_service.py
 
 from typing import List, Optional, Dict, Any, Tuple, Union
 from datetime import datetime, timedelta, date
@@ -6,2298 +6,1204 @@ import logging
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_
 
-from app.core.events import DomainEvent
-from app.core.exceptions import (
-    HideSyncException,
-    ValidationException,
-    EntityNotFoundException,
-    BusinessRuleException,
-    ConcurrentOperationException,
+# Import Events from app.core.events
+from app.core.events import (
+    DomainEvent, ToolCreated, ToolStatusChanged, ToolMaintenanceScheduled,
+    ToolMaintenanceCompleted, ToolCheckedOut, ToolReturned
 )
-from app.core.validation import validate_input, validate_entity
+from app.core.exceptions import (
+    HideSyncException, ValidationException, EntityNotFoundException,
+    BusinessRuleException, ConcurrentOperationException, ToolNotAvailableException,
+    InvalidStatusTransitionException, CheckoutNotFoundException, MaintenanceNotFoundException,
+    ToolNotFoundException  # Use if defined, otherwise EntityNotFoundException
+)
+# from app.core.validation import validate_input, validate_entity # Assuming these exist
 from app.db.models.enums import ToolCategory
 from app.db.models.tool import Tool, ToolMaintenance, ToolCheckout
 from app.repositories.tool_repository import (
-    ToolRepository,
-    ToolMaintenanceRepository,
-    ToolCheckoutRepository,
+    ToolRepository, ToolMaintenanceRepository, ToolCheckoutRepository,
 )
 from app.services.base_service import BaseService
+from app.schemas.tool import ToolSearchParams, MaintenanceSchedule, MaintenanceScheduleItem
 
 logger = logging.getLogger(__name__)
 
 
-class ToolCreated(DomainEvent):
-    """Event emitted when a tool is created."""
-
-    def __init__(
-        self, tool_id: int, name: str, category: str, user_id: Optional[int] = None
-    ):
-        """
-        Initialize tool created event.
-
-        Args:
-            tool_id: ID of the created tool
-            name: Name of the tool
-            category: Category of the tool
-            user_id: Optional ID of the user who created the tool
-        """
-        super().__init__()
-        self.tool_id = tool_id
-        self.name = name
-        self.category = category
-        self.user_id = user_id
-
-
-class ToolStatusChanged(DomainEvent):
-    """Event emitted when a tool's status changes."""
-
-    def __init__(
-        self,
-        tool_id: int,
-        previous_status: str,
-        new_status: str,
-        reason: Optional[str] = None,
-        user_id: Optional[int] = None,
-    ):
-        """
-        Initialize tool status changed event.
-
-        Args:
-            tool_id: ID of the tool
-            previous_status: Previous status
-            new_status: New status
-            reason: Optional reason for the status change
-            user_id: Optional ID of the user who changed the status
-        """
-        super().__init__()
-        self.tool_id = tool_id
-        self.previous_status = previous_status
-        self.new_status = new_status
-        self.reason = reason
-        self.user_id = user_id
+# --- Helper Function for Robust Date/Datetime Parsing ---
+def _parse_date_or_datetime(value: Any, field_name: str, expect_datetime: bool = False) -> Optional[
+    Union[date, datetime]]:
+    """ Safely parses input into a date or datetime object. Handles None, existing objects, and ISO strings. """
+    if value is None:
+        return None
+    if isinstance(value, datetime):  # Already a datetime object
+        return value if expect_datetime else value.date()
+    if isinstance(value, date):  # Already a date object
+        return datetime.combine(value, datetime.min.time()) if expect_datetime else value
+    if isinstance(value, str):
+        try:
+            # Try parsing as full ISO datetime first (more specific)
+            # Handle potential fractional seconds and 'Z' timezone indicator
+            dt_str = value.split('.')[0].replace('Z', '+00:00')
+            dt_obj = datetime.fromisoformat(dt_str)
+            return dt_obj if expect_datetime else dt_obj.date()
+        except ValueError:
+            # If datetime fails, try parsing just the date part
+            try:
+                date_obj = date.fromisoformat(value.split('T')[0])
+                return datetime.combine(date_obj, datetime.min.time()) if expect_datetime else date_obj
+            except ValueError:
+                logger.warning(f"Failed to parse string '{value}' for field '{field_name}'.")
+                raise ValidationException(
+                    f"Invalid date/datetime format for {field_name}. Expected ISO format (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS).")
+    # If it's not None, date, datetime, or string, it's an invalid type
+    logger.error(f"Invalid type provided for {field_name}: {type(value)}")
+    raise ValidationException(
+        f"Invalid type for {field_name}: {type(value)}. Expected date/datetime object or ISO string.")
 
 
-class ToolMaintenanceScheduled(DomainEvent):
-    """Event emitted when tool maintenance is scheduled."""
-
-    def __init__(
-        self,
-        maintenance_id: int,
-        tool_id: int,
-        maintenance_type: str,
-        date: str,
-        user_id: Optional[int] = None,
-    ):
-        """
-        Initialize tool maintenance scheduled event.
-
-        Args:
-            maintenance_id: ID of the maintenance record
-            tool_id: ID of the tool
-            maintenance_type: Type of maintenance
-            date: Scheduled date
-            user_id: Optional ID of the user who scheduled maintenance
-        """
-        super().__init__()
-        self.maintenance_id = maintenance_id
-        self.tool_id = tool_id
-        self.maintenance_type = maintenance_type
-        self.date = date
-        self.user_id = user_id
-
-
-class ToolMaintenanceCompleted(DomainEvent):
-    """Event emitted when tool maintenance is completed."""
-
-    def __init__(
-        self,
-        maintenance_id: int,
-        tool_id: int,
-        performed_by: str,
-        completion_date: str,
-        next_date: Optional[str] = None,
-        user_id: Optional[int] = None,
-    ):
-        """
-        Initialize tool maintenance completed event.
-
-        Args:
-            maintenance_id: ID of the maintenance record
-            tool_id: ID of the tool
-            performed_by: Who performed the maintenance
-            completion_date: Date completed
-            next_date: Optional next scheduled maintenance date
-            user_id: Optional ID of the user who recorded completion
-        """
-        super().__init__()
-        self.maintenance_id = maintenance_id
-        self.tool_id = tool_id
-        self.performed_by = performed_by
-        self.completion_date = completion_date
-        self.next_date = next_date
-        self.user_id = user_id
-
-
-class ToolCheckedOut(DomainEvent):
-    """Event emitted when a tool is checked out."""
-
-    def __init__(
-        self,
-        checkout_id: int,
-        tool_id: int,
-        checked_out_by: str,
-        project_id: Optional[int] = None,
-        due_date: Optional[str] = None,
-        user_id: Optional[int] = None,
-    ):
-        """
-        Initialize tool checked out event.
-
-        Args:
-            checkout_id: ID of the checkout record
-            tool_id: ID of the tool
-            checked_out_by: Who checked out the tool
-            project_id: Optional ID of the related project
-            due_date: Optional due date for return
-            user_id: Optional ID of the user who recorded the checkout
-        """
-        super().__init__()
-        self.checkout_id = checkout_id
-        self.tool_id = tool_id
-        self.checked_out_by = checked_out_by
-        self.project_id = project_id
-        self.due_date = due_date
-        self.user_id = user_id
-
-
-class ToolReturned(DomainEvent):
-    """Event emitted when a tool is returned."""
-
-    def __init__(
-        self,
-        checkout_id: int,
-        tool_id: int,
-        condition_after: str,
-        has_issues: bool,
-        user_id: Optional[int] = None,
-    ):
-        """
-        Initialize tool returned event.
-
-        Args:
-            checkout_id: ID of the checkout record
-            tool_id: ID of the tool
-            condition_after: Condition after return
-            has_issues: Whether there are issues with the tool
-            user_id: Optional ID of the user who recorded the return
-        """
-        super().__init__()
-        self.checkout_id = checkout_id
-        self.tool_id = tool_id
-        self.condition_after = condition_after
-        self.has_issues = has_issues
-        self.user_id = user_id
-
-
-# Validation functions
-validate_tool = validate_entity(Tool)
-validate_tool_maintenance = validate_entity(ToolMaintenance)
-validate_tool_checkout = validate_entity(ToolCheckout)
-
-
+# --- ToolService Class ---
 class ToolService(BaseService[Tool]):
     """
     Service for managing tools in the HideSync system.
-
-    Provides functionality for:
-    - Tool creation and management
-    - Tool status tracking
-    - Maintenance scheduling and tracking
-    - Tool checkout and return management
-    - Tool condition monitoring
+    Handles CRUD, status, maintenance, checkouts, business logic, validation, events, caching.
     """
 
-    def __init__(
-        self,
-        session: Session,
-        repository=None,
-        maintenance_repository=None,
-        checkout_repository=None,
-        security_context=None,
-        event_bus=None,
-        cache_service=None,
-        inventory_service=None,
-        project_service=None,
-        supplier_service=None,
-    ):
-        """
-        Initialize ToolService with dependencies.
+    # --- Field Type Mapping ---
+    _tool_date_fields_map = {  # Field name -> expects datetime? (True/False)
+        "purchase_date": False, "last_maintenance": False, "next_maintenance": False,
+        "checked_out_date": True, "due_date": False, "created_at": True, "updated_at": True,
+    }
+    # Map Pydantic schema field names (camelCase) used in incoming 'data' dict
+    _checkout_date_fields_map = {
+        "checkedOutDate": True, "dueDate": False, "returnedDate": True,
+        "createdAt": True, "updatedAt": True,
+    }
+    _maintenance_date_fields_map = {
+        "date": False,  # Assumes ToolMaintenance model uses Date for 'date' column
+        "nextDate": False,  # Assumes ToolMaintenance model uses Date for 'next_date'
+        "createdAt": True, "updatedAt": True,
+    }
 
-        Args:
-            session: Database session for persistence operations
-            repository: Optional repository for tools (defaults to ToolRepository)
-            maintenance_repository: Optional repository for tool maintenance
-            checkout_repository: Optional repository for tool checkouts
-            security_context: Optional security context for authorization
-            event_bus: Optional event bus for publishing domain events
-            cache_service: Optional cache service for data caching
-            inventory_service: Optional inventory service for inventory operations
-            project_service: Optional project service for project validation
-            supplier_service: Optional supplier service for supplier information
-        """
+    def __init__(
+            self, session: Session, repository: Optional[ToolRepository] = None,
+            maintenance_repository: Optional[ToolMaintenanceRepository] = None,
+            checkout_repository: Optional[ToolCheckoutRepository] = None,
+            event_bus=None, cache_service=None, inventory_service=None,
+            project_service=None, supplier_service=None,
+    ):
+        """ Initialize ToolService with dependencies. """
         self.session = session
         self.repository = repository or ToolRepository(session)
-        self.maintenance_repository = (
-            maintenance_repository or ToolMaintenanceRepository(session)
-        )
-        self.checkout_repository = checkout_repository or ToolCheckoutRepository(
-            session
-        )
-        self.security_context = security_context
-        self.event_bus = event_bus
+        self.maintenance_repository = maintenance_repository or ToolMaintenanceRepository(session)
+        self.checkout_repository = checkout_repository or ToolCheckoutRepository(session)
+        self.event_bus = event_bus;
         self.cache_service = cache_service
-        self.inventory_service = inventory_service
+        self.inventory_service = inventory_service;
         self.project_service = project_service
         self.supplier_service = supplier_service
+        super().__init__(session=session, repository=self.repository, event_bus=event_bus, cache_service=cache_service)
+        logger.info("ToolService initialized.")
 
-    # Add these methods to the ToolService class in app/services/tool_service.py
+    def _preprocess_data_dates(self, data: Dict[str, Any], field_map: Dict[str, bool]):
+        """ Converts date/datetime fields in data dict based on map, adds timestamps. """
+        if not data:
+            return
 
-    def get_tools(self, skip: int = 0, limit: int = 100, search_params=None) -> List[Tool]:
-        """
-        Get tools with filtering and pagination.
+        # Convert existing fields
+        for field, expect_datetime in field_map.items():
+            # Check for both potential schema names (camelCase) and model names (snake_case)
+            # This handles data coming directly from API (camel) or internal calls (snake)
+            schema_field_name = field  # Assume map uses schema names for incoming data
+            model_field_name = field  # Assume map uses model names for internal calls? Adjust if needed.
 
-        Args:
-            skip: Number of records to skip
-            limit: Maximum number of records to return
-            search_params: Optional search parameters for filtering
-
-        Returns:
-            List of tools matching the criteria
-        """
-        # Initialize empty filters dictionary
-        filters = {}
-
-        # Apply filters if search_params is provided
-        if search_params:
-            if search_params.category:
-                # Convert string category to enum if needed
+            if schema_field_name in data:
                 try:
-                    if isinstance(search_params.category, str):
-                        category = ToolCategory[search_params.category]
-                    else:
-                        category = search_params.category
-                    filters["category"] = category
-                except (KeyError, ValueError):
-                    raise ValidationException(f"Invalid tool category: {search_params.category}")
+                    parsed_value = _parse_date_or_datetime(data[schema_field_name], schema_field_name, expect_datetime)
+                    data[schema_field_name] = parsed_value
+                except ValidationException as e:
+                    logger.error(f"Date preprocessing failed for field '{schema_field_name}': {e}")
+                    raise  # Re-raise validation error
 
-            if search_params.status:
-                filters["status"] = search_params.status
+        # Add/update timestamps using datetime objects
+        now_dt = datetime.now()
+        if "createdAt" in field_map and field_map["createdAt"]:
+            # Only set 'createdAt' if it's not already present (i.e., during creation)
+            data.setdefault("createdAt", now_dt)
+        if "updatedAt" in field_map and field_map["updatedAt"]:
+            data["updatedAt"] = now_dt  # Always set/overwrite 'updatedAt'
 
-            if search_params.location:
-                filters["location"] = search_params.location
-
-        # If search text is provided, use the search method
-        if search_params and search_params.search:
-            return self.repository.search_tools(search_params.search, skip=skip, limit=limit)
-
-        # Otherwise use the list method with filters
-        return self.repository.list(skip=skip, limit=limit, **filters)
+    # --- Tool CRUD & Listing ---
+    def get_tools(self, skip: int = 0, limit: int = 100, search_params: Optional[ToolSearchParams] = None) -> List[
+        Tool]:
+        """ Get tools with filtering and pagination. """
+        logger.debug(f"Fetching tools: skip={skip}, limit={limit}, params={search_params}")
+        filters = {};
+        search_term = None
+        if search_params:
+            search_term = search_params.search
+            if search_params.category:
+                try:
+                    filters["category"] = ToolCategory[search_params.category.upper()]
+                except KeyError:
+                    raise ValidationException(f"Invalid category: {search_params.category}")
+            if search_params.status: filters["status"] = search_params.status
+            if search_params.location: filters["location"] = search_params.location
+        if search_term:
+            tools = self.repository.search_tools(search_term, skip=skip, limit=limit, **filters)
+        else:
+            tools = self.repository.list(skip=skip, limit=limit, **filters)
+        logger.debug(f"Retrieved {len(tools)} tools.");
+        return tools
 
     def get_tool(self, tool_id: int) -> Tool:
-        """
-        Get a tool by ID.
+        """ Get a tool by ID using base service method (handles cache). """
+        if not tool_id or not isinstance(tool_id, int) or tool_id <= 0:
+            raise ValidationException(f"Invalid tool ID: {tool_id}")
 
-        Args:
-            tool_id: ID of the tool to retrieve
-
-        Returns:
-            Tool entity
-
-        Raises:
-            EntityNotFoundException: If tool not found
-        """
-        tool = self.repository.get_by_id(tool_id)
+        logger.debug(f"Getting tool ID: {tool_id}")
+        tool = self.get_by_id(tool_id)
         if not tool:
-            from app.core.exceptions import EntityNotFoundException
-            raise EntityNotFoundException(f"Tool with ID {tool_id} not found")
+            logger.warning(f"Tool {tool_id} not found.")
+            raise ToolNotFoundException(
+                tool_id=tool_id) if 'ToolNotFoundException' in globals() else EntityNotFoundException("Tool", tool_id)
+        logger.debug(f"Retrieved tool {tool_id}")
         return tool
 
-    def get_checkouts(
-            self,
-            status: Optional[str] = None,
-            tool_id: Optional[int] = None,
-            project_id: Optional[int] = None,
-            user_id: Optional[int] = None
-    ) -> List[ToolCheckout]:
-        """
-        Get tool checkouts with optional filtering.
+    def create_tool(self, data: Dict[str, Any], user_id: Optional[int] = None) -> Tool:
+        """ Create a new tool, converting date strings to objects. """
+        if not data:
+            raise ValidationException("No data provided for tool creation")
 
-        Args:
-            status: Optional filter by checkout status
-            tool_id: Optional filter by tool ID
-            project_id: Optional filter by project ID
-            user_id: Optional filter by user ID
+        logger.info(f"User {user_id} creating tool: {data.get('name')}")
+        # Basic Validation
+        if not data.get("name"): raise ValidationException("Tool name required.")
+        if not data.get("category"): raise ValidationException("Tool category required.")
+        if not isinstance(data.get("category"), ToolCategory): raise ValidationException(
+            "Invalid internal category type.")
+        data.setdefault("status", "IN_STOCK")
+        if data.get("purchase_price") is not None and data["purchase_price"] < 0: raise ValidationException(
+            "Price cannot be negative.")
+        if data.get("maintenance_interval") is not None and data[
+            "maintenance_interval"] <= 0: raise ValidationException("Interval must be positive.")
 
-        Returns:
-            List of tool checkout records
-        """
-        filters = {}
+        # Preprocess Dates (includes created_at/updated_at)
+        self._preprocess_data_dates(data, self._tool_date_fields_map)
 
-        if status:
-            filters["status"] = status
-        if tool_id:
-            filters["tool_id"] = tool_id
-        if project_id:
-            filters["project_id"] = project_id
-        if user_id:
-            # This might need to be mapped to checked_out_by depending on your data model
-            filters["user_id"] = user_id
-
-        return self.checkout_repository.list(**filters)
-
-    def get_maintenance_records(
-            self,
-            status: Optional[str] = None,
-            tool_id: Optional[int] = None,
-            upcoming_only: bool = False
-    ) -> List[ToolMaintenance]:
-        """
-        Get tool maintenance records with optional filtering.
-
-        Args:
-            status: Optional filter by maintenance status
-            tool_id: Optional filter by tool ID
-            upcoming_only: Filter to show only upcoming maintenance
-
-        Returns:
-            List of tool maintenance records
-        """
-        filters = {}
-
-        if status:
-            filters["status"] = status
-        if tool_id:
-            filters["tool_id"] = tool_id
-
-        # Get basic filtered list
-        records = self.maintenance_repository.list(**filters)
-
-        # Apply upcoming filter if needed
-        if upcoming_only:
-            today = datetime.now().date()
-            # Only keep maintenance records with dates in the future
-            records = [
-                record for record in records
-                if record.date and isinstance(record.date, str) and
-                   datetime.fromisoformat(record.date.replace('Z', '+00:00')).date() >= today
-            ]
-
-        return records
-
-    def get_maintenance_schedule(
-            self,
-            start_date: Optional[str] = None,
-            end_date: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """
-        Get tool maintenance schedule.
-
-        Args:
-            start_date: Optional start date (YYYY-MM-DD)
-            end_date: Optional end date (YYYY-MM-DD)
-
-        Returns:
-            Maintenance schedule data
-        """
-        # Convert string dates to date objects if provided
-        from_date = None
-        to_date = None
-
-        if start_date:
-            try:
-                from_date = datetime.strptime(start_date, "%Y-%m-%d").date()
-            except ValueError:
-                raise ValidationException("Invalid start date format. Use YYYY-MM-DD.")
-        else:
-            # Default to current date
-            from_date = datetime.now().date()
-
-        if end_date:
-            try:
-                to_date = datetime.strptime(end_date, "%Y-%m-%d").date()
-            except ValueError:
-                raise ValidationException("Invalid end date format. Use YYYY-MM-DD.")
-        else:
-            # Default to 30 days from start date
-            to_date = from_date + timedelta(days=30)
-
-        # Get all scheduled maintenance in date range
-        scheduled_maintenance = self.maintenance_repository.get_by_date_range(
-            start_date=from_date.isoformat(),
-            end_date=to_date.isoformat()
-        )
-
-        # Organize by date
-        schedule_by_date = {}
-        for record in scheduled_maintenance:
-            if not record.date:
-                continue
-
-            date_str = record.date
-            if date_str not in schedule_by_date:
-                schedule_by_date[date_str] = []
-
-            # Get the associated tool
-            tool = self.repository.get_by_id(record.tool_id)
-            tool_name = tool.name if tool else f"Tool #{record.tool_id}"
-
-            schedule_by_date[date_str].append({
-                "maintenance_id": record.id,
-                "tool_id": record.tool_id,
-                "tool_name": tool_name,
-                "maintenance_type": record.maintenance_type,
-                "status": record.status,
-                "performed_by": record.performed_by
-            })
-
-        # Calculate schedule summary
-        total_scheduled = len(scheduled_maintenance)
-        scheduled_by_type = {}
-        for record in scheduled_maintenance:
-            mtype = record.maintenance_type
-            if mtype not in scheduled_by_type:
-                scheduled_by_type[mtype] = 0
-            scheduled_by_type[mtype] += 1
-
-        # Return complete schedule data
-        return {
-            "date_range": {
-                "start_date": from_date.isoformat(),
-                "end_date": to_date.isoformat(),
-                "days": (to_date - from_date).days
-            },
-            "total_scheduled": total_scheduled,
-            "scheduled_by_type": scheduled_by_type,
-            "schedule": schedule_by_date
-        }
-    @validate_input(validate_tool)
-    def create_tool(self, data: Dict[str, Any]) -> Tool:
-        """
-        Create a new tool.
-
-        Args:
-            data: Tool data with name, category, and other details
-
-        Returns:
-            Created tool entity
-
-        Raises:
-            ValidationException: If validation fails
-        """
         with self.transaction():
-            # Set default values if not provided
-            if "status" not in data:
-                data["status"] = "IN_STOCK"
-
-            if "purchase_date" not in data and "purchase_price" in data:
-                data["purchase_date"] = datetime.now().date().isoformat()
-
-            # Create tool
-            tool = self.repository.create(data)
-
-            # Update inventory if inventory service is available
-            if self.inventory_service and hasattr(
-                self.inventory_service, "adjust_inventory"
-            ):
-                self.inventory_service.adjust_inventory(
-                    item_type="tool",
-                    item_id=tool.id,
-                    quantity_change=1,
-                    adjustment_type="INITIAL_STOCK",
-                    reason="New tool added to inventory",
-                    location_id=data.get("location"),
-                )
-
-            # Publish event if event bus exists
-            if self.event_bus:
-                user_id = (
-                    self.security_context.current_user.id
-                    if self.security_context
-                    else None
-                )
-                self.event_bus.publish(
-                    ToolCreated(
-                        tool_id=tool.id,
-                        name=tool.name,
-                        category=tool.category,
-                        user_id=user_id,
-                    )
-                )
-
-            # Schedule initial maintenance if interval is specified
-            if "maintenance_interval" in data and data["maintenance_interval"]:
-                # Calculate next maintenance date
-                next_date = datetime.now().date() + timedelta(
-                    days=data["maintenance_interval"]
-                )
-
-                maintenance_data = {
-                    "tool_id": tool.id,
-                    "tool_name": tool.name,
-                    "maintenance_type": "INITIAL_INSPECTION",
-                    "date": next_date.isoformat(),
-                    "status": "SCHEDULED",
-                }
-
-                self.schedule_maintenance(maintenance_data)
-
+            try:
+                tool = self.repository.create(data)  # Pass dict with date/datetime objects
+            except Exception as repo_e:
+                logger.error(f"Repo create tool failed: {repo_e}", exc_info=True); raise HideSyncException(
+                    f"DB error creating tool.")
+            logger.info(f"Tool {tool.id} ({tool.name}) created by user {user_id}.")
+            self._handle_inventory_adjustment(tool, 1, "INITIAL_STOCK", f"New tool '{tool.name}' added", user_id)
+            self._publish_tool_created_event(tool, user_id)
+            self._schedule_initial_maintenance_if_needed(tool, data.get("maintenance_interval"), user_id)
+            self._invalidate_tool_caches(tool.id, list_too=True)
             return tool
 
-    def update_tool(self, tool_id: int, data: Dict[str, Any]) -> Tool:
-        """
-        Update an existing tool.
+    def update_tool(self, tool_id: int, data: Dict[str, Any], user_id: Optional[int] = None) -> Tool:
+        """ Update an existing tool, converting date strings to objects. """
+        if not tool_id or not isinstance(tool_id, int) or tool_id <= 0:
+            raise ValidationException(f"Invalid tool ID: {tool_id}")
+        if not data:
+            raise ValidationException("No data provided for tool update")
 
-        Args:
-            tool_id: ID of the tool to update
-            data: Updated tool data
+        logger.info(
+            f"User {user_id} updating tool {tool_id}: { {k: v for k, v in data.items() if k not in ['specifications', 'image']} }")
+        # Basic Validation
+        if "category" in data and data.get("category") is not None and not isinstance(data.get("category"),
+                                                                                      ToolCategory): raise ValidationException(
+            "Invalid internal category type.")
+        if data.get("purchase_price") is not None and data["purchase_price"] < 0: raise ValidationException(
+            "Price cannot be negative.")
+        if data.get("maintenance_interval") is not None and data[
+            "maintenance_interval"] <= 0: raise ValidationException("Interval must be positive.")
 
-        Returns:
-            Updated tool entity
+        # Preprocess Dates (includes updated_at)
+        self._preprocess_data_dates(data, self._tool_date_fields_map)
 
-        Raises:
-            ToolNotFoundException: If tool not found
-            ValidationException: If validation fails
-        """
         with self.transaction():
-            # Check if tool exists
-            tool = self.get_by_id(tool_id)
-            if not tool:
-                from app.core.exceptions import ToolNotFoundException
+            tool = self.repository.get_by_id(tool_id)
+            if not tool: raise ToolNotFoundException(
+                tool_id=tool_id) if 'ToolNotFoundException' in globals() else EntityNotFoundException("Tool", tool_id)
+            previous_status = tool.status;
+            new_status = data.get("status", previous_status)
+            if new_status != previous_status: self._validate_status_transition(previous_status, new_status)
 
-                raise ToolNotFoundException(tool_id)
-
-            # Store previous status for event
-            previous_status = tool.status
-
-            # Update tool
-            updated_tool = self.repository.update(tool_id, data)
-
-            # Check if status changed and publish event
-            if (
-                "status" in data
-                and data["status"] != previous_status
-                and self.event_bus
-            ):
-                user_id = (
-                    self.security_context.current_user.id
-                    if self.security_context
-                    else None
-                )
-                reason = data.get("status_change_reason", "Status updated")
-
-                self.event_bus.publish(
-                    ToolStatusChanged(
-                        tool_id=tool_id,
-                        previous_status=previous_status,
-                        new_status=data["status"],
-                        reason=reason,
-                        user_id=user_id,
-                    )
-                )
-
-            # Invalidate cache if cache service exists
-            if self.cache_service:
-                self.cache_service.invalidate(f"Tool:{tool_id}")
-                self.cache_service.invalidate(f"Tool:detail:{tool_id}")
-
+            try:
+                updated_tool = self.repository.update(tool_id, data)  # Pass dict with date/datetime objects
+            except Exception as repo_e:
+                logger.error(f"Repo update failed for tool {tool_id}: {repo_e}",
+                             exc_info=True); raise HideSyncException(f"DB error updating tool {tool_id}")
+            logger.info(f"Tool {tool_id} updated by user {user_id}.")
+            if new_status != previous_status: self._publish_tool_status_changed_event(tool_id, previous_status,
+                                                                                      new_status,
+                                                                                      data.get("status_change_reason"),
+                                                                                      user_id)
+            self._invalidate_tool_caches(tool_id, list_too=True)
             return updated_tool
 
-    def update_status(
-        self, tool_id: int, status: str, reason: Optional[str] = None
-    ) -> Tool:
-        """
-        Update the status of a tool.
+    def delete_tool(self, tool_id: int, user_id: Optional[int] = None) -> None:
+        """ Delete a tool. """
+        if not tool_id or not isinstance(tool_id, int) or tool_id <= 0:
+            raise ValidationException(f"Invalid tool ID: {tool_id}")
 
-        Args:
-            tool_id: ID of the tool
-            status: New status value
-            reason: Optional reason for the status change
+        logger.info(f"User {user_id} attempting to delete tool {tool_id}")
+        with self.transaction():
+            tool = self.repository.get_by_id(tool_id);
+            if not tool: raise ToolNotFoundException(
+                tool_id=tool_id) if 'ToolNotFoundException' in globals() else EntityNotFoundException("Tool", tool_id)
+            if tool.status == "CHECKED_OUT": raise BusinessRuleException(f"Cannot delete checked out tool {tool_id}.")
+            try:
+                self.repository.delete(tool_id)
+            except Exception as repo_e:
+                logger.error(f"Repo delete failed for tool {tool_id}: {repo_e}",
+                             exc_info=True); raise HideSyncException(f"DB error deleting tool {tool_id}")
+            logger.info(f"Tool {tool_id} deleted by user {user_id}.")
+            self._handle_inventory_adjustment(tool, -1, "DISPOSAL", f"Tool '{tool.name}' deleted", user_id)
+            self._invalidate_tool_caches(tool_id, list_too=True, detail_too=True)
 
-        Returns:
-            Updated tool entity
+    # --- Checkout Operations ---
+    def get_checkouts(self, status: Optional[str] = None, tool_id: Optional[int] = None,
+                      project_id: Optional[int] = None, user_id: Optional[int] = None,
+                      skip: int = 0, limit: int = 100) -> List[ToolCheckout]:
+        """ Get tool checkouts with filtering. """
+        filters = {}
+        if status:
+            filters["status"] = status
+        if tool_id:
+            if not isinstance(tool_id, int) or tool_id <= 0:
+                raise ValidationException(f"Invalid tool ID: {tool_id}")
+            filters["toolId"] = tool_id
+        if project_id:
+            if not isinstance(project_id, int) or project_id <= 0:
+                raise ValidationException(f"Invalid project ID: {project_id}")
+            filters["projectId"] = project_id
+        if user_id:
+            filters["checked_out_by_user_id"] = user_id
 
-        Raises:
-            ToolNotFoundException: If tool not found
-            ValidationException: If validation fails
-        """
-        # Validate status
-        valid_statuses = [
-            "IN_STOCK",
-            "CHECKED_OUT",
-            "MAINTENANCE",
-            "DAMAGED",
-            "LOST",
-            "RETIRED",
-            "ON_ORDER",
-        ]
+        logger.debug(f"Fetching checkouts: filters={filters}, skip={skip}, limit={limit}")
+        checkouts = self.checkout_repository.list(skip=skip, limit=limit, **filters)
+        logger.debug(f"Retrieved {len(checkouts)} checkouts.")
+        return checkouts
 
-        if status not in valid_statuses:
-            raise ValidationException(
-                f"Invalid tool status: {status}",
-                {"status": [f"Must be one of: {', '.join(valid_statuses)}"]},
-            )
+    def checkout_tool(self, data: Dict[str, Any], user_id: Optional[int] = None) -> ToolCheckout:
+        """ Check out a tool, converting date strings to objects. """
+        if not data:
+            raise ValidationException("No data provided for checkout")
+
+        # Handle both snake_case and camelCase keys for flexibility
+        tool_id = data.get("tool_id") or data.get("toolId")
+        checked_out_by = data.get("checked_out_by") or data.get("checkedOutBy")
+        due_date = data.get("due_date") or data.get("dueDate")
+
+        logger.info(f"User {user_id} checking out tool {tool_id} to '{checked_out_by}'")
+
+        if not tool_id:
+            raise ValidationException("Tool ID required.")
+        if not isinstance(tool_id, int) or tool_id <= 0:
+            raise ValidationException(f"Invalid tool ID: {tool_id}")
+        if not checked_out_by:
+            raise ValidationException("'checked_out_by' required.")
+        if not due_date:
+            raise ValidationException("Due date required.")
+
+        # Preprocess Dates (includes createdAt/updatedAt)
+        # Support both naming conventions in input data
+        date_fields_to_process = {}
+        # Add camelCase fields from original map
+        date_fields_to_process.update(self._checkout_date_fields_map)
+        # Add snake_case equivalents
+        date_fields_to_process.update({
+            "checked_out_date": self._checkout_date_fields_map.get("checkedOutDate", True),
+            "due_date": self._checkout_date_fields_map.get("dueDate", False),
+            "returned_date": self._checkout_date_fields_map.get("returnedDate", True),
+            "created_at": self._checkout_date_fields_map.get("createdAt", True),
+            "updated_at": self._checkout_date_fields_map.get("updatedAt", True),
+        })
+
+        # Preprocess all date fields
+        for field, expect_datetime in date_fields_to_process.items():
+            if field in data and data[field] is not None:
+                data[field] = _parse_date_or_datetime(data[field], field, expect_datetime)
+
+        # Ensure we have timestamps
+        now_dt = datetime.now()
+        # Handle both naming conventions
+        data.setdefault("created_at", now_dt)
+        data.setdefault("createdAt", now_dt)
+        data["updated_at"] = now_dt
+        data["updatedAt"] = now_dt
 
         with self.transaction():
-            # Get tool
-            tool = self.get_by_id(tool_id)
+            tool = self.repository.get_by_id(tool_id)
             if not tool:
-                from app.core.exceptions import ToolNotFoundException
-
-                raise ToolNotFoundException(tool_id)
-
-            # Store previous status for event
-            previous_status = tool.status
-
-            # No change if status is the same
-            if previous_status == status:
-                return tool
-
-            # Validate status transition
-            self._validate_status_transition(previous_status, status)
-
-            # Update tool
-            updated_tool = self.repository.update(
-                tool_id, {"status": status, "status_change_reason": reason}
-            )
-
-            # Publish event if event bus exists
-            if self.event_bus:
-                user_id = (
-                    self.security_context.current_user.id
-                    if self.security_context
-                    else None
-                )
-                self.event_bus.publish(
-                    ToolStatusChanged(
-                        tool_id=tool_id,
-                        previous_status=previous_status,
-                        new_status=status,
-                        reason=reason,
-                        user_id=user_id,
-                    )
-                )
-
-            # Invalidate cache if cache service exists
-            if self.cache_service:
-                self.cache_service.invalidate(f"Tool:{tool_id}")
-                self.cache_service.invalidate(f"Tool:detail:{tool_id}")
-
-            return updated_tool
-
-    def get_tool_with_details(self, tool_id: int) -> Dict[str, Any]:
-        """
-        Get a tool with comprehensive details.
-
-        Args:
-            tool_id: ID of the tool
-
-        Returns:
-            Tool with details including maintenance history and checkout status
-
-        Raises:
-            ToolNotFoundException: If tool not found
-        """
-        # Check cache first
-        if self.cache_service:
-            cache_key = f"Tool:detail:{tool_id}"
-            cached = self.cache_service.get(cache_key)
-            if cached:
-                return cached
-
-        # Get tool
-        tool = self.get_by_id(tool_id)
-        if not tool:
-            from app.core.exceptions import ToolNotFoundException
-
-            raise ToolNotFoundException(tool_id)
-
-        # Convert to dict and add related data
-        result = tool.to_dict()
-
-        # Add supplier details if available
-        if tool.supplier_id and self.supplier_service:
-            supplier = self.supplier_service.get_by_id(tool.supplier_id)
-            if supplier:
-                result["supplier"] = {
-                    "id": supplier.id,
-                    "name": supplier.name,
-                    "contact_name": supplier.contact_name,
-                    "phone": supplier.phone,
-                    "email": supplier.email,
-                    "website": supplier.website,
-                }
-
-        # Add current checkout if checked out
-        if tool.status == "CHECKED_OUT":
-            current_checkout = self._get_current_checkout(tool_id)
-            if current_checkout:
-                result["current_checkout"] = {
-                    "id": current_checkout.id,
-                    "checked_out_by": current_checkout.checked_out_by,
-                    "checked_out_date": (
-                        current_checkout.checked_out_date.isoformat()
-                        if current_checkout.checked_out_date
-                        else None
-                    ),
-                    "due_date": (
-                        current_checkout.due_date.isoformat()
-                        if current_checkout.due_date
-                        else None
-                    ),
-                    "project_id": current_checkout.project_id,
-                    "project_name": current_checkout.project_name,
-                    "overdue": self._is_checkout_overdue(current_checkout),
-                }
-
-                # Add project details if available
-                if current_checkout.project_id and self.project_service:
-                    project = self.project_service.get_by_id(
-                        current_checkout.project_id
-                    )
-                    if project:
-                        result["current_checkout"]["project"] = {
-                            "id": project.id,
-                            "name": project.name,
-                            "status": project.status,
-                            "type": project.type,
-                            "due_date": (
-                                project.due_date.isoformat()
-                                if project.due_date
-                                else None
-                            ),
-                        }
-
-        # Add maintenance history
-        result["maintenance_history"] = self._get_maintenance_history(tool_id)
-
-        # Add checkout history
-        result["checkout_history"] = self._get_checkout_history(tool_id)
-
-        # Add next scheduled maintenance
-        next_maintenance = self._get_next_scheduled_maintenance(tool_id)
-        if next_maintenance:
-            result["next_maintenance"] = {
-                "id": next_maintenance.id,
-                "maintenance_type": next_maintenance.maintenance_type,
-                "date": (
-                    next_maintenance.date.isoformat() if next_maintenance.date else None
-                ),
-                "days_away": (
-                    (next_maintenance.date - datetime.now().date()).days
-                    if next_maintenance.date
-                    else None
-                ),
-            }
-
-        # Add usage statistics
-        result["usage_statistics"] = self._calculate_usage_statistics(tool_id)
-
-        # Store in cache if cache service exists
-        if self.cache_service:
-            self.cache_service.set(cache_key, result, ttl=3600)  # 1 hour TTL
-
-        return result
-
-    def get_tools_by_category(self, category: Union[ToolCategory, str]) -> List[Tool]:
-        """
-        Get all tools in a specific category.
-
-        Args:
-            category: Category to filter by
-
-        Returns:
-            List of tools in the category
-        """
-        # Convert string category to enum value if needed
-        if isinstance(category, ToolCategory):
-            category = category.value
-
-        return self.repository.list(category=category)
-
-    def get_tools_by_status(self, status: str) -> List[Tool]:
-        """
-        Get all tools with a specific status.
-
-        Args:
-            status: Status to filter by
-
-        Returns:
-            List of tools with the status
-        """
-        return self.repository.list(status=status)
-
-    def get_tools_due_for_maintenance(
-        self, days_window: int = 7
-    ) -> List[Dict[str, Any]]:
-        """
-        Get tools that are due for maintenance within a time window.
-
-        Args:
-            days_window: Number of days to look ahead
-
-        Returns:
-            List of tools with upcoming maintenance
-        """
-        # Calculate date range
-        today = datetime.now().date()
-        end_date = today + timedelta(days=days_window)
-
-        # Get scheduled maintenance in date range
-        maintenance_records = self.maintenance_repository.get_upcoming_maintenance(
-            start_date=today, end_date=end_date
-        )
-
-        # Get tool details for each maintenance record
-        result = []
-        for maintenance in maintenance_records:
-            tool = self.get_by_id(maintenance.tool_id)
-            if not tool:
-                continue
-
-            # Add to result
-            result.append(
-                {
-                    "maintenance_id": maintenance.id,
-                    "tool_id": tool.id,
-                    "tool_name": tool.name,
-                    "category": tool.category,
-                    "maintenance_type": maintenance.maintenance_type,
-                    "scheduled_date": (
-                        maintenance.date.isoformat() if maintenance.date else None
-                    ),
-                    "days_away": (
-                        (maintenance.date - today).days if maintenance.date else None
-                    ),
-                    "status": maintenance.status,
-                    "tool_status": tool.status,
-                }
-            )
-
-        # Sort by scheduled date (ascending)
-        return sorted(result, key=lambda x: x["scheduled_date"])
-
-    def get_overdue_tools(self) -> List[Dict[str, Any]]:
-        """
-        Get tools that are overdue for return.
-
-        Returns:
-            List of overdue tool checkouts
-        """
-        # Get active checkouts
-        checkouts = self.checkout_repository.list(status="CHECKED_OUT")
-
-        # Filter for overdue
-        today = datetime.now().date()
-        overdue_checkouts = [c for c in checkouts if c.due_date and c.due_date < today]
-
-        # Get tool details for each checkout
-        result = []
-        for checkout in overdue_checkouts:
-            tool = self.get_by_id(checkout.tool_id)
-            if not tool:
-                continue
-
-            # Add to result
-            result.append(
-                {
-                    "checkout_id": checkout.id,
-                    "tool_id": tool.id,
-                    "tool_name": tool.name,
-                    "category": tool.category,
-                    "checked_out_by": checkout.checked_out_by,
-                    "checked_out_date": (
-                        checkout.checked_out_date.isoformat()
-                        if checkout.checked_out_date
-                        else None
-                    ),
-                    "due_date": (
-                        checkout.due_date.isoformat() if checkout.due_date else None
-                    ),
-                    "days_overdue": (
-                        (today - checkout.due_date).days if checkout.due_date else 0
-                    ),
-                    "project_id": checkout.project_id,
-                    "project_name": checkout.project_name,
-                }
-            )
-
-        # Sort by days overdue (descending)
-        return sorted(result, key=lambda x: x["days_overdue"], reverse=True)
-
-    @validate_input(validate_tool_maintenance)
-    def schedule_maintenance(self, data: Dict[str, Any]) -> ToolMaintenance:
-        """
-        Schedule maintenance for a tool.
-
-        Args:
-            data: Maintenance data with tool_id, type, and date
-
-        Returns:
-            Created maintenance record
-
-        Raises:
-            ValidationException: If validation fails
-            ToolNotFoundException: If tool not found
-        """
-        with self.transaction():
-            # Check if tool exists
-            tool_id = data.get("tool_id")
-            tool = self.get_by_id(tool_id)
-            if not tool:
-                from app.core.exceptions import ToolNotFoundException
-
-                raise ToolNotFoundException(tool_id)
-
-            # Set default values if not provided
-            if "status" not in data:
-                data["status"] = "SCHEDULED"
-
-            if "tool_name" not in data:
-                data["tool_name"] = tool.name
-
-            # Convert date string to date object if needed
-            if "date" in data and isinstance(data["date"], str):
-                try:
-                    data["date"] = datetime.fromisoformat(
-                        data["date"].replace("Z", "+00:00")
-                    ).date()
-                except ValueError:
-                    try:
-                        data["date"] = datetime.strptime(
-                            data["date"], "%Y-%m-%d"
-                        ).date()
-                    except ValueError:
-                        raise ValidationException(
-                            "Invalid date format. Expected ISO format (YYYY-MM-DD).",
-                            {"date": ["Invalid date format"]},
-                        )
-
-            # Create maintenance record
-            maintenance = self.maintenance_repository.create(data)
-
-            # Update tool's next maintenance date
-            self.repository.update(
-                tool_id,
-                {
-                    "next_maintenance": (
-                        data["date"].isoformat()
-                        if isinstance(data["date"], date)
-                        else data["date"]
-                    )
-                },
-            )
-
-            # Publish event if event bus exists
-            if self.event_bus:
-                user_id = (
-                    self.security_context.current_user.id
-                    if self.security_context
-                    else None
-                )
-                self.event_bus.publish(
-                    ToolMaintenanceScheduled(
-                        maintenance_id=maintenance.id,
-                        tool_id=tool_id,
-                        maintenance_type=maintenance.maintenance_type,
-                        date=maintenance.date.isoformat() if maintenance.date else None,
-                        user_id=user_id,
-                    )
-                )
-
-            # Invalidate cache
-            if self.cache_service:
-                self.cache_service.invalidate(f"Tool:detail:{tool_id}")
-
-            return maintenance
-
-    def complete_maintenance(
-        self, maintenance_id: int, data: Dict[str, Any]
-    ) -> ToolMaintenance:
-        """
-        Complete a scheduled maintenance.
-
-        Args:
-            maintenance_id: ID of the maintenance record
-            data: Completion data with performed_by, date, and results
-
-        Returns:
-            Updated maintenance record
-
-        Raises:
-            MaintenanceNotFoundException: If maintenance record not found
-            ValidationException: If validation fails
-        """
-        with self.transaction():
-            # Check if maintenance record exists
-            maintenance = self.maintenance_repository.get_by_id(maintenance_id)
-            if not maintenance:
-                from app.core.exceptions import MaintenanceNotFoundException
-
-                raise MaintenanceNotFoundException(maintenance_id)
-
-            # Check if already completed
-            if maintenance.status == "COMPLETED":
-                raise ValidationException(
-                    "Maintenance has already been completed",
-                    {"maintenance_id": ["Already completed"]},
-                )
-
-            # Set default values if not provided
-            if "completion_date" not in data:
-                data["completion_date"] = datetime.now().date().isoformat()
-
-            # Convert to date object if needed
-            if isinstance(data.get("completion_date"), str):
-                try:
-                    data["completion_date"] = datetime.fromisoformat(
-                        data["completion_date"].replace("Z", "+00:00")
-                    ).date()
-                except ValueError:
-                    try:
-                        data["completion_date"] = datetime.strptime(
-                            data["completion_date"], "%Y-%m-%d"
-                        ).date()
-                    except ValueError:
-                        raise ValidationException(
-                            "Invalid date format. Expected ISO format (YYYY-MM-DD).",
-                            {"completion_date": ["Invalid date format"]},
-                        )
-
-            # Combine with status update
-            completion_data = {**data, "status": "COMPLETED"}
-
-            # Update maintenance record
-            updated_maintenance = self.maintenance_repository.update(
-                maintenance_id, completion_data
-            )
-
-            # Calculate next maintenance date if interval exists
-            tool = self.get_by_id(maintenance.tool_id)
-            next_date = None
-
-            if tool and tool.maintenance_interval:
-                # Calculate from completion date
-                if isinstance(data.get("completion_date"), date):
-                    next_date = data["completion_date"] + timedelta(
-                        days=tool.maintenance_interval
-                    )
-                else:
-                    next_date = datetime.now().date() + timedelta(
-                        days=tool.maintenance_interval
-                    )
-
-                # Schedule next maintenance
-                next_maintenance_data = {
-                    "tool_id": tool.id,
-                    "tool_name": tool.name,
-                    "maintenance_type": "ROUTINE",
-                    "date": next_date.isoformat(),
-                    "status": "SCHEDULED",
-                }
-
-                self.schedule_maintenance(next_maintenance_data)
-
-            # Update tool status and last maintenance date
-            tool_update_data = {
-                "last_maintenance": (
-                    data.get("completion_date").isoformat()
-                    if isinstance(data.get("completion_date"), date)
-                    else data.get("completion_date")
-                ),
-                "status": "IN_STOCK" if tool.status == "MAINTENANCE" else tool.status,
-            }
-
-            if next_date:
-                tool_update_data["next_maintenance"] = next_date.isoformat()
-
-            self.repository.update(maintenance.tool_id, tool_update_data)
-
-            # Publish event if event bus exists
-            if self.event_bus:
-                user_id = (
-                    self.security_context.current_user.id
-                    if self.security_context
-                    else None
-                )
-                self.event_bus.publish(
-                    ToolMaintenanceCompleted(
-                        maintenance_id=maintenance_id,
-                        tool_id=maintenance.tool_id,
-                        performed_by=data.get("performed_by", "Unknown"),
-                        completion_date=(
-                            data.get("completion_date").isoformat()
-                            if isinstance(data.get("completion_date"), date)
-                            else data.get("completion_date")
-                        ),
-                        next_date=next_date.isoformat() if next_date else None,
-                        user_id=user_id,
-                    )
-                )
-
-            # Invalidate cache
-            if self.cache_service:
-                self.cache_service.invalidate(f"Tool:detail:{maintenance.tool_id}")
-
-            return updated_maintenance
-
-    @validate_input(validate_tool_checkout)
-    def checkout_tool(self, data: Dict[str, Any]) -> ToolCheckout:
-        """
-        Check out a tool.
-
-        Args:
-            data: Checkout data with tool_id, checked_out_by, and optional project_id
-
-        Returns:
-            Created checkout record
-
-        Raises:
-            ValidationException: If validation fails
-            ToolNotFoundException: If tool not found
-            ToolNotAvailableException: If tool is not available for checkout
-        """
-        with self.transaction():
-            # Check if tool exists
-            tool_id = data.get("tool_id")
-            tool = self.get_by_id(tool_id)
-            if not tool:
-                from app.core.exceptions import ToolNotFoundException
-
-                raise ToolNotFoundException(tool_id)
-
-            # Check if tool is available
+                raise ToolNotFoundException(tool_id=tool_id)
             if tool.status != "IN_STOCK":
-                from app.core.exceptions import ToolNotAvailableException
-
                 raise ToolNotAvailableException(
-                    f"Tool {tool_id} is not available for checkout (current status: {tool.status})",
-                    current_status=tool.status,
+                    f"Tool {tool_id} unavailable (Status: {tool.status})",
+                    tool_id=tool_id,
+                    current_status=tool.status
                 )
 
-            # Set default values if not provided
-            if "checked_out_date" not in data:
-                data["checked_out_date"] = datetime.now().isoformat()
+            project_id = data.get("project_id") or data.get("projectId")
+            project_name = self._validate_and_get_project_name(project_id)
 
-            if "status" not in data:
-                data["status"] = "CHECKED_OUT"
+            # Prepare checkout data with standardized keys for repository
+            checked_out_date = data.get("checked_out_date") or data.get("checkedOutDate") or now_dt
+            checkout_data_to_create = {
+                "toolId": tool_id,
+                "toolName": tool.name,
+                "checkedOutBy": checked_out_by,
+                "checkedOutDate": checked_out_date,
+                "dueDate": data.get("due_date") or data.get("dueDate"),
+                "projectId": project_id,
+                "projectName": project_name,
+                "notes": data.get("notes"),
+                "status": "CHECKED_OUT",
+                "conditionBefore": data.get("condition_before") or data.get("conditionBefore", "Good"),
+                "createdAt": data.get("created_at") or data.get("createdAt"),
+                "updatedAt": data.get("updated_at") or data.get("updatedAt")
+            }
+            checkout_data_to_create = {k: v for k, v in checkout_data_to_create.items() if v is not None}
 
-            if "tool_name" not in data:
-                data["tool_name"] = tool.name
-
-            # Set condition_before if not provided
-            if "condition_before" not in data:
-                data["condition_before"] = "Good"
-
-            # Check if project exists
-            if "project_id" in data and data["project_id"] and self.project_service:
-                project = self.project_service.get_by_id(data["project_id"])
-                if project:
-                    data["project_name"] = project.name
-
-            # Create checkout record
-            checkout = self.checkout_repository.create(data)
-
-            # Update tool status
-            self.update_status(
-                tool_id=tool_id,
-                status="CHECKED_OUT",
-                reason=f"Checked out by {data.get('checked_out_by')}",
-            )
-
-            # Update tool checkout info
-            self.repository.update(
-                tool_id,
-                {
-                    "checked_out_to": data.get("checked_out_by"),
-                    "checked_out_date": data.get("checked_out_date"),
-                    "due_date": data.get("due_date"),
-                },
-            )
-
-            # Publish event if event bus exists
-            if self.event_bus:
-                user_id = (
-                    self.security_context.current_user.id
-                    if self.security_context
-                    else None
-                )
-                self.event_bus.publish(
-                    ToolCheckedOut(
-                        checkout_id=checkout.id,
-                        tool_id=tool_id,
-                        checked_out_by=data.get("checked_out_by"),
-                        project_id=data.get("project_id"),
-                        due_date=data.get("due_date"),
-                        user_id=user_id,
-                    )
-                )
-
-            # Invalidate cache
-            if self.cache_service:
-                self.cache_service.invalidate(f"Tool:detail:{tool_id}")
-
+            checkout = self._create_checkout_record_in_repo(checkout_data_to_create)
+            self._update_tool_after_checkout(tool_id, checkout, user_id)
+            self._publish_tool_checked_out_event(checkout, user_id)
             return checkout
 
-    def return_tool(self, checkout_id: int, data: Dict[str, Any]) -> ToolCheckout:
-        """
-        Return a checked out tool.
+    def return_tool(self, checkout_id: int, data: Dict[str, Any], user_id: Optional[int] = None) -> ToolCheckout:
+        """ Return a checked out tool, converting date strings to objects. """
+        if not checkout_id or not isinstance(checkout_id, int) or checkout_id <= 0:
+            raise ValidationException(f"Invalid checkout ID: {checkout_id}")
+        if not data:
+            data = {}  # Use empty dict with defaults
 
-        Args:
-            checkout_id: ID of the checkout record
-            data: Return data with condition_after and optional issues
+        logger.info(f"User {user_id} returning checkout {checkout_id} with data: {data}")
 
-        Returns:
-            Updated checkout record
+        # Set default return date if not provided
+        now_dt = datetime.now()
+        data.setdefault("returned_date", now_dt)  # Default as datetime object
+        data.setdefault("returnedDate", now_dt)  # Support both naming conventions
 
-        Raises:
-            CheckoutNotFoundException: If checkout record not found
-            ValidationException: If validation fails
-        """
+        # Preprocess Dates (includes updatedAt and returnedDate)
+        # Support both naming conventions in input data
+        date_fields_to_process = {}
+        # Add camelCase fields from original map
+        date_fields_to_process.update(self._checkout_date_fields_map)
+        # Add snake_case equivalents
+        date_fields_to_process.update({
+            "checked_out_date": self._checkout_date_fields_map.get("checkedOutDate", True),
+            "due_date": self._checkout_date_fields_map.get("dueDate", False),
+            "returned_date": self._checkout_date_fields_map.get("returnedDate", True),
+            "created_at": self._checkout_date_fields_map.get("createdAt", True),
+            "updated_at": self._checkout_date_fields_map.get("updatedAt", True),
+        })
+
+        # Preprocess all date fields
+        for field, expect_datetime in date_fields_to_process.items():
+            if field in data and data[field] is not None:
+                data[field] = _parse_date_or_datetime(data[field], field, expect_datetime)
+
+        # Ensure we have timestamps
+        data["updated_at"] = now_dt
+        data["updatedAt"] = now_dt
+
         with self.transaction():
-            # Check if checkout record exists
             checkout = self.checkout_repository.get_by_id(checkout_id)
             if not checkout:
-                from app.core.exceptions import CheckoutNotFoundException
-
-                raise CheckoutNotFoundException(checkout_id)
-
-            # Check if already returned
+                raise CheckoutNotFoundException(checkout_id=checkout_id)
             if checkout.status != "CHECKED_OUT":
-                raise ValidationException(
-                    f"Tool is not checked out (current status: {checkout.status})",
-                    {"checkout_id": ["Not checked out"]},
-                )
+                raise BusinessRuleException(f"Checkout {checkout_id} not CHECKED_OUT.")
 
-            # Set default values if not provided
-            if "returned_date" not in data:
-                data["returned_date"] = datetime.now().isoformat()
+            # Support both naming conventions for condition and issues
+            condition_after = data.get("condition_after") or data.get("conditionAfter", "Good")
+            issue_description = data.get("issue_description") or data.get("issueDescription")
+            has_issues = bool(issue_description)
 
-            if "status" not in data:
-                # Determine status based on issues
-                has_issues = (
-                    data.get("issue_description") is not None
-                    and data.get("issue_description") != ""
-                )
-                data["status"] = "RETURNED_WITH_ISSUES" if has_issues else "RETURNED"
+            # Prepare update data with standardized keys
+            checkout_update = {
+                "returnedDate": data.get("returned_date") or data.get("returnedDate"),
+                "status": "RETURNED_WITH_ISSUES" if has_issues else "RETURNED",
+                "conditionAfter": condition_after,
+                "issueDescription": issue_description,
+                "updatedAt": data.get("updated_at") or data.get("updatedAt")
+            }
+            checkout_update = {k: v for k, v in checkout_update.items() if v is not None}
 
-            # Update checkout record
-            updated_checkout = self.checkout_repository.update(checkout_id, data)
-
-            # Determine tool status based on condition
-            has_issues = (
-                data.get("issue_description") is not None
-                and data.get("issue_description") != ""
-            )
-            new_tool_status = "DAMAGED" if has_issues else "IN_STOCK"
-
-            # Update tool status
-            self.update_status(
-                tool_id=checkout.tool_id,
-                status=new_tool_status,
-                reason=f"Returned by {checkout.checked_out_by}"
-                + (
-                    f" with issues: {data.get('issue_description')}"
-                    if has_issues
-                    else ""
-                ),
-            )
-
-            # Clear checkout info from tool
-            self.repository.update(
-                checkout.tool_id,
-                {"checked_out_to": None, "checked_out_date": None, "due_date": None},
-            )
-
-            # Schedule maintenance if issues reported
+            updated_checkout = self._update_checkout_record_in_repo(checkout_id, checkout_update)
+            self._update_tool_after_return(updated_checkout.toolId, has_issues, user_id)
             if has_issues:
-                maintenance_data = {
-                    "tool_id": checkout.tool_id,
-                    "tool_name": checkout.tool_name,
-                    "maintenance_type": "REPAIR",
-                    "date": datetime.now().date().isoformat(),
-                    "status": "SCHEDULED",
-                    "details": data.get("issue_description"),
-                }
-
-                self.schedule_maintenance(maintenance_data)
-
-            # Publish event if event bus exists
-            if self.event_bus:
-                user_id = (
-                    self.security_context.current_user.id
-                    if self.security_context
-                    else None
-                )
-                self.event_bus.publish(
-                    ToolReturned(
-                        checkout_id=checkout_id,
-                        tool_id=checkout.tool_id,
-                        condition_after=data.get("condition_after", "Unknown"),
-                        has_issues=has_issues,
-                        user_id=user_id,
-                    )
-                )
-
-            # Invalidate cache
-            if self.cache_service:
-                self.cache_service.invalidate(f"Tool:detail:{checkout.tool_id}")
-
+                self._schedule_maintenance_after_return(updated_checkout, condition_after, issue_description, user_id)
+            self._publish_tool_returned_event(updated_checkout, condition_after, has_issues, user_id)
             return updated_checkout
 
-    def get_tool_utilization(
-        self, tool_id: int, date_range: Optional[Tuple[datetime, datetime]] = None
-    ) -> Dict[str, Any]:
-        """
-        Get utilization statistics for a tool.
+    # --- Maintenance Operations ---
+    def get_maintenance_records(self, status: Optional[str] = None, tool_id: Optional[int] = None,
+                                upcoming_only: bool = False, skip: int = 0, limit: int = 100) -> List[ToolMaintenance]:
+        """ Get tool maintenance records. """
+        filters = {}
+        if status:
+            filters["status"] = status
+        if tool_id:
+            if not isinstance(tool_id, int) or tool_id <= 0:
+                raise ValidationException(f"Invalid tool ID: {tool_id}")
+            filters["toolId"] = tool_id
 
-        Args:
-            tool_id: ID of the tool
-            date_range: Optional tuple of (start_date, end_date)
+        logger.debug(f"Fetching maintenance: filters={filters}, upcoming={upcoming_only}, skip={skip}, limit={limit}")
 
-        Returns:
-            Dictionary with utilization statistics
-
-        Raises:
-            ToolNotFoundException: If tool not found
-        """
-        # Check if tool exists
-        tool = self.get_by_id(tool_id)
-        if not tool:
-            from app.core.exceptions import ToolNotFoundException
-
-            raise ToolNotFoundException(tool_id)
-
-        # Default date range to last 90 days if not provided
-        if not date_range:
-            end_date = datetime.now()
-            start_date = end_date - timedelta(days=90)
+        if upcoming_only:
+            today = date.today()
+            filters["status"] = "SCHEDULED"
+            # Attempt efficient query if repo supports date comparison
+            try:
+                records = self.maintenance_repository.list(date_gte=today, skip=skip, limit=limit, **filters)
+                logger.debug(f"Retrieved {len(records)} upcoming maint records via repo filter.")
+            except TypeError:  # If repo doesn't support date_gte
+                logger.warning("Repo doesn't support date_gte filter, filtering upcoming maint in memory.")
+                all_scheduled = self.maintenance_repository.list(**filters)
+                records = [r for r in all_scheduled if r.date and isinstance(r.date, date) and r.date >= today]
+                records = records[skip: skip + limit]
+                logger.debug(f"Retrieved {len(records)} upcoming maint records via memory filter.")
         else:
-            start_date, end_date = date_range
+            records = self.maintenance_repository.list(skip=skip, limit=limit, **filters)
+            logger.debug(f"Retrieved {len(records)} maintenance records.")
+        return records
 
-        # Get checkouts in date range
-        checkouts = self.checkout_repository.get_by_date_range(
-            tool_id=tool_id, start_date=start_date, end_date=end_date
+    def get_maintenance_schedule(self, start_date_str: Optional[str] = None,
+                                 end_date_str: Optional[str] = None) -> MaintenanceSchedule:
+        """ Get tool maintenance schedule. """
+        logger.debug(f"Generating maintenance schedule: start={start_date_str}, end={end_date_str}")
+
+        # Parse date strings to date objects
+        try:
+            start_date = date.fromisoformat(start_date_str) if start_date_str else date.today()
+            end_date = date.fromisoformat(end_date_str) if end_date_str else start_date + timedelta(days=30)
+        except ValueError as e:
+            raise ValidationException(f"Invalid date format: {e}. Use YYYY-MM-DD.")
+
+        if start_date > end_date:
+            raise ValidationException("Start date cannot be after end date.")
+
+        # Fetch scheduled records in range (using date objects)
+        scheduled_records = self.maintenance_repository.get_maintenance_by_date_range(
+            start_date=start_date,
+            end_date=end_date,
+            status="SCHEDULED"
         )
+        logger.debug(f"Fetched {len(scheduled_records)} scheduled maintenance records.")
 
-        # Calculate total checked out days
-        total_days = (end_date - start_date).days
-        checked_out_days = 0
+        schedule_items: List[MaintenanceScheduleItem] = []
+        today = date.today()
+        overdue_count = 0
 
-        for checkout in checkouts:
-            if checkout.status not in [
-                "CHECKED_OUT",
-                "RETURNED",
-                "RETURNED_WITH_ISSUES",
-            ]:
+        # Get all required tools in one query
+        tool_ids = {r.tool_id for r in scheduled_records}
+        tools_dict = {t.id: t for t in self.repository.get_by_ids(list(tool_ids))} if tool_ids else {}
+
+        # Process each maintenance record
+        for record in scheduled_records:
+            # Ensure we have a valid date object
+            record_date = record.date if isinstance(record.date, date) else None
+            if not record_date:
                 continue
 
-            # Determine start date (max of checkout date and range start)
-            checkout_start = max(
-                (
-                    checkout.checked_out_date.date()
-                    if checkout.checked_out_date
-                    else start_date.date()
-                ),
-                start_date.date(),
+            tool = tools_dict.get(record.toolId)
+            if not tool:
+                continue
+
+            is_overdue = record_date < today
+            days_until = (record_date - today).days if record_date >= today else None
+
+            item = MaintenanceScheduleItem(
+                tool_id=tool.id,
+                tool_name=tool.name,
+                maintenance_type=record.maintenanceType,
+                scheduled_date=record_date,
+                category=tool.category,
+                status=record.status,
+                location=tool.location,
+                is_overdue=is_overdue,
+                days_until_due=days_until
             )
+            schedule_items.append(item)
 
-            # Determine end date (min of return date and range end)
-            if checkout.status == "CHECKED_OUT":
-                # Still checked out
-                checkout_end = end_date.date()
-            else:
-                # Returned
-                checkout_end = min(
-                    (
-                        checkout.returned_date.date()
-                        if checkout.returned_date
-                        else end_date.date()
-                    ),
-                    end_date.date(),
-                )
+            if is_overdue:
+                overdue_count += 1
 
-            # Add days
-            checked_out_days += max(0, (checkout_end - checkout_start).days)
-
-        # Calculate maintenance days
-        maintenance_records = self.maintenance_repository.get_by_date_range(
-            tool_id=tool_id, start_date=start_date, end_date=end_date
+        # Sort by scheduled date and create response
+        schedule_items.sort(key=lambda x: x.scheduled_date)
+        response = MaintenanceSchedule(
+            schedule=schedule_items,
+            total_items=len(schedule_items),
+            overdue_items=overdue_count,
+            upcoming_items=len(schedule_items) - overdue_count,
+            start_date=start_date,
+            end_date=end_date
         )
 
-        maintenance_days = 0
-        for maintenance in maintenance_records:
+        logger.debug("Maintenance schedule generated.")
+        return response
+
+    def create_maintenance(self, data: Dict[str, Any], user_id: Optional[int] = None) -> ToolMaintenance:
+        """ Create (schedule) a maintenance record, converting date strings. """
+        if not data:
+            raise ValidationException("No data provided for maintenance creation")
+
+        # Support both naming conventions
+        tool_id = data.get("tool_id") or data.get("toolId")
+        maint_type = data.get("maintenance_type") or data.get("maintenanceType")
+        maint_date = data.get("date")
+
+        logger.info(f"User {user_id} creating maintenance for tool {tool_id}: Type='{maint_type}', Date='{maint_date}'")
+
+        if not tool_id:
+            raise ValidationException("Tool ID required.")
+        if not isinstance(tool_id, int) or tool_id <= 0:
+            raise ValidationException(f"Invalid tool ID: {tool_id}")
+        if not maint_type:
+            raise ValidationException("Maintenance type required.")
+        if not maint_date:
+            raise ValidationException("Maintenance date required.")
+
+        # Preprocess Dates (includes createdAt/updatedAt)
+        # Support both naming conventions in input data
+        date_fields_to_process = {}
+        # Add fields from original map
+        date_fields_to_process.update(self._maintenance_date_fields_map)
+        # Add snake_case equivalents if using camelCase in map
+        date_fields_to_process.update({
+            "next_date": self._maintenance_date_fields_map.get("nextDate", False),
+            "created_at": self._maintenance_date_fields_map.get("createdAt", True),
+            "updated_at": self._maintenance_date_fields_map.get("updatedAt", True),
+        })
+
+        # Preprocess all date fields
+        for field, expect_datetime in date_fields_to_process.items():
+            if field in data and data[field] is not None:
+                data[field] = _parse_date_or_datetime(data[field], field, expect_datetime)
+
+        # Ensure we have timestamps
+        now_dt = datetime.now()
+        data.setdefault("created_at", now_dt)
+        data.setdefault("createdAt", now_dt)
+        data["updated_at"] = now_dt
+        data["updatedAt"] = now_dt
+
+        with self.transaction():
+            tool = self.repository.get_by_id(tool_id)
+            if not tool:
+                raise ToolNotFoundException(tool_id=tool_id)
+
+            # Prepare maintenance data with standardized keys
+            performed_by = data.get("performed_by") or data.get("performedBy")
+            condition_before = data.get("condition_before") or data.get("conditionBefore", tool.status)
+            condition_after = data.get("condition_after") or data.get("conditionAfter")
+            internal_service = data.get("internal_service") or data.get("internalService", True)
+
+            maint_data_create = {
+                "toolId": tool_id,
+                "toolName": tool.name,
+                "maintenanceType": maint_type,
+                "date": data.get("date"),
+                "performedBy": performed_by,
+                "cost": data.get("cost", 0.0),
+                "internalService": internal_service,
+                "details": data.get("details"),
+                "parts": data.get("parts"),
+                "conditionBefore": condition_before,
+                "conditionAfter": condition_after,
+                "status": data.get("status", "SCHEDULED"),
+                "nextDate": data.get("next_date") or data.get("nextDate"),
+                "createdAt": data.get("created_at") or data.get("createdAt"),
+                "updatedAt": data.get("updated_at") or data.get("updatedAt")
+            }
+
+            if maint_data_create["status"] not in ["SCHEDULED", "IN_PROGRESS", "COMPLETED", "WAITING_PARTS"]:
+                raise ValidationException(f"Invalid status: {maint_data_create['status']}")
+
+            maint_data_create = {k: v for k, v in maint_data_create.items() if v is not None}
+
+            maintenance = self._create_maintenance_record_in_repo(maint_data_create)
+            self._update_tool_after_maint_schedule(tool, maintenance, user_id)
+            self._publish_maintenance_scheduled_event(maintenance, user_id)
+            self._invalidate_maintenance_caches(tool_id=tool_id)
+            return maintenance
+
+    def update_maintenance(self, maintenance_id: int, data: Dict[str, Any],
+                           user_id: Optional[int] = None) -> ToolMaintenance:
+        """ Update maintenance record, converting date strings. """
+        if not maintenance_id or not isinstance(maintenance_id, int) or maintenance_id <= 0:
+            raise ValidationException(f"Invalid maintenance ID: {maintenance_id}")
+        if not data:
+            raise ValidationException("No update data provided.")
+
+        logger.info(f"User {user_id} updating maintenance {maintenance_id}: {data}")
+
+        if "status" in data and data["status"] not in ["SCHEDULED", "IN_PROGRESS", "COMPLETED", "WAITING_PARTS"]:
+            raise ValidationException(f"Invalid status: {data['status']}")
+        if data.get("cost") is not None and data["cost"] < 0:
+            raise ValidationException("Cost cannot be negative.")
+
+        # Preprocess Dates (includes updatedAt)
+        # Support both naming conventions in input data
+        date_fields_to_process = {}
+        # Add fields from original map
+        date_fields_to_process.update(self._maintenance_date_fields_map)
+        # Add snake_case equivalents if using camelCase in map
+        date_fields_to_process.update({
+            "next_date": self._maintenance_date_fields_map.get("nextDate", False),
+            "created_at": self._maintenance_date_fields_map.get("createdAt", True),
+            "updated_at": self._maintenance_date_fields_map.get("updatedAt", True),
+        })
+
+        # Preprocess all date fields
+        for field, expect_datetime in date_fields_to_process.items():
+            if field in data and data[field] is not None:
+                data[field] = _parse_date_or_datetime(data[field], field, expect_datetime)
+
+        # Ensure we have timestamp for update
+        now_dt = datetime.now()
+        data["updated_at"] = now_dt
+        data["updatedAt"] = now_dt
+
+        with self.transaction():
+            maintenance = self.maintenance_repository.get_by_id(maintenance_id)
+            if not maintenance:
+                raise MaintenanceNotFoundException(maintenance_id=maintenance_id)
+
+            allowed_updates_on_completed = {"details", "cost", "parts", "updatedAt", "updated_at"}
+            if maintenance.status == "COMPLETED" and not set(data.keys()).issubset(allowed_updates_on_completed):
+                raise BusinessRuleException(f"Cannot modify completed maintenance {maintenance_id}.")
+
+            # Clean None values before repo update
+            update_data_repo = {k: v for k, v in data.items() if v is not None}
+
+            updated_maintenance = self._update_maintenance_record_in_repo(maintenance_id, update_data_repo)
+            self._invalidate_maintenance_caches(maintenance_id=maintenance_id, tool_id=maintenance.toolId)
+            return updated_maintenance
+
+    def complete_maintenance(self, maintenance_id: int, data: Dict[str, Any],
+                             user_id: Optional[int] = None) -> ToolMaintenance:
+        """ Mark maintenance as completed, converting date strings. """
+        if not maintenance_id or not isinstance(maintenance_id, int) or maintenance_id <= 0:
+            raise ValidationException(f"Invalid maintenance ID: {maintenance_id}")
+        if not data:
+            data = {}  # Use empty dict with defaults
+
+        logger.info(f"User {user_id} completing maintenance {maintenance_id}: {data}")
+
+        if data.get("cost") is not None and data["cost"] < 0:
+            raise ValidationException("Cost cannot be negative.")
+
+        # Preprocess Dates
+        # Support both naming conventions in input data
+        date_fields_to_process = {}
+        # Add fields from original map
+        date_fields_to_process.update(self._maintenance_date_fields_map)
+        # Add snake_case equivalents if using camelCase in map
+        date_fields_to_process.update({
+            "next_date": self._maintenance_date_fields_map.get("nextDate", False),
+            "created_at": self._maintenance_date_fields_map.get("createdAt", True),
+            "updated_at": self._maintenance_date_fields_map.get("updatedAt", True),
+        })
+
+        # Preprocess all date fields
+        for field, expect_datetime in date_fields_to_process.items():
+            if field in data and data[field] is not None:
+                data[field] = _parse_date_or_datetime(data[field], field, expect_datetime)
+
+        # Ensure we have timestamp for update
+        now_dt = datetime.now()
+        data["updated_at"] = now_dt
+        data["updatedAt"] = now_dt
+
+        with self.transaction():
+            maintenance = self.maintenance_repository.get_by_id(maintenance_id)
+            if not maintenance:
+                raise MaintenanceNotFoundException(maintenance_id=maintenance_id)
             if maintenance.status == "COMPLETED":
-                # Assume 1 day per maintenance for now
-                maintenance_days += 1
+                raise BusinessRuleException(f"Maintenance {maintenance_id} already completed.")
 
-        # Calculate utilization percentages
-        utilization_percentage = (
-            round((checked_out_days / total_days * 100), 1) if total_days > 0 else 0
-        )
-        availability_percentage = (
-            round(
-                ((total_days - checked_out_days - maintenance_days) / total_days * 100),
-                1,
-            )
-            if total_days > 0
-            else 0
-        )
-        maintenance_percentage = (
-            round((maintenance_days / total_days * 100), 1) if total_days > 0 else 0
-        )
+            tool = self.repository.get_by_id(maintenance.toolId)
+            if not tool:
+                raise EntityNotFoundException("Tool", maintenance.toolId)
 
-        return {
-            "tool_id": tool_id,
-            "tool_name": tool.name,
-            "date_range": {
-                "start": start_date.isoformat(),
-                "end": end_date.isoformat(),
-                "days": total_days,
-            },
-            "utilization": {
-                "checked_out_days": checked_out_days,
-                "maintenance_days": maintenance_days,
-                "available_days": total_days - checked_out_days - maintenance_days,
-                "utilization_percentage": utilization_percentage,
-                "availability_percentage": availability_percentage,
-                "maintenance_percentage": maintenance_percentage,
-            },
-            "checkout_count": len(checkouts),
-            "maintenance_count": len(maintenance_records),
-            "average_checkout_duration": (
-                round(checked_out_days / len(checkouts), 1) if len(checkouts) > 0 else 0
-            ),
-        }
+            # Get condition after and notes, supporting both naming conventions
+            condition_after = data.get("condition_after") or data.get("conditionAfter", "Good")
+            notes = data.get("details") or data.get("notes", 'N/A')
 
-    def get_tools_needing_replacement(self) -> List[Dict[str, Any]]:
-        """
-        Get tools that may need replacement based on age, condition, or repair frequency.
+            # Prepare maintenance update
+            completion_date_obj = now_dt
 
-        Returns:
-            List of tools that may need replacement with reasons
-        """
-        # Get all tools
-        tools = self.repository.list()
+            # Determine date field type based on map
+            date_field_value = completion_date_obj.date() if self._maintenance_date_fields_map.get(
+                "date") is False else completion_date_obj
 
-        # List to store tools needing replacement
-        replacement_candidates = []
+            maint_update = {
+                "status": "COMPLETED",
+                "date": date_field_value,  # Use correct date/datetime type
+                "performedBy": maintenance.performedBy or f"User {user_id}",
+                "cost": data.get("cost", maintenance.cost),
+                "details": (
+                                       maintenance.details or "") + f"\n\nCompleted by User {user_id} on {now_dt.strftime('%Y-%m-%d %H:%M')}.\nNotes: {notes}",
+                "conditionAfter": condition_after,
+                "updatedAt": now_dt,
+            }
 
-        for tool in tools:
-            reasons = []
+            # Add parts if provided
+            if "parts" in data:
+                maint_update["parts"] = data["parts"]
 
-            # Check age if purchase date available
-            if tool.purchase_date:
-                age_years = (datetime.now().date() - tool.purchase_date).days / 365
-                if age_years > 5:  # Arbitrary threshold
-                    reasons.append(f"Tool is {round(age_years, 1)} years old")
+            maint_update = {k: v for k, v in maint_update.items() if v is not None}
 
-            # Check maintenance frequency
-            maintenance_records = self.maintenance_repository.list(tool_id=tool.id)
-            repair_count = len(
-                [
-                    m
-                    for m in maintenance_records
-                    if m.maintenance_type == "REPAIR"
-                    and m.date
-                    and m.date > datetime.now().date() - timedelta(days=365)
-                ]
-            )
+            completed_maint = self._update_maintenance_record_in_repo(maintenance_id, maint_update)
 
-            if repair_count >= 3:  # Arbitrary threshold
-                reasons.append(f"Required {repair_count} repairs in the past year")
+            # Schedule next maintenance if needed, using date object
+            next_maint_date_obj = self._schedule_next_maintenance_if_needed(tool, completion_date_obj.date(),
+                                                                            condition_after, user_id)
 
-            # Check status
-            if tool.status == "DAMAGED":
-                reasons.append("Currently damaged")
+            # Update tool with maintenance information
+            self._update_tool_after_maint_completion(tool, completion_date_obj, next_maint_date_obj, user_id)
 
-            # If any reasons, add to candidates
-            if reasons:
-                replacement_candidates.append(
-                    {
-                        "tool_id": tool.id,
-                        "name": tool.name,
-                        "category": tool.category,
-                        "status": tool.status,
-                        "purchase_date": (
-                            tool.purchase_date.isoformat()
-                            if tool.purchase_date
-                            else None
-                        ),
-                        "age_years": (
-                            round(
-                                (datetime.now().date() - tool.purchase_date).days / 365,
-                                1,
-                            )
-                            if tool.purchase_date
-                            else None
-                        ),
-                        "repair_count_past_year": repair_count,
-                        "replacement_reasons": reasons,
-                    }
-                )
+            # Publish event and invalidate caches
+            self._publish_maintenance_completed_event(completed_maint, next_maint_date_obj, user_id)
+            self._invalidate_maintenance_caches(maintenance_id=maintenance_id, tool_id=tool.id, list_too=True)
 
-        # Sort by number of reasons (descending)
-        return sorted(
-            replacement_candidates,
-            key=lambda x: len(x["replacement_reasons"]),
-            reverse=True,
-        )
+            return completed_maint
 
-    def generate_tool_report(
-        self, report_type: str, filters: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
-        """
-        Generate a tool report based on specified type and filters.
-
-        Args:
-            report_type: Type of report (inventory, maintenance, utilization)
-            filters: Optional filters to apply to the report
-
-        Returns:
-            Dictionary with report results
-
-        Raises:
-            ValidationException: If invalid report type
-        """
-        # Validate report type
-        valid_report_types = ["inventory", "maintenance", "utilization", "checkout"]
-        if report_type.lower() not in valid_report_types:
-            raise ValidationException(
-                f"Invalid report type: {report_type}",
-                {"report_type": [f"Must be one of: {', '.join(valid_report_types)}"]},
-            )
-
-        # Initialize filters
-        if not filters:
-            filters = {}
-
-        # Generate report based on type
-        if report_type.lower() == "inventory":
-            return self._generate_inventory_report(filters)
-        elif report_type.lower() == "maintenance":
-            return self._generate_maintenance_report(filters)
-        elif report_type.lower() == "utilization":
-            return self._generate_utilization_report(filters)
-        elif report_type.lower() == "checkout":
-            return self._generate_checkout_report(filters)
-
+    # --- Private Helper Methods ---
     def _validate_status_transition(self, current_status: str, new_status: str) -> None:
-        """
-        Validate that a status transition is allowed based on business rules.
+        """Validate that a status transition is allowed."""
+        if not current_status or not new_status:
+            logger.warning(f"Empty status in transition: '{current_status}'->{new_status}'")
+            raise ValidationException("Status cannot be empty")
 
-        Args:
-            current_status: Current status
-            new_status: Proposed new status
-
-        Raises:
-            InvalidStatusTransitionException: If transition is not allowed
-        """
-        # Define allowed transitions
-        allowed_transitions = {
+        allowed = {
             "IN_STOCK": ["CHECKED_OUT", "MAINTENANCE", "DAMAGED", "LOST", "RETIRED"],
             "CHECKED_OUT": ["IN_STOCK", "DAMAGED", "LOST"],
             "MAINTENANCE": ["IN_STOCK", "DAMAGED", "RETIRED"],
             "DAMAGED": ["MAINTENANCE", "IN_STOCK", "RETIRED"],
             "LOST": ["IN_STOCK"],
             "RETIRED": [],
-            "ON_ORDER": ["IN_STOCK", "DAMAGED"],
+            "ON_ORDER": ["IN_STOCK", "DAMAGED"]
         }
 
-        # Allow transition to same status
         if current_status == new_status:
             return
 
-        # Check if transition is allowed
-        if new_status not in allowed_transitions.get(current_status, []):
-            from app.core.exceptions import InvalidStatusTransitionException
-
+        if new_status not in allowed.get(current_status, []):
+            logger.warning(f"Invalid transition: {current_status}->{new_status}")
             raise InvalidStatusTransitionException(
-                f"Cannot transition from {current_status} to {new_status}",
-                allowed_transitions=allowed_transitions.get(current_status, []),
+                f"Cannot transition from '{current_status}' to '{new_status}'",
+                allowed.get(current_status, [])
             )
 
-    def _get_current_checkout(self, tool_id: int) -> Optional[ToolCheckout]:
-        """
-        Get the current checkout record for a tool.
+        logger.debug(f"Valid transition: {current_status}->{new_status}")
 
-        Args:
-            tool_id: ID of the tool
+    def _validate_and_get_project_name(self, project_id: Optional[int]) -> Optional[str]:
+        """Validate project ID and get project name."""
+        if not project_id:
+            return None
 
-        Returns:
-            Current checkout record if found, None otherwise
-        """
-        checkouts = self.checkout_repository.list(tool_id=tool_id, status="CHECKED_OUT")
+        if not isinstance(project_id, int) or project_id <= 0:
+            logger.warning(f"Invalid project ID: {project_id}")
+            return None
 
-        return checkouts[0] if checkouts else None
+        if self.project_service:
+            try:
+                return self.project_service.get_by_id(project_id).name
+            except EntityNotFoundException:
+                logger.warning(f"Project ID {project_id} not found.")
+                return None
+        return None
 
-    def _is_checkout_overdue(self, checkout: ToolCheckout) -> bool:
-        """
-        Check if a checkout is overdue.
+    def _create_checkout_record_in_repo(self, data: Dict[str, Any]) -> ToolCheckout:
+        """Create a checkout record in the repository."""
+        try:
+            checkout = self.checkout_repository.create(data)
+            logger.info(f"Checkout {checkout.id} created.")
+            return checkout
+        except Exception as e:
+            logger.error(f"Repo create checkout fail: {e}", exc_info=True)
+            raise HideSyncException("DB error creating checkout.")
 
-        Args:
-            checkout: Checkout record to check
+    def _update_tool_after_checkout(self, tool_id: int, checkout: ToolCheckout, user_id: Optional[int]):
+        """Update tool record after checkout."""
+        if not tool_id or not isinstance(tool_id, int) or tool_id <= 0:
+            logger.error(f"Invalid tool_id in _update_tool_after_checkout: {tool_id}")
+            return
 
-        Returns:
-            True if overdue, False otherwise
-        """
-        if not checkout.due_date:
-            return False
+        update_data = {
+            "status": "CHECKED_OUT",
+            "checked_out_to": checkout.checkedOutBy,
+            "checked_out_date": checkout.checkedOutDate,
+            "due_date": checkout.dueDate
+        }
 
-        return checkout.due_date < datetime.now().date()
+        self.update_tool(tool_id, update_data, user_id)
 
-    def _get_maintenance_history(self, tool_id: int) -> List[Dict[str, Any]]:
-        """
-        Get maintenance history for a tool.
+    def _update_checkout_record_in_repo(self, checkout_id: int, data: Dict[str, Any]) -> ToolCheckout:
+        """Update a checkout record in the repository."""
+        try:
+            updated = self.checkout_repository.update(checkout_id, data)
+            logger.info(f"Checkout {checkout_id} updated.")
+            return updated
+        except Exception as e:
+            logger.error(f"Repo update checkout fail: {e}", exc_info=True)
+            raise HideSyncException("DB error updating checkout.")
 
-        Args:
-            tool_id: ID of the tool
+    def _update_tool_after_return(self, tool_id: int, has_issues: bool, user_id: Optional[int]):
+        """Update tool record after return."""
+        if tool_id is None or not isinstance(tool_id, int) or tool_id <= 0:
+            logger.error(f"Invalid tool_id in _update_tool_after_return: {tool_id}")
+            return
 
-        Returns:
-            List of maintenance records
-        """
-        maintenance_records = self.maintenance_repository.list(
-            tool_id=tool_id, order_by="date", order_dir="desc"
-        )
+        status = "MAINTENANCE" if has_issues else "IN_STOCK"
+        update_data = {
+            "status": status,
+            "checked_out_to": None,
+            "checked_out_date": None,
+            "due_date": None
+        }
 
-        return [
-            {
-                "id": record.id,
-                "maintenance_type": record.maintenance_type,
-                "status": record.status,
-                "date": record.date.isoformat() if record.date else None,
-                "completed_date": (
-                    record.completion_date.isoformat()
-                    if record.completion_date
-                    else None
-                ),
-                "performed_by": record.performed_by,
-                "cost": record.cost,
-                "details": record.details,
-                "parts": record.parts,
-                "condition_before": record.condition_before,
-                "condition_after": record.condition_after,
-            }
-            for record in maintenance_records
-        ]
+        try:
+            self.update_tool(tool_id, update_data, user_id)
+            logger.info(f"Tool {tool_id} status->{status} after return.")
+        except Exception as e:
+            logger.error(f"Failed tool update after return {tool_id}: {e}", exc_info=True)
 
-    def _get_checkout_history(self, tool_id: int) -> List[Dict[str, Any]]:
-        """
-        Get checkout history for a tool.
+    def _schedule_maintenance_after_return(self, checkout: ToolCheckout, condition: str, issues: Optional[str],
+                                           user_id: Optional[int]):
+        """Schedule maintenance for a tool after it's returned with issues."""
+        if not checkout or not checkout.toolId:
+            logger.error("Invalid checkout in _schedule_maintenance_after_return")
+            return
 
-        Args:
-            tool_id: ID of the tool
+        logger.info(f"Scheduling maint for tool {checkout.toolId} from return issues.")
 
-        Returns:
-            List of checkout records
-        """
-        checkout_records = self.checkout_repository.list(
-            tool_id=tool_id, order_by="checked_out_date", order_dir="desc"
-        )
+        try:
+            now_dt = datetime.now()
+            now_date = now_dt.date()
 
-        return [
-            {
-                "id": record.id,
-                "checked_out_by": record.checked_out_by,
-                "status": record.status,
-                "checked_out_date": (
-                    record.checked_out_date.isoformat()
-                    if record.checked_out_date
-                    else None
-                ),
-                "due_date": record.due_date.isoformat() if record.due_date else None,
-                "returned_date": (
-                    record.returned_date.isoformat() if record.returned_date else None
-                ),
-                "project_id": record.project_id,
-                "project_name": record.project_name,
-                "condition_before": record.condition_before,
-                "condition_after": record.condition_after,
-                "issue_description": record.issue_description,
-                "overdue": record.due_date
-                and record.checked_out_date
-                and (
-                    (
-                        record.status == "CHECKED_OUT"
-                        and record.due_date < datetime.now().date()
-                    )
-                    or (
-                        record.status in ["RETURNED", "RETURNED_WITH_ISSUES"]
-                        and record.returned_date
-                        and record.due_date < record.returned_date
-                    )
-                ),
-            }
-            for record in checkout_records
-        ]
-
-    def _get_next_scheduled_maintenance(
-        self, tool_id: int
-    ) -> Optional[ToolMaintenance]:
-        """
-        Get the next scheduled maintenance for a tool.
-
-        Args:
-            tool_id: ID of the tool
-
-        Returns:
-            Next maintenance record if found, None otherwise
-        """
-        maintenance_records = self.maintenance_repository.list(
-            tool_id=tool_id, status="SCHEDULED", order_by="date", order_dir="asc"
-        )
-
-        # Filter for future dates
-        future_maintenance = [
-            m for m in maintenance_records if m.date and m.date >= datetime.now().date()
-        ]
-
-        return future_maintenance[0] if future_maintenance else None
-
-    def _calculate_usage_statistics(self, tool_id: int) -> Dict[str, Any]:
-        """
-        Calculate usage statistics for a tool.
-
-        Args:
-            tool_id: ID of the tool
-
-        Returns:
-            Dictionary with usage statistics
-        """
-        # Get all checkouts for the tool
-        checkouts = self.checkout_repository.list(tool_id=tool_id)
-
-        if not checkouts:
-            return {
-                "total_checkouts": 0,
-                "total_days_used": 0,
-                "average_checkout_duration": 0,
-                "utilization_last_90_days": 0,
-                "most_frequent_user": None,
-                "most_common_project": None,
+            maintenance_data = {
+                "tool_id": checkout.toolId,
+                "tool_name": checkout.toolName,
+                "maintenance_type": "REPAIR",
+                "date": now_date,  # Use date object directly
+                "status": "SCHEDULED",
+                "details": f"Issues on return (CK{checkout.id}): {issues}",
+                "condition_before": condition,
+                "created_at": now_dt,
+                "updated_at": now_dt
             }
 
-        # Calculate total days used
-        total_days = 0
-        for checkout in checkouts:
-            if checkout.status == "CHECKED_OUT":
-                # Still checked out
-                days = (
-                    (datetime.now().date() - checkout.checked_out_date.date()).days
-                    if checkout.checked_out_date
-                    else 0
+            self.create_maintenance(maintenance_data, user_id)
+        except Exception as e:
+            logger.error(f"Failed auto-schedule maint for tool {checkout.toolId}: {e}", exc_info=True)
+
+    def _create_maintenance_record_in_repo(self, data: Dict[str, Any]) -> ToolMaintenance:
+        """Create a maintenance record in the repository."""
+        try:
+            maintenance = self.maintenance_repository.create(data)
+            logger.info(f"Maint {maintenance.id} created.")
+            return maintenance
+        except Exception as e:
+            logger.error(f"Repo create maint fail: {e}", exc_info=True)
+            raise HideSyncException("DB error creating maint.")
+
+    def _update_tool_after_maint_schedule(self, tool: Tool, maintenance: ToolMaintenance, user_id: Optional[int]):
+        """Update tool record after maintenance is scheduled."""
+        if not tool or not maintenance:
+            logger.error("Invalid tool or maintenance in _update_tool_after_maint_schedule")
+            return
+
+        if maintenance.status == "SCHEDULED":
+            # Only update if status is SCHEDULED
+            update_data = {"next_maintenance": maintenance.date}  # Use date object
+
+            # Change tool status if appropriate
+            if tool.status == "DAMAGED" and maintenance.maintenanceType == "REPAIR":
+                update_data["status"] = "MAINTENANCE"
+
+            # Only update tool if something has changed
+            current_next = tool.next_maintenance  # Already a date object
+            new_next = maintenance.date  # Already a date object
+
+            if current_next != new_next or update_data.get("status", tool.status) != tool.status:
+                self.update_tool(tool.id, update_data, user_id)
+
+    def _update_maintenance_record_in_repo(self, maintenance_id: int, data: Dict[str, Any]) -> ToolMaintenance:
+        """Update a maintenance record in the repository."""
+        try:
+            updated = self.maintenance_repository.update(maintenance_id, data)
+            logger.info(f"Maint {maintenance_id} updated.")
+            return updated
+        except Exception as e:
+            logger.error(f"Repo update maint fail: {e}", exc_info=True)
+            raise HideSyncException("DB error updating maint.")
+
+    def _schedule_next_maintenance_if_needed(self, tool: Tool, completion_date: date, condition_after: str,
+                                             user_id: Optional[int]) -> Optional[date]:
+        """Schedule next maintenance for a tool if needed."""
+        if not tool:
+            logger.error("Invalid tool in _schedule_next_maintenance_if_needed")
+            return None
+
+        next_dt = None
+        if tool.maintenance_interval and tool.maintenance_interval > 0:
+            next_dt = completion_date + timedelta(days=tool.maintenance_interval)
+            logger.info(f"Scheduling next maint for tool {tool.id} on {next_dt}")
+
+            try:
+                now = datetime.now()
+                maintenance_data = {
+                    "tool_id": tool.id,
+                    "tool_name": tool.name,
+                    "maintenance_type": "ROUTINE",
+                    "date": next_dt,  # Pass date object directly
+                    "status": "SCHEDULED",
+                    "details": f"Routine maint after completion on {completion_date}",
+                    "condition_before": condition_after,
+                    "created_at": now,
+                    "updated_at": now
+                }
+                self.create_maintenance(maintenance_data, user_id)
+            except Exception as e:
+                logger.error(f"Failed schedule next maint for tool {tool.id}: {e}", exc_info=True)
+                next_dt = None
+
+        return next_dt
+
+    def _update_tool_after_maint_completion(self, tool: Tool, completion_dt: datetime, next_maint_date: Optional[date],
+                                            user_id: Optional[int]):
+        """Update tool record after maintenance is completed."""
+        if not tool:
+            logger.error("Invalid tool in _update_tool_after_maint_completion")
+            return
+
+        # Determine correct field types based on mapping
+        last_maint_val = completion_dt if self._tool_date_fields_map.get(
+            "last_maintenance") is True else completion_dt.date()
+
+        # Prepare update data
+        update_data = {
+            "last_maintenance": last_maint_val,
+            "status": "IN_STOCK" if tool.status == "MAINTENANCE" else tool.status,
+            "next_maintenance": next_maint_date  # Already a date object or None
+        }
+
+        # Allow explicit None for next_maintenance to clear the field
+        update_data = {k: v for k, v in update_data.items() if v is not None or k == "next_maintenance"}
+
+        # Perform update if we have data
+        if update_data:
+            try:
+                self.update_tool(tool.id, update_data, user_id)
+                logger.info(f"Tool {tool.id} updated after maint completion.")
+            except Exception as e:
+                logger.error(f"Failed tool update post-maint {tool.id}: {e}", exc_info=True)
+
+    def _invalidate_tool_caches(self, tool_id: int, list_too: bool = False, detail_too: bool = True):
+        """Invalidate tool-related cache entries."""
+        if not self.cache_service:
+            return
+
+        if detail_too:
+            key = f"Tool:detail:{tool_id}"
+            logger.debug(f"Invalidating cache: {key}")
+            self.cache_service.invalidate(key)
+
+        if list_too:
+            pattern = "Tool:list:*"
+            logger.debug(f"Invalidating cache pattern: {pattern}")
+            self.cache_service.invalidate_pattern(pattern)
+
+    def _invalidate_maintenance_caches(self, maintenance_id: Optional[int] = None, tool_id: Optional[int] = None,
+                                       list_too: bool = True):
+        """Invalidate maintenance-related cache entries."""
+        if not self.cache_service:
+            return
+
+        if maintenance_id:
+            key = f"Maintenance:detail:{maintenance_id}"
+            logger.debug(f"Invalidating cache: {key}")
+            self.cache_service.invalidate(key)
+
+        if list_too:
+            pattern = "Maintenance:list:*"
+            logger.debug(f"Invalidating cache pattern: {pattern}")
+            self.cache_service.invalidate_pattern(pattern)
+
+        if tool_id:
+            self._invalidate_tool_caches(tool_id, list_too=False, detail_too=True)
+
+    def _handle_inventory_adjustment(self, tool: Tool, quantity_change: int, adjustment_type: str, reason: str,
+                                     user_id: Optional[int]):
+        """Handle inventory adjustment for a tool."""
+        if not tool:
+            logger.error("Invalid tool in _handle_inventory_adjustment")
+            return
+
+        if self.inventory_service and hasattr(self.inventory_service, "adjust_inventory"):
+            try:
+                logger.debug(f"Adjust inventory tool {tool.id} by {quantity_change}")
+                self.inventory_service.adjust_inventory(
+                    item_type="tool",
+                    item_id=tool.id,
+                    quantity_change=quantity_change,
+                    adjustment_type=adjustment_type,
+                    reason=reason,
+                    location_id=tool.location,
+                    user_id=user_id
                 )
-            else:
-                # Returned
-                if checkout.checked_out_date and checkout.returned_date:
-                    days = (
-                        checkout.returned_date.date() - checkout.checked_out_date.date()
-                    ).days
-                else:
-                    days = 0
+            except Exception as e:
+                logger.error(f"Failed inventory adjust tool {tool.id}: {e}", exc_info=True)
 
-            total_days += max(0, days)
+    def _schedule_initial_maintenance_if_needed(self, tool: Tool, maintenance_interval: Optional[int],
+                                                user_id: Optional[int]) -> None:
+        """Schedule initial maintenance for a new tool if needed."""
+        if not tool or not maintenance_interval or maintenance_interval <= 0:
+            return
 
-        # Calculate utilization in last 90 days
-        ninety_days_ago = datetime.now().date() - timedelta(days=90)
-        recent_checkouts = [
-            c
-            for c in checkouts
-            if c.checked_out_date and c.checked_out_date.date() >= ninety_days_ago
-        ]
+        try:
+            # Calculate initial maintenance date
+            now = datetime.now()
+            initial_maint_date = now.date() + timedelta(days=maintenance_interval)
 
-        recent_days = 0
-        for checkout in recent_checkouts:
-            if checkout.status == "CHECKED_OUT":
-                # Still checked out
-                days = (datetime.now().date() - checkout.checked_out_date.date()).days
-            else:
-                # Returned
-                if checkout.checked_out_date and checkout.returned_date:
-                    days = (
-                        checkout.returned_date.date() - checkout.checked_out_date.date()
-                    ).days
-                else:
-                    days = 0
+            # Prepare maintenance data
+            maintenance_data = {
+                "tool_id": tool.id,
+                "tool_name": tool.name,
+                "maintenance_type": "ROUTINE",
+                "date": initial_maint_date,  # Use date object
+                "status": "SCHEDULED",
+                "details": "Initial routine maintenance",
+                "condition_before": "Good",
+                "created_at": now,
+                "updated_at": now
+            }
 
-            recent_days += max(0, days)
+            # Create maintenance record
+            self.create_maintenance(maintenance_data, user_id)
+            logger.info(f"Initial maintenance scheduled for tool {tool.id} on {initial_maint_date}")
+        except Exception as e:
+            logger.error(f"Failed to schedule initial maintenance for tool {tool.id}: {e}", exc_info=True)
 
-        utilization_percentage = round((recent_days / 90 * 100), 1)
+    # --- Event Publishing Helpers ---
+    def _publish_tool_created_event(self, tool: Tool, user_id: Optional[int]):
+        """Publish tool created event."""
+        if not self.event_bus:
+            return
 
-        # Find most frequent user
-        user_counts = {}
-        for checkout in checkouts:
-            user = checkout.checked_out_by or "Unknown"
-            if user not in user_counts:
-                user_counts[user] = 0
-            user_counts[user] += 1
+        logger.debug(f"Pub ToolCreated tool {tool.id}")
+        try:
+            self.event_bus.publish(ToolCreated(
+                tool_id=tool.id,
+                name=tool.name,
+                category=str(tool.category.value),
+                user_id=user_id
+            ))
+        except Exception as e:
+            logger.error(f"Fail pub ToolCreated: {e}", exc_info=True)
 
-        most_frequent_user = (
-            max(user_counts.items(), key=lambda x: x[1]) if user_counts else None
-        )
+    def _publish_tool_status_changed_event(self, tool_id: int, prev: str, new: str, reason: Optional[str],
+                                           user_id: Optional[int]):
+        """Publish tool status changed event."""
+        if not self.event_bus:
+            return
 
-        # Find most common project
-        project_counts = {}
-        for checkout in checkouts:
-            if not checkout.project_id:
-                continue
+        logger.debug(f"Pub ToolStatusChanged tool {tool_id}")
+        try:
+            self.event_bus.publish(ToolStatusChanged(
+                tool_id=tool_id,
+                previous_status=prev,
+                new_status=new,
+                reason=reason or f"User {user_id}",
+                user_id=user_id
+            ))
+        except Exception as e:
+            logger.error(f"Fail pub ToolStatusChanged: {e}", exc_info=True)
 
-            project = checkout.project_name or f"Project {checkout.project_id}"
-            if project not in project_counts:
-                project_counts[project] = 0
-            project_counts[project] += 1
+    def _publish_tool_checked_out_event(self, ck: ToolCheckout, user_id: Optional[int]):
+        """Publish tool checked out event."""
+        if not self.event_bus:
+            return
 
-        most_common_project = (
-            max(project_counts.items(), key=lambda x: x[1]) if project_counts else None
-        )
+        logger.debug(f"Pub ToolCheckedOut ck {ck.id}")
+        try:
+            # Use isoformat() which already returns a string
+            ck_dt = ck.checkedOutDate.isoformat() if isinstance(ck.checkedOutDate, datetime) else str(ck.checkedOutDate)
+            due_dt = ck.dueDate.isoformat() if isinstance(ck.dueDate, date) else str(ck.dueDate)
 
-        return {
-            "total_checkouts": len(checkouts),
-            "total_days_used": total_days,
-            "average_checkout_duration": round(total_days / len(checkouts), 1),
-            "utilization_last_90_days": utilization_percentage,
-            "most_frequent_user": most_frequent_user[0] if most_frequent_user else None,
-            "most_common_project": (
-                most_common_project[0] if most_common_project else None
-            ),
-        }
+            self.event_bus.publish(ToolCheckedOut(
+                checkout_id=ck.id,
+                tool_id=ck.toolId,
+                checked_out_by=ck.checkedOutBy,
+                project_id=ck.projectId,
+                due_date=due_dt,
+                user_id=user_id
+            ))
+        except Exception as e:
+            logger.error(f"Fail pub ToolCheckedOut: {e}", exc_info=True)
 
-    def _generate_inventory_report(self, filters: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Generate inventory report for tools.
+    def _publish_tool_returned_event(self, ck: ToolCheckout, cond: str, issues: bool, user_id: Optional[int]):
+        """Publish tool returned event."""
+        if not self.event_bus:
+            return
 
-        Args:
-            filters: Report filters
+        logger.debug(f"Pub ToolReturned ck {ck.id}")
+        try:
+            self.event_bus.publish(ToolReturned(
+                checkout_id=ck.id,
+                tool_id=ck.toolId,
+                has_issues=issues,
+                condition_after=cond,
+                user_id=user_id
+            ))
+        except Exception as e:
+            logger.error(f"Fail pub ToolReturned: {e}", exc_info=True)
 
-        Returns:
-            Dictionary with inventory report results
-        """
-        # Apply filters
-        category = filters.get("category")
-        status = filters.get("status")
+    def _publish_maintenance_scheduled_event(self, mt: ToolMaintenance, user_id: Optional[int]):
+        """Publish maintenance scheduled event."""
+        if not self.event_bus or mt.status != "SCHEDULED":
+            return
 
-        query_filters = {}
-        if category:
-            query_filters["category"] = category
-        if status:
-            query_filters["status"] = status
+        logger.debug(f"Pub ToolMaintScheduled mt {mt.id}")
+        try:
+            # Use isoformat() which already returns a string
+            dt_str = mt.date.isoformat() if isinstance(mt.date, date) else str(mt.date)
 
-        tools = self.repository.list(**query_filters)
+            self.event_bus.publish(ToolMaintenanceScheduled(
+                maintenance_id=mt.id,
+                tool_id=mt.toolId,
+                maintenance_type=mt.maintenanceType,
+                date=dt_str,
+                user_id=user_id
+            ))
+        except Exception as e:
+            logger.error(f"Fail pub ToolMaintScheduled: {e}", exc_info=True)
 
-        # Group by category and status
-        by_category = {}
-        by_status = {}
+    def _publish_maintenance_completed_event(self, mt: ToolMaintenance, next_dt: Optional[date],
+                                             user_id: Optional[int]):
+        """Publish maintenance completed event."""
+        if not self.event_bus:
+            return
 
-        for tool in tools:
-            # By category
-            category = tool.category
-            if category not in by_category:
-                by_category[category] = 0
-            by_category[category] += 1
+        logger.debug(f"Pub ToolMaintCompleted mt {mt.id}")
+        try:
+            # Use isoformat() which already returns a string
+            comp_dt = mt.date.isoformat() if isinstance(mt.date, (datetime, date)) else str(mt.date)
+            next_dt_str = next_dt.isoformat() if next_dt else None
 
-            # By status
-            status = tool.status
-            if status not in by_status:
-                by_status[status] = 0
-            by_status[status] += 1
-
-        # Build report
-        return {
-            "report_type": "inventory",
-            "generated_at": datetime.now().isoformat(),
-            "filters": filters,
-            "total_tools": len(tools),
-            "by_category": by_category,
-            "by_status": by_status,
-            "tools": [
-                {
-                    "id": tool.id,
-                    "name": tool.name,
-                    "category": tool.category,
-                    "status": tool.status,
-                    "purchase_date": (
-                        tool.purchase_date.isoformat() if tool.purchase_date else None
-                    ),
-                    "purchase_price": tool.purchase_price,
-                    "location": tool.location,
-                    "checked_out_to": tool.checked_out_to,
-                    "last_maintenance": (
-                        tool.last_maintenance.isoformat()
-                        if tool.last_maintenance
-                        else None
-                    ),
-                    "next_maintenance": (
-                        tool.next_maintenance.isoformat()
-                        if tool.next_maintenance
-                        else None
-                    ),
-                }
-                for tool in tools
-            ],
-        }
-
-    def _generate_maintenance_report(self, filters: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Generate maintenance report for tools.
-
-        Args:
-            filters: Report filters
-
-        Returns:
-            Dictionary with maintenance report results
-        """
-        # Get date range from filters
-        from_date = filters.get("from_date")
-        if isinstance(from_date, str):
-            from_date = datetime.fromisoformat(from_date.replace("Z", "+00:00")).date()
-        elif not from_date:
-            from_date = datetime.now().date() - timedelta(days=90)
-
-        to_date = filters.get("to_date")
-        if isinstance(to_date, str):
-            to_date = datetime.fromisoformat(to_date.replace("Z", "+00:00")).date()
-        elif not to_date:
-            to_date = datetime.now().date()
-
-        # Apply filters
-        category = filters.get("category")
-        maintenance_type = filters.get("maintenance_type")
-        status = filters.get("status")
-
-        # Get maintenance records
-        maintenance_records = self.maintenance_repository.get_by_date_range(
-            start_date=from_date, end_date=to_date
-        )
-
-        # Filter by tool category if needed
-        if category:
-            filtered_records = []
-            for record in maintenance_records:
-                tool = self.get_by_id(record.tool_id)
-                if tool and tool.category == category:
-                    filtered_records.append(record)
-            maintenance_records = filtered_records
-
-        # Filter by maintenance type if needed
-        if maintenance_type:
-            maintenance_records = [
-                r for r in maintenance_records if r.maintenance_type == maintenance_type
-            ]
-
-        # Filter by status if needed
-        if status:
-            maintenance_records = [r for r in maintenance_records if r.status == status]
-
-        # Group by type and status
-        by_type = {}
-        by_status = {}
-
-        for record in maintenance_records:
-            # By type
-            mtype = record.maintenance_type
-            if mtype not in by_type:
-                by_type[mtype] = 0
-            by_type[mtype] += 1
-
-            # By status
-            mstatus = record.status
-            if mstatus not in by_status:
-                by_status[mstatus] = 0
-            by_status[mstatus] += 1
-
-        # Build report
-        return {
-            "report_type": "maintenance",
-            "generated_at": datetime.now().isoformat(),
-            "filters": {
-                "from_date": from_date.isoformat(),
-                "to_date": to_date.isoformat(),
-                "category": category,
-                "maintenance_type": maintenance_type,
-                "status": status,
-            },
-            "date_range_days": (to_date - from_date).days,
-            "total_maintenance_records": len(maintenance_records),
-            "by_type": by_type,
-            "by_status": by_status,
-            "maintenance_records": [
-                {
-                    "id": record.id,
-                    "tool_id": record.tool_id,
-                    "tool_name": record.tool_name,
-                    "maintenance_type": record.maintenance_type,
-                    "status": record.status,
-                    "date": record.date.isoformat() if record.date else None,
-                    "completion_date": (
-                        record.completion_date.isoformat()
-                        if record.completion_date
-                        else None
-                    ),
-                    "performed_by": record.performed_by,
-                    "cost": record.cost,
-                    "details": record.details,
-                }
-                for record in maintenance_records
-            ],
-        }
-
-    def _generate_utilization_report(self, filters: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Generate utilization report for tools.
-
-        Args:
-            filters: Report filters
-
-        Returns:
-            Dictionary with utilization report results
-        """
-        # Get date range from filters
-        from_date = filters.get("from_date")
-        if isinstance(from_date, str):
-            from_date = datetime.fromisoformat(from_date.replace("Z", "+00:00"))
-        elif not from_date:
-            from_date = datetime.now() - timedelta(days=90)
-
-        to_date = filters.get("to_date")
-        if isinstance(to_date, str):
-            to_date = datetime.fromisoformat(to_date.replace("Z", "+00:00"))
-        elif not to_date:
-            to_date = datetime.now()
-
-        # Apply filters
-        category = filters.get("category")
-
-        query_filters = {}
-        if category:
-            query_filters["category"] = category
-
-        tools = self.repository.list(**query_filters)
-
-        # Calculate utilization for each tool
-        utilization_data = []
-        for tool in tools:
-            utilization = self.get_tool_utilization(
-                tool_id=tool.id, date_range=(from_date, to_date)
-            )
-            utilization_data.append(utilization)
-
-        # Calculate overall statistics
-        total_days = sum(u["utilization"]["checked_out_days"] for u in utilization_data)
-        maintenance_days = sum(
-            u["utilization"]["maintenance_days"] for u in utilization_data
-        )
-        available_days = sum(
-            u["utilization"]["available_days"] for u in utilization_data
-        )
-        total_period = (to_date - from_date).days * len(tools)
-
-        overall_utilization = (
-            round((total_days / total_period * 100), 1) if total_period > 0 else 0
-        )
-        overall_maintenance = (
-            round((maintenance_days / total_period * 100), 1) if total_period > 0 else 0
-        )
-        overall_availability = (
-            round((available_days / total_period * 100), 1) if total_period > 0 else 0
-        )
-
-        # Sort by utilization (descending)
-        utilization_data.sort(
-            key=lambda x: x["utilization"]["utilization_percentage"], reverse=True
-        )
-
-        # Build report
-        return {
-            "report_type": "utilization",
-            "generated_at": datetime.now().isoformat(),
-            "filters": {
-                "from_date": from_date.isoformat(),
-                "to_date": to_date.isoformat(),
-                "category": category,
-            },
-            "date_range_days": (to_date - from_date).days,
-            "total_tools": len(tools),
-            "overall_stats": {
-                "total_days": total_period,
-                "checked_out_days": total_days,
-                "maintenance_days": maintenance_days,
-                "available_days": available_days,
-                "utilization_percentage": overall_utilization,
-                "maintenance_percentage": overall_maintenance,
-                "availability_percentage": overall_availability,
-            },
-            "utilization_by_tool": utilization_data,
-            "most_utilized_tools": (
-                utilization_data[:5] if len(utilization_data) > 5 else utilization_data
-            ),
-            "least_utilized_tools": (
-                utilization_data[-5:][::-1]
-                if len(utilization_data) > 5
-                else utilization_data[::-1]
-            ),
-        }
-
-    def _generate_checkout_report(self, filters: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Generate checkout report for tools.
-
-        Args:
-            filters: Report filters
-
-        Returns:
-            Dictionary with checkout report results
-        """
-        # Get date range from filters
-        from_date = filters.get("from_date")
-        if isinstance(from_date, str):
-            from_date = datetime.fromisoformat(from_date.replace("Z", "+00:00"))
-        elif not from_date:
-            from_date = datetime.now() - timedelta(days=90)
-
-        to_date = filters.get("to_date")
-        if isinstance(to_date, str):
-            to_date = datetime.fromisoformat(to_date.replace("Z", "+00:00"))
-        elif not to_date:
-            to_date = datetime.now()
-
-        # Apply filters
-        status = filters.get("status")
-        user = filters.get("user")
-        project_id = filters.get("project_id")
-
-        # Get checkouts
-        checkouts = self.checkout_repository.get_by_date_range(
-            start_date=from_date, end_date=to_date
-        )
-
-        # Apply additional filters
-        if status:
-            checkouts = [c for c in checkouts if c.status == status]
-
-        if user:
-            checkouts = [c for c in checkouts if c.checked_out_by == user]
-
-        if project_id:
-            checkouts = [c for c in checkouts if c.project_id == project_id]
-
-        # Group by status and user
-        by_status = {}
-        by_user = {}
-        by_project = {}
-
-        for checkout in checkouts:
-            # By status
-            status = checkout.status
-            if status not in by_status:
-                by_status[status] = 0
-            by_status[status] += 1
-
-            # By user
-            user = checkout.checked_out_by or "Unknown"
-            if user not in by_user:
-                by_user[user] = 0
-            by_user[user] += 1
-
-            # By project
-            if checkout.project_id:
-                project = checkout.project_name or f"Project {checkout.project_id}"
-                if project not in by_project:
-                    by_project[project] = 0
-                by_project[project] += 1
-
-        # Calculate overdue stats
-        overdue_count = len(
-            [
-                c
-                for c in checkouts
-                if c.status == "CHECKED_OUT"
-                and c.due_date
-                and c.due_date < datetime.now().date()
-            ]
-        )
-
-        returned_late_count = len(
-            [
-                c
-                for c in checkouts
-                if c.status in ["RETURNED", "RETURNED_WITH_ISSUES"]
-                and c.due_date
-                and c.returned_date
-                and c.due_date < c.returned_date.date()
-            ]
-        )
-
-        # Build report
-        return {
-            "report_type": "checkout",
-            "generated_at": datetime.now().isoformat(),
-            "filters": {
-                "from_date": from_date.isoformat(),
-                "to_date": to_date.isoformat(),
-                "status": status,
-                "user": user,
-                "project_id": project_id,
-            },
-            "date_range_days": (to_date - from_date).days,
-            "total_checkouts": len(checkouts),
-            "by_status": by_status,
-            "by_user": by_user,
-            "by_project": by_project,
-            "overdue_stats": {
-                "currently_overdue": overdue_count,
-                "returned_late": returned_late_count,
-                "overdue_percentage": (
-                    round(
-                        (overdue_count + returned_late_count) / len(checkouts) * 100, 1
-                    )
-                    if len(checkouts) > 0
-                    else 0
-                ),
-            },
-            "checkouts": [
-                {
-                    "id": checkout.id,
-                    "tool_id": checkout.tool_id,
-                    "tool_name": checkout.tool_name,
-                    "checked_out_by": checkout.checked_out_by,
-                    "status": checkout.status,
-                    "checked_out_date": (
-                        checkout.checked_out_date.isoformat()
-                        if checkout.checked_out_date
-                        else None
-                    ),
-                    "due_date": (
-                        checkout.due_date.isoformat() if checkout.due_date else None
-                    ),
-                    "returned_date": (
-                        checkout.returned_date.isoformat()
-                        if checkout.returned_date
-                        else None
-                    ),
-                    "project_id": checkout.project_id,
-                    "project_name": checkout.project_name,
-                    "overdue": (
-                        checkout.status == "CHECKED_OUT"
-                        and checkout.due_date
-                        and checkout.due_date < datetime.now().date()
-                    )
-                    or (
-                        checkout.status in ["RETURNED", "RETURNED_WITH_ISSUES"]
-                        and checkout.due_date
-                        and checkout.returned_date
-                        and checkout.due_date < checkout.returned_date.date()
-                    ),
-                }
-                for checkout in checkouts
-            ],
-        }
+            self.event_bus.publish(ToolMaintenanceCompleted(
+                maintenance_id=mt.id,
+                tool_id=mt.toolId,
+                completion_date=comp_dt,
+                performed_by=mt.performedBy,
+                next_date=next_dt_str,
+                user_id=user_id
+            ))
+        except Exception as e:
+            logger.error(f"Fail pub ToolMaintCompleted: {e}", exc_info=True)

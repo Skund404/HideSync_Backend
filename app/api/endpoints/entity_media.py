@@ -19,12 +19,16 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-@router.get("/entity/{entity_type}/{entity_id}", response_model=List[EntityMediaResponse])
+@router.get(
+    "/entity/{entity_type}/{entity_id}", response_model=List[EntityMediaResponse]
+)
 async def get_entity_media(
-        entity_type: str = Path(..., description="The type of entity (material, tool, supplier, etc.)"),
-        entity_id: str = Path(..., description="The ID of the entity"),
-        db: Session = Depends(get_db),
-        current_user: dict = Depends(get_current_active_user),
+    entity_type: str = Path(
+        ..., description="The type of entity (material, tool, supplier, etc.)"
+    ),
+    entity_id: str = Path(..., description="The ID of the entity"),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_active_user),
 ):
     """
     Retrieve all media associations for a specific entity.
@@ -41,15 +45,15 @@ async def get_entity_media(
         logger.error(f"Error retrieving entity media: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve media for {entity_type} {entity_id}: {str(e)}"
+            detail=f"Failed to retrieve media for {entity_type} {entity_id}: {str(e)}",
         )
 
 
 @router.get("/media-asset/{media_asset_id}", response_model=List[EntityMediaResponse])
 async def get_entity_media_by_asset(
-        media_asset_id: str = Path(..., description="The ID of the media asset"),
-        db: Session = Depends(get_db),
-        current_user: dict = Depends(get_current_active_user),
+    media_asset_id: str = Path(..., description="The ID of the media asset"),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_active_user),
 ):
     """
     Retrieve all entity associations for a specific media asset.
@@ -63,18 +67,25 @@ async def get_entity_media_by_asset(
 
         return entity_media_list
     except Exception as e:
-        logger.error(f"Error retrieving entities for media asset {media_asset_id}: {str(e)}")
+        logger.error(
+            f"Error retrieving entities for media asset {media_asset_id}: {str(e)}"
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve entities for media asset {media_asset_id}: {str(e)}"
+            detail=f"Failed to retrieve entities for media asset {media_asset_id}: {str(e)}",
         )
 
-@router.get("/thumbnail/{entity_type}/{entity_id}", response_model=Optional[EntityMediaResponse])
+
+@router.get(
+    "/thumbnail/{entity_type}/{entity_id}", response_model=Optional[EntityMediaResponse]
+)
 async def get_entity_thumbnail(
-        entity_type: str = Path(..., description="The type of entity (material, tool, supplier, etc.)"),
-        entity_id: str = Path(..., description="The ID of the entity"),
-        db: Session = Depends(get_db),
-        current_user: dict = Depends(get_current_active_user),
+    entity_type: str = Path(
+        ..., description="The type of entity (material, tool, supplier, etc.)"
+    ),
+    entity_id: str = Path(..., description="The ID of the entity"),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_active_user),
 ):
     """
     Retrieve the thumbnail media association for a specific entity.
@@ -89,7 +100,7 @@ async def get_entity_thumbnail(
         if not thumbnail:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"No thumbnail found for {entity_type} {entity_id}"
+                detail=f"No thumbnail found for {entity_type} {entity_id}",
             )
 
         return thumbnail
@@ -99,15 +110,17 @@ async def get_entity_thumbnail(
         logger.error(f"Error retrieving entity thumbnail: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve thumbnail for {entity_type} {entity_id}: {str(e)}"
+            detail=f"Failed to retrieve thumbnail for {entity_type} {entity_id}: {str(e)}",
         )
 
 
-@router.post("", response_model=EntityMediaResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "", response_model=EntityMediaResponse, status_code=status.HTTP_201_CREATED
+)
 async def create_entity_media(
-        entity_media: EntityMediaCreate,
-        db: Session = Depends(get_db),
-        current_user: dict = Depends(get_current_active_user),
+    entity_media: EntityMediaCreate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_active_user),
 ):
     """
     Create a new entity media association.
@@ -128,44 +141,37 @@ async def create_entity_media(
 
         return result
     except EntityNotFoundException as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except BusinessRuleException as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
         logger.error(f"Error creating entity media: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create entity media: {str(e)}"
+            detail=f"Failed to create entity media: {str(e)}",
         )
-
-
 
 
 from fastapi import Response  # Add this import at the top
 
+
 @router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_entity_media(
-        id: str = Path(..., description="The ID of the entity media association"),
-        db: Session = Depends(get_db),
-        current_user: dict = Depends(get_current_active_user),
+    id: str = Path(..., description="The ID of the entity media association"),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_active_user),
 ):
     try:
         service_factory = ServiceFactory(db)
         entity_media_service = service_factory.get_entity_media_service()
 
         # Call the CORRECT service method
-        success = entity_media_service.delete_entity_media(id) # <--- FIX
+        success = entity_media_service.delete_entity_media(id)  # <--- FIX
 
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Entity media with ID {id} not found"
+                detail=f"Entity media with ID {id} not found",
             )
 
         # Return a proper 204 No Content response
@@ -176,17 +182,21 @@ async def delete_entity_media(
         logger.error(f"Error deleting entity media: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete entity media: {str(e)}"
+            detail=f"Failed to delete entity media: {str(e)}",
         )
 
 
 @router.delete("/entity", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_entity_media_by_entity(
-        entity_type: str = Query(..., description="The type of entity (material, tool, supplier, etc.)"),
-        entity_id: str = Query(..., description="The ID of the entity"),
-        media_type: Optional[str] = Query(None, description="Optional type of media to remove (if None, removes all)"),
-        db: Session = Depends(get_db),
-        current_user: dict = Depends(get_current_active_user),
+    entity_type: str = Query(
+        ..., description="The type of entity (material, tool, supplier, etc.)"
+    ),
+    entity_id: str = Query(..., description="The ID of the entity"),
+    media_type: Optional[str] = Query(
+        None, description="Optional type of media to remove (if None, removes all)"
+    ),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_active_user),
 ):
     """
     Remove media associations for an entity.
@@ -196,12 +206,14 @@ async def delete_entity_media_by_entity(
         entity_media_service = service_factory.get_entity_media_service()
 
         # Delete media for the entity
-        success = entity_media_service.remove_entity_media(entity_type, entity_id, media_type)
+        success = entity_media_service.remove_entity_media(
+            entity_type, entity_id, media_type
+        )
 
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"No media found for {entity_type} {entity_id}"
+                detail=f"No media found for {entity_type} {entity_id}",
             )
 
         return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -211,5 +223,5 @@ async def delete_entity_media_by_entity(
         logger.error(f"Error deleting entity media: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete media for {entity_type} {entity_id}: {str(e)}"
+            detail=f"Failed to delete media for {entity_type} {entity_id}: {str(e)}",
         )

@@ -24,13 +24,13 @@ class ServiceFactory:
     """
 
     def __init__(
-            self,
-            session: Session,
-            security_context=None,
-            event_bus=None,
-            cache_service=None,
-            key_service=None,
-            file_storage_service=None,
+        self,
+        session: Session,
+        security_context=None,
+        event_bus=None,
+        cache_service=None,
+        key_service=None,
+        file_storage_service=None,
     ):
         """
         Initialize the service factory with dependencies.
@@ -305,15 +305,14 @@ class ServiceFactory:
 
         # Create and cache entity media service
         service = EntityMediaService(
-            db=self.session,
-            encryption_service=self.key_service
+            db=self.session, encryption_service=self.key_service
         )
 
         self._service_instances["entity_media_service"] = service
         return service
 
     def get_file_storage_service(
-            self, base_path: str = "./storage"
+        self, base_path: str = "./storage"
     ) -> "FileStorageService":
         """
         Get a FileStorageService instance.
@@ -416,8 +415,7 @@ class ServiceFactory:
 
         # Create and cache media asset service
         service = MediaAssetService(
-            session=self.session,
-            file_storage_service=self.file_storage_service
+            session=self.session, file_storage_service=self.file_storage_service
         )
 
         self._service_instances["media_asset_service"] = service
@@ -438,9 +436,7 @@ class ServiceFactory:
             return self._service_instances["tag_service"]
 
         # Create and cache tag service
-        service = TagService(
-            session=self.session
-        )
+        service = TagService(session=self.session)
 
         self._service_instances["tag_service"] = service
         return service

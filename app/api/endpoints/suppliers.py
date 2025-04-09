@@ -45,11 +45,11 @@ router = APIRouter()
 
 @router.get("/")
 def list_suppliers(
-        *,
-        db: Session = Depends(get_db),
-        current_user: Any = Depends(get_current_active_user),
-        page: int = Query(1, ge=1, description="Page number"),
-        pageSize: int = Query(10, ge=1, le=100, description="Items per page")
+    *,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_active_user),
+    page: int = Query(1, ge=1, description="Page number"),
+    pageSize: int = Query(10, ge=1, le=100, description="Items per page"),
 ):
     """
     Retrieve suppliers with pagination.
@@ -92,7 +92,7 @@ def list_suppliers(
                     "status": str(getattr(supplier, "status", "active")),
                     "notes": getattr(supplier, "notes", None),
                     "created_at": datetime.now().isoformat(),
-                    "updated_at": datetime.now().isoformat()
+                    "updated_at": datetime.now().isoformat(),
                 }
 
                 # Add to list
@@ -103,14 +103,16 @@ def list_suppliers(
 
         # Calculate pages
         pages = max(1, (total + pageSize - 1) // pageSize)
-        logger.debug(f"Supplier list being returned from GET /suppliers: {json.dumps(supplier_list, indent=2)}")
+        logger.debug(
+            f"Supplier list being returned from GET /suppliers: {json.dumps(supplier_list, indent=2)}"
+        )
         # Create response dictionary
         response_data = {
             "items": supplier_list,
             "total": total,
             "page": page,
             "size": pageSize,
-            "pages": pages
+            "pages": pages,
         }
 
         # Return as dict (FastAPI will convert to JSON)
@@ -126,16 +128,16 @@ def list_suppliers(
             "page": page,
             "size": pageSize,
             "pages": 0,
-            "error": str(e)
+            "error": str(e),
         }
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
 def create_supplier(
-        *,
-        db: Session = Depends(get_db),
-        supplier_in: SupplierCreate,
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    db: Session = Depends(get_db),
+    supplier_in: SupplierCreate,
+    current_user: Any = Depends(get_current_active_user),
 ):
     """
     Create a new supplier.
@@ -149,8 +151,10 @@ def create_supplier(
         result = supplier_service.create_supplier(supplier_data)
 
         # Convert result to dict for safe JSON serialization
-        if hasattr(result, '__dict__'):
-            response_data = {k: v for k, v in result.__dict__.items() if not k.startswith('_')}
+        if hasattr(result, "__dict__"):
+            response_data = {
+                k: v for k, v in result.__dict__.items() if not k.startswith("_")
+            }
         else:
             response_data = dict(result)
 
@@ -161,10 +165,10 @@ def create_supplier(
 
 @router.get("/{supplier_id}")
 def get_supplier(
-        *,
-        db: Session = Depends(get_db),
-        supplier_id: int = Path(..., ge=1, description="The ID of the supplier"),
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    db: Session = Depends(get_db),
+    supplier_id: int = Path(..., ge=1, description="The ID of the supplier"),
+    current_user: Any = Depends(get_current_active_user),
 ):
     """
     Get a specific supplier by ID.
@@ -179,12 +183,14 @@ def get_supplier(
             )
 
         # Convert result to dict for safe JSON serialization
-        if hasattr(result, '__dict__'):
-            response_data = {k: v for k, v in result.__dict__.items() if not k.startswith('_')}
+        if hasattr(result, "__dict__"):
+            response_data = {
+                k: v for k, v in result.__dict__.items() if not k.startswith("_")
+            }
 
             # Ensure datetime fields are serialized
-            for key in ['created_at', 'updated_at']:
-                if key in response_data and hasattr(response_data[key], 'isoformat'):
+            for key in ["created_at", "updated_at"]:
+                if key in response_data and hasattr(response_data[key], "isoformat"):
                     response_data[key] = response_data[key].isoformat()
         else:
             response_data = dict(result)
@@ -204,11 +210,11 @@ def get_supplier(
 
 @router.put("/{supplier_id}")
 def update_supplier(
-        *,
-        db: Session = Depends(get_db),
-        supplier_id: int = Path(..., ge=1, description="The ID of the supplier to update"),
-        supplier_in: SupplierUpdate,
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    db: Session = Depends(get_db),
+    supplier_id: int = Path(..., ge=1, description="The ID of the supplier to update"),
+    supplier_in: SupplierUpdate,
+    current_user: Any = Depends(get_current_active_user),
 ):
     """
     Update a supplier.
@@ -220,8 +226,10 @@ def update_supplier(
         result = supplier_service.update_supplier(supplier_id, update_data)
 
         # Convert result to dict for safe JSON serialization
-        if hasattr(result, '__dict__'):
-            response_data = {k: v for k, v in result.__dict__.items() if not k.startswith('_')}
+        if hasattr(result, "__dict__"):
+            response_data = {
+                k: v for k, v in result.__dict__.items() if not k.startswith("_")
+            }
         else:
             response_data = dict(result)
 
@@ -237,10 +245,10 @@ def update_supplier(
 
 @router.delete("/{supplier_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_supplier(
-        *,
-        db: Session = Depends(get_db),
-        supplier_id: int = Path(..., ge=1, description="The ID of the supplier to delete"),
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    db: Session = Depends(get_db),
+    supplier_id: int = Path(..., ge=1, description="The ID of the supplier to delete"),
+    current_user: Any = Depends(get_current_active_user),
 ):
     """
     Delete a supplier.

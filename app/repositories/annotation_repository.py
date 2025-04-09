@@ -9,13 +9,14 @@ implementing data access patterns for annotation management.
 from typing import List, Dict, Any, Optional, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, desc, func
-import logging # Added for logging
+import logging  # Added for logging
 
 from app.db.models.annotation import Annotation
 from app.repositories.base_repository import BaseRepository
 
 # Setup logger
 logger = logging.getLogger(__name__)
+
 
 class AnnotationRepository(BaseRepository[Annotation]):
     """
@@ -34,7 +35,7 @@ class AnnotationRepository(BaseRepository[Annotation]):
             encryption_service: Optional service for field encryption/decryption
         """
         super().__init__(session, encryption_service)
-        self.model = Annotation # Correctly sets the model for this repository
+        self.model = Annotation  # Correctly sets the model for this repository
         logger.debug("AnnotationRepository initialized.")
 
     def list(self, skip: int = 0, limit: int = 100, **filters) -> List[Annotation]:
@@ -49,7 +50,9 @@ class AnnotationRepository(BaseRepository[Annotation]):
         Returns:
             List of annotation objects
         """
-        logger.debug(f"Listing annotations with skip={skip}, limit={limit}, filters={filters}")
+        logger.debug(
+            f"Listing annotations with skip={skip}, limit={limit}, filters={filters}"
+        )
         # --- CORRECTED: Use self.session ---
         query = self.session.query(self.model)
 
@@ -77,11 +80,12 @@ class AnnotationRepository(BaseRepository[Annotation]):
             # from sqlalchemy.dialects.postgresql import ARRAY, Any
             # query = query.filter(self.model.tags.contains(filters["tags"])) # Check exact match
             # query = query.filter(func.array_to_string(self.model.tags, ',').ilike(f"%{tag}%")) # Simple string search
-            logger.warning("Tag filtering implementation depends on storage method - check if correct.")
+            logger.warning(
+                "Tag filtering implementation depends on storage method - check if correct."
+            )
             # Placeholder: Assuming simple string search if tags is a string field
             # for tag in filters["tags"]:
             #    query = query.filter(self.model.tags.ilike(f"%{tag}%"))
-
 
         # Order by created_at desc (most recent first)
         query = query.order_by(desc(self.model.created_at))
@@ -93,7 +97,7 @@ class AnnotationRepository(BaseRepository[Annotation]):
             return results
         except Exception as e:
             logger.error(f"Error listing annotations: {e}", exc_info=True)
-            raise # Re-raise the exception after logging
+            raise  # Re-raise the exception after logging
 
     def get_by_id(self, annotation_id: int) -> Optional[Annotation]:
         """
@@ -108,14 +112,20 @@ class AnnotationRepository(BaseRepository[Annotation]):
         logger.debug(f"Getting annotation by ID: {annotation_id}")
         try:
             # --- CORRECTED: Use self.session ---
-            result = self.session.query(self.model).filter(self.model.id == annotation_id).first()
+            result = (
+                self.session.query(self.model)
+                .filter(self.model.id == annotation_id)
+                .first()
+            )
             if result:
-                 logger.debug(f"Annotation found for ID: {annotation_id}")
+                logger.debug(f"Annotation found for ID: {annotation_id}")
             else:
-                 logger.debug(f"Annotation not found for ID: {annotation_id}")
+                logger.debug(f"Annotation not found for ID: {annotation_id}")
             return result
         except Exception as e:
-            logger.error(f"Error getting annotation by ID {annotation_id}: {e}", exc_info=True)
+            logger.error(
+                f"Error getting annotation by ID {annotation_id}: {e}", exc_info=True
+            )
             raise
 
         # In app/repositories/annotation_repository.py
@@ -133,8 +143,10 @@ class AnnotationRepository(BaseRepository[Annotation]):
             logger.debug(f"Creating annotation with data: {data}")
             try:
                 # Ensure self.model is set
-                if not hasattr(self, 'model') or self.model is None:
-                    raise AttributeError("'AnnotationRepository' object has no attribute 'model' or it's None")
+                if not hasattr(self, "model") or self.model is None:
+                    raise AttributeError(
+                        "'AnnotationRepository' object has no attribute 'model' or it's None"
+                    )
 
                 obj = self.model(**data)
                 self.session.add(obj)
@@ -147,7 +159,9 @@ class AnnotationRepository(BaseRepository[Annotation]):
 
                 # Add a check for debugging:
                 if obj.id is None:
-                    logger.error("!!! Annotation ID is still None after flush, commit and refresh !!!")
+                    logger.error(
+                        "!!! Annotation ID is still None after flush, commit and refresh !!!"
+                    )
                     # Optionally raise an error here if it's still None
                     # raise RuntimeError("Failed to obtain generated ID for Annotation")
                 else:
@@ -181,11 +195,12 @@ class AnnotationRepository(BaseRepository[Annotation]):
             # BaseRepository handles encryption if needed
             # If update is overridden here, apply updates directly
             for key, value in data.items():
-                if hasattr(obj, key): # Check if attribute exists on the model
+                if hasattr(obj, key):  # Check if attribute exists on the model
                     setattr(obj, key, value)
                 else:
-                    logger.warning(f"Attempted to update non-existent attribute '{key}' on Annotation {annotation_id}")
-
+                    logger.warning(
+                        f"Attempted to update non-existent attribute '{key}' on Annotation {annotation_id}"
+                    )
 
             # --- CORRECTED: Use self.session ---
             # self.session.add(obj) # Not needed if obj is already in session from get_by_id
@@ -194,7 +209,9 @@ class AnnotationRepository(BaseRepository[Annotation]):
             logger.info(f"Annotation updated successfully: ID {annotation_id}")
             return obj
         except Exception as e:
-            logger.error(f"Error updating annotation {annotation_id}: {e}", exc_info=True)
+            logger.error(
+                f"Error updating annotation {annotation_id}: {e}", exc_info=True
+            )
             self.session.rollback()
             raise
 
@@ -222,7 +239,9 @@ class AnnotationRepository(BaseRepository[Annotation]):
             logger.info(f"Annotation deleted successfully: ID {annotation_id}")
             return True
         except Exception as e:
-            logger.error(f"Error deleting annotation {annotation_id}: {e}", exc_info=True)
+            logger.error(
+                f"Error deleting annotation {annotation_id}: {e}", exc_info=True
+            )
             self.session.rollback()
             raise
 
@@ -237,7 +256,9 @@ class AnnotationRepository(BaseRepository[Annotation]):
         Returns:
             Count of annotations
         """
-        logger.debug(f"Counting annotations for entity_type={entity_type}, entity_id={entity_id}")
+        logger.debug(
+            f"Counting annotations for entity_type={entity_type}, entity_id={entity_id}"
+        )
         try:
             # --- CORRECTED: Use self.session ---
             count = (
@@ -248,12 +269,16 @@ class AnnotationRepository(BaseRepository[Annotation]):
                         self.model.entity_id == entity_id,
                     )
                 )
-                .scalar() or 0 # Ensure scalar returns 0 if no rows match
+                .scalar()
+                or 0  # Ensure scalar returns 0 if no rows match
             )
             logger.debug(f"Found {count} annotations for entity.")
             return count
         except Exception as e:
-            logger.error(f"Error counting annotations for entity {entity_type}/{entity_id}: {e}", exc_info=True)
+            logger.error(
+                f"Error counting annotations for entity {entity_type}/{entity_id}: {e}",
+                exc_info=True,
+            )
             raise
 
     def get_recent_annotations(
@@ -274,7 +299,7 @@ class AnnotationRepository(BaseRepository[Annotation]):
             # --- CORRECTED: Use self.session ---
             query = self.session.query(self.model).order_by(desc(self.model.created_at))
 
-            if user_id is not None: # Explicit check for None
+            if user_id is not None:  # Explicit check for None
                 query = query.filter(self.model.created_by == user_id)
 
             results = query.limit(limit).all()
@@ -286,4 +311,3 @@ class AnnotationRepository(BaseRepository[Annotation]):
 
     # Add any other AnnotationRepository specific methods here
     # e.g., find_by_tags, find_by_content_search etc. if needed beyond BaseRepository.search
-

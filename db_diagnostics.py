@@ -23,8 +23,7 @@ from app.core.key_manager import KeyManager
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -84,7 +83,7 @@ def test_session_query(db_path, table_name, limit=100):
     model_class = None
     for mapper in Base.registry.mappers:
         cls = mapper.class_
-        if hasattr(cls, '__tablename__') and cls.__tablename__ == table_name:
+        if hasattr(cls, "__tablename__") and cls.__tablename__ == table_name:
             model_class = cls
             break
 
@@ -104,7 +103,7 @@ def test_session_query(db_path, table_name, limit=100):
         pool_size=2,  # Reduced from 5
         max_overflow=3,  # Reduced from 10
         timeout=10,
-        health_check_interval=60
+        health_check_interval=60,
     )
     session = SQLCipherSession(pool)
 
@@ -172,22 +171,26 @@ def test_batch_sizes(db_path, key, table_name, batch_sizes=[10, 50, 100, 500]):
 
         # Memory after
         mem_after = get_memory_usage()
-        results.append({
-            'batch_size': batch_size,
-            'memory_increase': mem_after - mem_before,
-            'time_taken': end_time - start_time,
-            'total_rows': total_rows
-        })
+        results.append(
+            {
+                "batch_size": batch_size,
+                "memory_increase": mem_after - mem_before,
+                "time_taken": end_time - start_time,
+                "total_rows": total_rows,
+            }
+        )
 
         # Force garbage collection
         gc.collect()
 
-        logger.info(f"Batch size {batch_size}: Memory increase {mem_after - mem_before:.2f} MB, "
-                    f"Time: {end_time - start_time:.4f}s, Rows: {total_rows}")
+        logger.info(
+            f"Batch size {batch_size}: Memory increase {mem_after - mem_before:.2f} MB, "
+            f"Time: {end_time - start_time:.4f}s, Rows: {total_rows}"
+        )
 
     # Find optimal batch size
-    sorted_results = sorted(results, key=lambda x: x['memory_increase'])
-    optimal_size = sorted_results[0]['batch_size']
+    sorted_results = sorted(results, key=lambda x: x["memory_increase"])
+    optimal_size = sorted_results[0]["batch_size"]
     logger.info(f"Optimal batch size: {optimal_size}")
 
     return results
@@ -200,8 +203,12 @@ def main():
     parser = argparse.ArgumentParser(description="HideSync Database Diagnostics")
     parser.add_argument("--table", default="storage_locations", help="Table to test")
     parser.add_argument("--limit", type=int, default=100, help="Query limit")
-    parser.add_argument("--test", choices=["direct", "session", "batch", "all"],
-                        default="all", help="Test to run")
+    parser.add_argument(
+        "--test",
+        choices=["direct", "session", "batch", "all"],
+        default="all",
+        help="Test to run",
+    )
 
     args = parser.parse_args()
 

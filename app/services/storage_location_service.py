@@ -32,13 +32,14 @@ from app.services.base_service import BaseService
 
 logger = logging.getLogger(__name__)
 
+
 class StorageLocationDeleted(DomainEvent):
     """Event emitted when a storage location is deleted."""
 
     def __init__(
-            self,
-            location_id: str,
-            user_id: Optional[int] = None,
+        self,
+        location_id: str,
+        user_id: Optional[int] = None,
     ):
         """
         Initialize storage location deleted event.
@@ -47,15 +48,16 @@ class StorageLocationDeleted(DomainEvent):
         self.location_id = location_id
         self.user_id = user_id
 
+
 class StorageLocationCreated(DomainEvent):
     """Event emitted when a storage location is created."""
 
     def __init__(
-            self,
-            location_id: str,
-            location_name: str,
-            location_type: str,
-            user_id: Optional[int] = None,
+        self,
+        location_id: str,
+        location_name: str,
+        location_type: str,
+        user_id: Optional[int] = None,
     ):
         """
         Initialize storage location created event.
@@ -77,12 +79,12 @@ class StorageAssignmentCreated(DomainEvent):
     """Event emitted when materials are assigned to a storage location."""
 
     def __init__(
-            self,
-            assignment_id: str,
-            material_id: int,
-            location_id: str,
-            quantity: float,
-            user_id: Optional[int] = None,
+        self,
+        assignment_id: str,
+        material_id: int,
+        location_id: str,
+        quantity: float,
+        user_id: Optional[int] = None,
     ):
         """
         Initialize storage assignment created event.
@@ -106,13 +108,13 @@ class StorageMoveCreated(DomainEvent):
     """Event emitted when material is moved between storage locations."""
 
     def __init__(
-            self,
-            move_id: str,
-            material_id: int,
-            from_location_id: str,
-            to_location_id: str,
-            quantity: float,
-            user_id: Optional[int] = None,
+        self,
+        move_id: str,
+        material_id: int,
+        from_location_id: str,
+        to_location_id: str,
+        quantity: float,
+        user_id: Optional[int] = None,
     ):
         """
         Initialize storage move created event.
@@ -138,13 +140,13 @@ class StorageSpaceUpdated(DomainEvent):
     """Event emitted when storage capacity or utilization is updated."""
 
     def __init__(
-            self,
-            location_id: str,
-            previous_capacity: int,
-            new_capacity: int,
-            previous_utilized: int,
-            new_utilized: int,
-            user_id: Optional[int] = None,
+        self,
+        location_id: str,
+        previous_capacity: int,
+        new_capacity: int,
+        previous_utilized: int,
+        new_utilized: int,
+        user_id: Optional[int] = None,
     ):
         """
         Initialize storage space updated event.
@@ -186,17 +188,17 @@ class StorageLocationService(BaseService[StorageLocation]):
     """
 
     def __init__(
-            self,
-            session: Session,
-            location_repository=None,
-            cell_repository=None,
-            assignment_repository=None,
-            move_repository=None,
-            security_context=None,
-            event_bus=None,
-            cache_service=None,
-            material_service=None,
-            inventory_service=None,
+        self,
+        session: Session,
+        location_repository=None,
+        cell_repository=None,
+        assignment_repository=None,
+        move_repository=None,
+        security_context=None,
+        event_bus=None,
+        cache_service=None,
+        material_service=None,
+        inventory_service=None,
     ):
         """
         Initialize StorageLocationService with dependencies.
@@ -225,7 +227,9 @@ class StorageLocationService(BaseService[StorageLocation]):
         # Set our specific repositories
         self.repository = location_repository or StorageLocationRepository(session)
         self.cell_repository = cell_repository or StorageCellRepository(session)
-        self.assignment_repository = assignment_repository or StorageAssignmentRepository(session)
+        self.assignment_repository = (
+            assignment_repository or StorageAssignmentRepository(session)
+        )
         self.move_repository = move_repository or StorageMoveRepository(session)
 
         # Set additional service-specific dependencies
@@ -242,7 +246,10 @@ class StorageLocationService(BaseService[StorageLocation]):
     from sqlalchemy import func
     import logging
     from app.db.models.enums import StorageLocationType
-    from app.db.models.storage import StorageLocation, StorageAssignment  # Import StorageAssignment
+    from app.db.models.storage import (
+        StorageLocation,
+        StorageAssignment,
+    )  # Import StorageAssignment
 
     logger = logging.getLogger(__name__)
 
@@ -253,8 +260,9 @@ class StorageLocationService(BaseService[StorageLocation]):
         # self.assignment_repository (StorageAssignmentRepository) are initialized
         # in the __init__ method of StorageLocationService.
 
-        def get_storage_occupancy_report(self, section: Optional[str] = None, location_type: Optional[str] = None) -> \
-        Dict[str, Any]:
+        def get_storage_occupancy_report(
+            self, section: Optional[str] = None, location_type: Optional[str] = None
+        ) -> Dict[str, Any]:
             """
             Generate a storage occupancy report with accurate utilization calculations
             and item counts by type.
@@ -266,7 +274,9 @@ class StorageLocationService(BaseService[StorageLocation]):
             Returns:
                 Storage occupancy report dictionary matching the StorageOccupancyReport schema.
             """
-            logger.info(f"Generating storage occupancy report. Filters: section={section}, type={location_type}")
+            logger.info(
+                f"Generating storage occupancy report. Filters: section={section}, type={location_type}"
+            )
 
             # Initialize results dictionary matching the StorageOccupancyReport Pydantic schema
             result = {
@@ -285,28 +295,37 @@ class StorageLocationService(BaseService[StorageLocation]):
                 "locations_nearly_empty": 0,  # e.g., <= 10% utilized
                 "most_utilized_locations": [],
                 "least_utilized_locations": [],
-                "recommendations": []
+                "recommendations": [],
             }
 
             try:
                 # --- 1. Get Locations and Calculate Location-Based Stats ---
                 logger.debug("Fetching storage locations...")
                 filters = {}
-                if section: filters["section"] = section
+                if section:
+                    filters["section"] = section
                 if location_type:
                     try:
                         # Convert string type to enum if repository expects it
                         filters["type"] = StorageLocationType[location_type.upper()]
                     except KeyError:
-                        logger.warning(f"Invalid location type filter provided: {location_type}. Ignoring filter.")
+                        logger.warning(
+                            f"Invalid location type filter provided: {location_type}. Ignoring filter."
+                        )
                         # Optionally raise an error or just ignore the filter
 
-                locations = self.repository.list(**filters)  # Assuming repository handles filtering
+                locations = self.repository.list(
+                    **filters
+                )  # Assuming repository handles filtering
                 result["total_locations"] = len(locations)
-                logger.debug(f"Found {result['total_locations']} locations matching filters.")
+                logger.debug(
+                    f"Found {result['total_locations']} locations matching filters."
+                )
 
                 if not locations:
-                    logger.warning("No storage locations found matching criteria. Returning empty report.")
+                    logger.warning(
+                        "No storage locations found matching criteria. Returning empty report."
+                    )
                     return result  # Return default empty report if no locations found
 
                 total_capacity = 0.0
@@ -321,40 +340,63 @@ class StorageLocationService(BaseService[StorageLocation]):
 
                 # Process each location
                 for loc in locations:
-                    loc_id = str(getattr(loc, 'id', 'unknown'))
-                    capacity = float(getattr(loc, 'capacity', 0) or 0)
-                    utilized = float(getattr(loc, 'utilized', 0) or 0)  # Utilized from the location record
+                    loc_id = str(getattr(loc, "id", "unknown"))
+                    capacity = float(getattr(loc, "capacity", 0) or 0)
+                    utilized = float(
+                        getattr(loc, "utilized", 0) or 0
+                    )  # Utilized from the location record
 
                     total_capacity += capacity
                     total_utilized_loc_field += utilized
 
-                    utilization_pct = (utilized / capacity * 100) if capacity > 0 else 0.0
+                    utilization_pct = (
+                        (utilized / capacity * 100) if capacity > 0 else 0.0
+                    )
 
                     # Store details for sorting later
                     location_utilization_details[loc_id] = {
                         "id": loc_id,
-                        "name": getattr(loc, 'name', 'Unknown'),
+                        "name": getattr(loc, "name", "Unknown"),
                         "capacity": int(capacity),
                         "utilized": int(utilized),
-                        "utilization_percentage": round(utilization_pct, 1)
+                        "utilization_percentage": round(utilization_pct, 1),
                     }
 
                     # Group counts/stats by Type
-                    loc_type_enum = getattr(loc, 'type', None)
-                    loc_type_str = str(loc_type_enum.name) if loc_type_enum else "OTHER"  # Default to OTHER
-                    locations_by_type[loc_type_str] = locations_by_type.get(loc_type_str, 0) + 1
-                    type_stats = by_type.setdefault(loc_type_str, {"capacity": 0.0, "utilized": 0.0, "locations": 0,
-                                                                   "utilization_percentage": 0.0})
+                    loc_type_enum = getattr(loc, "type", None)
+                    loc_type_str = (
+                        str(loc_type_enum.name) if loc_type_enum else "OTHER"
+                    )  # Default to OTHER
+                    locations_by_type[loc_type_str] = (
+                        locations_by_type.get(loc_type_str, 0) + 1
+                    )
+                    type_stats = by_type.setdefault(
+                        loc_type_str,
+                        {
+                            "capacity": 0.0,
+                            "utilized": 0.0,
+                            "locations": 0,
+                            "utilization_percentage": 0.0,
+                        },
+                    )
                     type_stats["capacity"] += capacity
                     type_stats["utilized"] += utilized  # Aggregate location.utilized
                     type_stats["locations"] += 1
 
                     # Group counts/stats by Section
-                    loc_section_str = getattr(loc, 'section', "Unknown") or "Unknown"
-                    locations_by_section[loc_section_str] = locations_by_section.get(loc_section_str, 0) + 1
-                    section_stats = by_section.setdefault(loc_section_str,
-                                                          {"capacity": 0.0, "utilized": 0.0, "locations": 0,
-                                                           "utilization_percentage": 0.0})
+                    loc_section_str = getattr(loc, "section", "Unknown") or "Unknown"
+                    locations_by_section[loc_section_str] = (
+                        locations_by_section.get(loc_section_str, 0) + 1
+                    )
+                    section_stats = by_section.setdefault(
+                        loc_section_str,
+                        {
+                            "capacity": 0.0,
+                            "utilized": 0.0,
+                            "locations": 0,
+                            "utilization_percentage": 0.0,
+                        },
+                    )
                     section_stats["capacity"] += capacity
                     section_stats["utilized"] += utilized  # Aggregate location.utilized
                     section_stats["locations"] += 1
@@ -367,7 +409,9 @@ class StorageLocationService(BaseService[StorageLocation]):
                             locations_nearly_empty += 1
 
                 result["total_capacity"] = total_capacity
-                result["total_utilized"] = total_utilized_loc_field  # Start with location field value
+                result["total_utilized"] = (
+                    total_utilized_loc_field  # Start with location field value
+                )
                 result["locations_at_capacity"] = locations_at_capacity
                 result["locations_nearly_empty"] = locations_nearly_empty
 
@@ -376,25 +420,40 @@ class StorageLocationService(BaseService[StorageLocation]):
                 try:
                     # Query assignments: group by material_type and count distinct material_id
                     # This assumes 'material_type' on StorageAssignment is a string like 'leather', 'hardware'
-                    item_counts_query = self.session.query(
-                        StorageAssignment.material_type,
-                        func.count(StorageAssignment.material_id.distinct())  # Counts unique items per type
-                        # OR: func.sum(StorageAssignment.quantity) # If you need sum of quantities
-                    ).group_by(StorageAssignment.material_type).all()
+                    item_counts_query = (
+                        self.session.query(
+                            StorageAssignment.material_type,
+                            func.count(
+                                StorageAssignment.material_id.distinct()
+                            ),  # Counts unique items per type
+                            # OR: func.sum(StorageAssignment.quantity) # If you need sum of quantities
+                        )
+                        .group_by(StorageAssignment.material_type)
+                        .all()
+                    )
 
                     # Process the query results into a dictionary, lowercasing the type
                     items_by_type_calc = {
                         str(item_type).lower(): count
-                        for item_type, count in item_counts_query if item_type  # Ensure item_type is not None
+                        for item_type, count in item_counts_query
+                        if item_type  # Ensure item_type is not None
                     }
 
                     # Ensure common types exist in the dictionary, even if count is 0
-                    for common_type in ["leather", "hardware", "supplies", "other", "unknown"]:
+                    for common_type in [
+                        "leather",
+                        "hardware",
+                        "supplies",
+                        "other",
+                        "unknown",
+                    ]:
                         items_by_type_calc.setdefault(common_type, 0)
 
                     result["items_by_type"] = items_by_type_calc
                     result["total_items"] = sum(items_by_type_calc.values())
-                    logger.info(f"Successfully calculated item counts by type: {result['items_by_type']}")
+                    logger.info(
+                        f"Successfully calculated item counts by type: {result['items_by_type']}"
+                    )
 
                     # --- Optional Override Decision ---
                     # Decide if the sum of distinct items should override the 'total_utilized'
@@ -411,31 +470,48 @@ class StorageLocationService(BaseService[StorageLocation]):
                     result["total_utilized"] = total_utilized_loc_field
 
                 except Exception as e:
-                    logger.error(f"Error calculating items_by_type from assignments: {e}", exc_info=True)
-                    result["items_by_type"] = {"error": "Calculation failed"}  # Indicate error in result
+                    logger.error(
+                        f"Error calculating items_by_type from assignments: {e}",
+                        exc_info=True,
+                    )
+                    result["items_by_type"] = {
+                        "error": "Calculation failed"
+                    }  # Indicate error in result
                     result["total_items"] = None  # Indicate calculation failed
                     # Keep total_utilized based on location field as fallback
 
                 # --- 3. Final Calculations & Formatting ---
                 logger.debug("Performing final calculations for report...")
-                final_total_utilized = result["total_utilized"]  # Use the determined total utilized
+                final_total_utilized = result[
+                    "total_utilized"
+                ]  # Use the determined total utilized
 
                 if total_capacity > 0:
                     usage_pct = (final_total_utilized / total_capacity) * 100
                     result["utilization_percentage"] = round(usage_pct, 1)
-                    result["overall_usage_percentage"] = round(usage_pct, 1)  # Assign same value
+                    result["overall_usage_percentage"] = round(
+                        usage_pct, 1
+                    )  # Assign same value
 
                 # Calculate final percentages for by_type and by_section breakdowns
                 # These percentages are based on the summed location.utilized values per group
                 for stats in by_type.values():
                     cap = stats.get("capacity", 0.0)
-                    ut = stats.get("utilized", 0.0)  # Utilized from location field sum for this group
-                    stats["utilization_percentage"] = round((ut / cap) * 100, 1) if cap > 0 else 0.0
+                    ut = stats.get(
+                        "utilized", 0.0
+                    )  # Utilized from location field sum for this group
+                    stats["utilization_percentage"] = (
+                        round((ut / cap) * 100, 1) if cap > 0 else 0.0
+                    )
 
                 for stats in by_section.values():
                     cap = stats.get("capacity", 0.0)
-                    ut = stats.get("utilized", 0.0)  # Utilized from location field sum for this group
-                    stats["utilization_percentage"] = round((ut / cap) * 100, 1) if cap > 0 else 0.0
+                    ut = stats.get(
+                        "utilized", 0.0
+                    )  # Utilized from location field sum for this group
+                    stats["utilization_percentage"] = (
+                        round((ut / cap) * 100, 1) if cap > 0 else 0.0
+                    )
 
                 result["by_type"] = by_type
                 result["by_section"] = by_section
@@ -446,15 +522,16 @@ class StorageLocationService(BaseService[StorageLocation]):
                 sorted_locations = sorted(
                     location_utilization_details.values(),
                     key=lambda x: x["utilization_percentage"],
-                    reverse=True
+                    reverse=True,
                 )
 
                 # Populate most/least utilized lists (ensure structure matches Pydantic schema)
                 result["most_utilized_locations"] = sorted_locations[:5]
                 result["least_utilized_locations"] = [
-                                                         loc for loc in reversed(sorted_locations) if
-                                                         loc["capacity"] > 0 and loc["utilization_percentage"] > 0
-                                                     ][:5]
+                    loc
+                    for loc in reversed(sorted_locations)
+                    if loc["capacity"] > 0 and loc["utilization_percentage"] > 0
+                ][:5]
 
                 # --- 4. Generate Recommendations ---
                 logger.debug("Generating recommendations...")
@@ -462,13 +539,20 @@ class StorageLocationService(BaseService[StorageLocation]):
                 usage_pct_final = result["utilization_percentage"]
                 if usage_pct_final > 85:
                     recommendations.append(
-                        "Overall utilization is high. Consider expanding storage or optimizing existing space.")
+                        "Overall utilization is high. Consider expanding storage or optimizing existing space."
+                    )
                 elif usage_pct_final < 25:
-                    recommendations.append("Overall utilization is low. Consider consolidating storage.")
-                if result["locations_at_capacity"] > 0: recommendations.append(
-                    f"Address {result['locations_at_capacity']} locations at or near capacity (>=95%).")
-                if result["locations_nearly_empty"] > 0: recommendations.append(
-                    f"Review {result['locations_nearly_empty']} nearly empty locations (<=10%) for potential consolidation.")
+                    recommendations.append(
+                        "Overall utilization is low. Consider consolidating storage."
+                    )
+                if result["locations_at_capacity"] > 0:
+                    recommendations.append(
+                        f"Address {result['locations_at_capacity']} locations at or near capacity (>=95%)."
+                    )
+                if result["locations_nearly_empty"] > 0:
+                    recommendations.append(
+                        f"Review {result['locations_nearly_empty']} nearly empty locations (<=10%) for potential consolidation."
+                    )
                 # Add more recommendations based on by_type, by_section, etc. if needed
                 result["recommendations"] = recommendations
 
@@ -476,11 +560,15 @@ class StorageLocationService(BaseService[StorageLocation]):
                 return result
 
             except Exception as e:
-                logger.error(f"Major error generating storage occupancy report: {e}", exc_info=True)
+                logger.error(
+                    f"Major error generating storage occupancy report: {e}",
+                    exc_info=True,
+                )
                 # Return the initialized result dictionary with defaults on major error
-                result["recommendations"] = ["Error generating report."]  # Add error message
+                result["recommendations"] = [
+                    "Error generating report."
+                ]  # Add error message
                 return result
-
 
     # Just add this method to app/services/storage_location_service.py
     # Don't change any existing code - just add this new method
@@ -511,7 +599,7 @@ class StorageLocationService(BaseService[StorageLocation]):
                     "storage_id": str(getattr(cell, "storage_id", location_id)),
                     "occupied": bool(getattr(cell, "occupied", False)),
                     "material_id": getattr(cell, "material_id", None),
-                    "position": {"row": 1, "column": 1}  # Default position
+                    "position": {"row": 1, "column": 1},  # Default position
                 }
 
                 # Parse position data if available
@@ -520,6 +608,7 @@ class StorageLocationService(BaseService[StorageLocation]):
                     if isinstance(position, str):
                         try:
                             import json
+
                             pos_data = json.loads(position)
                             if isinstance(pos_data, dict):
                                 cell_data["position"] = pos_data
@@ -532,7 +621,9 @@ class StorageLocationService(BaseService[StorageLocation]):
                 if occupied is None or cell_data["occupied"] == occupied:
                     formatted_cells.append(cell_data)
 
-            logger.info(f"Retrieved {len(formatted_cells)} cells for location {location_id}")
+            logger.info(
+                f"Retrieved {len(formatted_cells)} cells for location {location_id}"
+            )
             return formatted_cells
 
         except Exception as e:
@@ -542,22 +633,24 @@ class StorageLocationService(BaseService[StorageLocation]):
             default_cells = []
             for row in range(1, 5):
                 for col in range(1, 5):
-                    default_cells.append({
-                        "id": f"default_{location_id}_{row}_{col}",
-                        "storage_id": str(location_id),
-                        "position": {"row": row, "column": col},
-                        "occupied": False,
-                        "material_id": None
-                    })
+                    default_cells.append(
+                        {
+                            "id": f"default_{location_id}_{row}_{col}",
+                            "storage_id": str(location_id),
+                            "position": {"row": row, "column": col},
+                            "occupied": False,
+                            "material_id": None,
+                        }
+                    )
 
             logger.warning(f"Returning default grid with {len(default_cells)} cells")
             return default_cells
 
     def get_storage_locations(
-            self,
-            skip: int = 0,
-            limit: int = 100,
-            search_params: Optional[Dict[str, Any]] = None,
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        search_params: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Get a list of storage locations with optional filtering and pagination.
@@ -570,7 +663,9 @@ class StorageLocationService(BaseService[StorageLocation]):
         Returns:
             List of storage locations with properly formatted fields
         """
-        logger.info(f"Getting storage locations with params: {search_params}, skip={skip}, limit={limit}")
+        logger.info(
+            f"Getting storage locations with params: {search_params}, skip={skip}, limit={limit}"
+        )
 
         try:
             # Check cache first if available
@@ -594,21 +689,23 @@ class StorageLocationService(BaseService[StorageLocation]):
                 if search_params.get("status"):
                     filters["status"] = search_params["status"]
                 if search_params.get("search"):
-                    filters["name"] = search_params["search"]  # Use name field for search
+                    filters["name"] = search_params[
+                        "search"
+                    ]  # Use name field for search
 
             # Get locations from repository with pagination
-            locations = self.repository.list(
-                skip=skip,
-                limit=limit,
-                **filters
-            )
+            locations = self.repository.list(skip=skip, limit=limit, **filters)
 
             # Format locations for API
-            formatted_locations = [self._format_location_for_api(loc) for loc in locations]
+            formatted_locations = [
+                self._format_location_for_api(loc) for loc in locations
+            ]
 
             # Add to cache if available
             if self.cache_service and cache_key:
-                self.cache_service.set(cache_key, formatted_locations, ttl=300)  # 5 min TTL
+                self.cache_service.set(
+                    cache_key, formatted_locations, ttl=300
+                )  # 5 min TTL
 
             logger.info(f"Retrieved {len(formatted_locations)} storage locations")
             return formatted_locations
@@ -616,6 +713,7 @@ class StorageLocationService(BaseService[StorageLocation]):
         except Exception as e:
             logger.error(f"Error fetching storage locations: {e}")
             import traceback
+
             logger.error(traceback.format_exc())
             return []  # Return empty list on error
 
@@ -637,7 +735,7 @@ class StorageLocationService(BaseService[StorageLocation]):
                     "id": "unknown",
                     "name": "Unknown Location",
                     "type": "unknown",
-                    "status": "UNKNOWN"
+                    "status": "UNKNOWN",
                 }
 
             # Create a base dictionary
@@ -645,9 +743,9 @@ class StorageLocationService(BaseService[StorageLocation]):
 
             # Get ID with type handling
             try:
-                location_id = getattr(location, 'id', None)
+                location_id = getattr(location, "id", None)
                 if location_id is None:
-                    location_id = getattr(location, 'uuid', 'unknown')
+                    location_id = getattr(location, "uuid", "unknown")
                 result["id"] = str(location_id)
             except Exception:
                 result["id"] = "unknown"
@@ -661,7 +759,7 @@ class StorageLocationService(BaseService[StorageLocation]):
                 "capacity": ("capacity", 0, int),
                 "utilized": ("utilized", 0, int),
                 "status": ("status", "ACTIVE", str),
-                "parent_id": ("parent_id", None, lambda x: str(x) if x else None)
+                "parent_id": ("parent_id", None, lambda x: str(x) if x else None),
             }
 
             for key, (attr_name, default, converter) in attributes.items():
@@ -676,12 +774,13 @@ class StorageLocationService(BaseService[StorageLocation]):
 
             # Handle dimensions with special care
             try:
-                dimensions = getattr(location, 'dimensions', None)
+                dimensions = getattr(location, "dimensions", None)
                 if dimensions:
                     # Handle string format (JSON)
                     if isinstance(dimensions, str):
                         try:
                             import json
+
                             dimensions = json.loads(dimensions)
                         except:
                             dimensions = {"width": 4, "height": 4}
@@ -703,7 +802,7 @@ class StorageLocationService(BaseService[StorageLocation]):
                 try:
                     value = getattr(location, timestamp, None)
                     if value:
-                        if hasattr(value, 'isoformat'):
+                        if hasattr(value, "isoformat"):
                             result[timestamp] = value.isoformat()
                         else:
                             result[timestamp] = str(value)
@@ -716,14 +815,14 @@ class StorageLocationService(BaseService[StorageLocation]):
             logger.error(f"Error formatting location for API: {e}")
             # Return minimal safe dictionary
             return {
-                "id": str(getattr(location, 'id', 'unknown')),
+                "id": str(getattr(location, "id", "unknown")),
                 "name": "Error Formatting Location",
                 "type": "unknown",
                 "status": "UNKNOWN",
                 "capacity": 0,
                 "utilized": 0,
                 "dimensions": {"width": 4, "height": 4},
-                "_error": str(e)
+                "_error": str(e),
             }
 
     def _calculate_utilization_statistics(self, location_id):
@@ -745,11 +844,7 @@ class StorageLocationService(BaseService[StorageLocation]):
             "utilization_percentage": 0,
             "item_count": 0,
             "material_types": {},
-            "by_status": {
-                "active": 0,
-                "reserved": 0,
-                "in_use": 0
-            }
+            "by_status": {"active": 0, "reserved": 0, "in_use": 0},
         }
 
         try:
@@ -797,7 +892,7 @@ class StorageLocationService(BaseService[StorageLocation]):
             "position": None,
             "assigned_date": None,
             "assigned_by": getattr(assignment, "assigned_by", None),
-            "notes": getattr(assignment, "notes", "")
+            "notes": getattr(assignment, "notes", ""),
         }
 
         # Handle position data
@@ -807,6 +902,7 @@ class StorageLocationService(BaseService[StorageLocation]):
             if isinstance(position, str):
                 try:
                     import json
+
                     parsed_position = json.loads(position)
                     if isinstance(parsed_position, dict):
                         result["position"] = parsed_position
@@ -847,7 +943,7 @@ class StorageLocationService(BaseService[StorageLocation]):
             # Count assignments per location
             location_counts = {}
             for assignment in all_assignments:
-                loc_id = getattr(assignment, 'storage_id', None)
+                loc_id = getattr(assignment, "storage_id", None)
                 if loc_id:
                     location_counts[loc_id] = location_counts.get(loc_id, 0) + 1
 
@@ -866,29 +962,35 @@ class StorageLocationService(BaseService[StorageLocation]):
                         self.repository.update(loc_id, {"utilized": count})
 
                         updated_count += 1
-                        updated_locations.append({
-                            "id": loc_id,
-                            "name": getattr(loc, 'name', 'Unknown'),
-                            "previous_count": previous_count,
-                            "new_count": count
-                        })
+                        updated_locations.append(
+                            {
+                                "id": loc_id,
+                                "name": getattr(loc, "name", "Unknown"),
+                                "previous_count": previous_count,
+                                "new_count": count,
+                            }
+                        )
 
                         logger.debug(
                             f"Updated location {getattr(loc, 'name', 'Unknown')} (ID: {loc_id}): "
-                            f"utilized from {previous_count} to {count}")
+                            f"utilized from {previous_count} to {count}"
+                        )
                 except Exception as loc_error:
                     logger.error(f"Error updating location {loc_id}: {loc_error}")
 
-            logger.info(f"Successfully updated utilization for {updated_count} storage locations")
+            logger.info(
+                f"Successfully updated utilization for {updated_count} storage locations"
+            )
 
             return {
                 "updated_count": updated_count,
-                "updated_locations": updated_locations
+                "updated_locations": updated_locations,
             }
 
         except Exception as e:
             logger.error(f"Error synchronizing storage utilization: {e}")
             import traceback
+
             logger.error(traceback.format_exc())
             raise
 
@@ -935,7 +1037,9 @@ class StorageLocationService(BaseService[StorageLocation]):
                     if location:
                         logger.info(f"Found location using numeric ID: {numeric_id}")
                 except Exception as e:
-                    logger.debug(f"Error getting location with numeric ID {location_id}: {e}")
+                    logger.debug(
+                        f"Error getting location with numeric ID {location_id}: {e}"
+                    )
 
             # If still not found, try direct database query
             if not location:
@@ -944,14 +1048,18 @@ class StorageLocationService(BaseService[StorageLocation]):
                     from app.db.models.storage import StorageLocation
 
                     # Try multiple ID formats
-                    location = self.session.query(StorageLocation).filter(
-                        or_(
-                            StorageLocation.id == location_id,
-                            StorageLocation.id == str(location_id),
-                            StorageLocation.uuid == location_id,
-                            StorageLocation.name == location_id
+                    location = (
+                        self.session.query(StorageLocation)
+                        .filter(
+                            or_(
+                                StorageLocation.id == location_id,
+                                StorageLocation.id == str(location_id),
+                                StorageLocation.uuid == location_id,
+                                StorageLocation.name == location_id,
+                            )
                         )
-                    ).first()
+                        .first()
+                    )
 
                     if location:
                         logger.info(f"Found location using direct query: {location.id}")
@@ -986,7 +1094,7 @@ class StorageLocationService(BaseService[StorageLocation]):
                             "capacity": 100,
                             "utilized": 30,
                             "status": "ACTIVE",
-                            "dimensions": {"width": 4, "height": 4}
+                            "dimensions": {"width": 4, "height": 4},
                         },
                         {
                             "id": "2",
@@ -996,13 +1104,15 @@ class StorageLocationService(BaseService[StorageLocation]):
                             "capacity": 50,
                             "utilized": 25,
                             "status": "ACTIVE",
-                            "dimensions": {"width": 3, "height": 6}
-                        }
+                            "dimensions": {"width": 3, "height": 6},
+                        },
                     ]
 
                     for mock_loc in mock_locations:
                         if str(mock_loc["id"]) == str(location_id):
-                            logger.warning(f"Using mock data for location {location_id}")
+                            logger.warning(
+                                f"Using mock data for location {location_id}"
+                            )
                             return mock_loc
                 except Exception:
                     pass
@@ -1019,7 +1129,9 @@ class StorageLocationService(BaseService[StorageLocation]):
             if self.cache_service:
                 self.cache_service.set(cache_key, formatted_location, ttl=3600)
 
-            logger.info(f"Retrieved storage location: {formatted_location.get('name', 'Unknown')}")
+            logger.info(
+                f"Retrieved storage location: {formatted_location.get('name', 'Unknown')}"
+            )
             return formatted_location
 
         except StorageLocationNotFoundException:
@@ -1028,6 +1140,7 @@ class StorageLocationService(BaseService[StorageLocation]):
         except Exception as e:
             logger.error(f"Error fetching storage location: {e}")
             import traceback
+
             logger.error(traceback.format_exc())
             raise StorageLocationNotFoundException(location_id)
 
@@ -1060,7 +1173,7 @@ class StorageLocationService(BaseService[StorageLocation]):
             "locations_nearly_empty": 0,
             "most_utilized_locations": [],
             "least_utilized_locations": [],
-            "recommendations": []
+            "recommendations": [],
         }
 
         try:
@@ -1100,12 +1213,14 @@ class StorageLocationService(BaseService[StorageLocation]):
                     "name": loc.name or "",
                     "capacity": capacity,
                     "utilized": utilized,
-                    "utilization_percentage": round((utilized / capacity) * 100, 1) if capacity > 0 else 0
+                    "utilization_percentage": (
+                        round((utilized / capacity) * 100, 1) if capacity > 0 else 0
+                    ),
                 }
 
                 # Process location types
                 loc_type = loc.type or "Unknown"
-                if hasattr(loc_type, 'value'):
+                if hasattr(loc_type, "value"):
                     loc_type = loc_type.value
                 locations_by_type[loc_type] = locations_by_type.get(loc_type, 0) + 1
 
@@ -1114,7 +1229,7 @@ class StorageLocationService(BaseService[StorageLocation]):
                         "capacity": 0,
                         "utilized": 0,
                         "locations": 0,
-                        "utilization_percentage": 0
+                        "utilization_percentage": 0,
                     }
                 by_type[loc_type]["capacity"] += capacity
                 by_type[loc_type]["utilized"] += utilized
@@ -1122,14 +1237,16 @@ class StorageLocationService(BaseService[StorageLocation]):
 
                 # Process sections
                 loc_section = loc.section or "Unknown"
-                locations_by_section[loc_section] = locations_by_section.get(loc_section, 0) + 1
+                locations_by_section[loc_section] = (
+                    locations_by_section.get(loc_section, 0) + 1
+                )
 
                 if loc_section not in by_section:
                     by_section[loc_section] = {
                         "capacity": 0,
                         "utilized": 0,
                         "locations": 0,
-                        "utilization_percentage": 0
+                        "utilization_percentage": 0,
                     }
                 by_section[loc_section]["capacity"] += capacity
                 by_section[loc_section]["utilized"] += utilized
@@ -1168,8 +1285,12 @@ class StorageLocationService(BaseService[StorageLocation]):
                         if loc_id in location_utilization:
                             location_utilization[loc_id]["utilized"] = count
                             if location_utilization[loc_id]["capacity"] > 0:
-                                location_utilization[loc_id]["utilization_percentage"] = round(
-                                    (count / location_utilization[loc_id]["capacity"]) * 100, 1
+                                location_utilization[loc_id][
+                                    "utilization_percentage"
+                                ] = round(
+                                    (count / location_utilization[loc_id]["capacity"])
+                                    * 100,
+                                    1,
                                 )
 
                     # Recalculate total utilized
@@ -1181,7 +1302,7 @@ class StorageLocationService(BaseService[StorageLocation]):
                         loc_id = str(loc.id)
                         if loc_id in location_items:
                             loc_type = loc.type
-                            if hasattr(loc_type, 'value'):
+                            if hasattr(loc_type, "value"):
                                 loc_type = loc_type.value
 
                             if loc_type in by_type:
@@ -1189,7 +1310,9 @@ class StorageLocationService(BaseService[StorageLocation]):
 
                             loc_section = loc.section or "Unknown"
                             if loc_section in by_section:
-                                by_section[loc_section]["utilized"] += location_items[loc_id]
+                                by_section[loc_section]["utilized"] += location_items[
+                                    loc_id
+                                ]
                 else:
                     # Use the original total_utilized
                     result["total_utilized"] = total_utilized
@@ -1212,12 +1335,16 @@ class StorageLocationService(BaseService[StorageLocation]):
             # Calculate type utilization percentages
             for type_name, data in by_type.items():
                 if data["capacity"] > 0:
-                    data["utilization_percentage"] = round((data["utilized"] / data["capacity"]) * 100, 1)
+                    data["utilization_percentage"] = round(
+                        (data["utilized"] / data["capacity"]) * 100, 1
+                    )
 
             # Calculate section utilization percentages
             for section_name, data in by_section.items():
                 if data["capacity"] > 0:
-                    data["utilization_percentage"] = round((data["utilized"] / data["capacity"]) * 100, 1)
+                    data["utilization_percentage"] = round(
+                        (data["utilized"] / data["capacity"]) * 100, 1
+                    )
 
             result["by_type"] = by_type
             result["by_section"] = by_section
@@ -1228,7 +1355,7 @@ class StorageLocationService(BaseService[StorageLocation]):
             sorted_locations = sorted(
                 location_utilization.values(),
                 key=lambda x: x["utilization_percentage"],
-                reverse=True
+                reverse=True,
             )
 
             # Most utilized locations (top 5)
@@ -1236,9 +1363,10 @@ class StorageLocationService(BaseService[StorageLocation]):
 
             # Least utilized locations (bottom 5, excluding empty ones)
             result["least_utilized_locations"] = [
-                                                     loc for loc in reversed(sorted_locations)
-                                                     if loc["capacity"] > 0 and loc["utilization_percentage"] > 0
-                                                 ][:5]
+                loc
+                for loc in reversed(sorted_locations)
+                if loc["capacity"] > 0 and loc["utilization_percentage"] > 0
+            ][:5]
 
             # Add recommendations
             usage_pct = result["utilization_percentage"]
@@ -1249,23 +1377,30 @@ class StorageLocationService(BaseService[StorageLocation]):
 
             if result["locations_at_capacity"] > 0:
                 result["recommendations"].append(
-                    f"Address {result['locations_at_capacity']} locations at or near capacity")
+                    f"Address {result['locations_at_capacity']} locations at or near capacity"
+                )
 
             if result["locations_nearly_empty"] > 0:
-                result["recommendations"].append(f"Review {result['locations_nearly_empty']} nearly empty locations")
+                result["recommendations"].append(
+                    f"Review {result['locations_nearly_empty']} nearly empty locations"
+                )
 
             logger.info(
                 f"Generated storage occupancy report: {result['total_locations']} locations, "
-                f"{result['utilization_percentage']}% utilized, {result['total_items']} items stored")
+                f"{result['utilization_percentage']}% utilized, {result['total_items']} items stored"
+            )
             return result
 
         except Exception as e:
             logger.error(f"Error in storage occupancy report: {e}")
             import traceback
+
             logger.error(traceback.format_exc())
             return result
 
-    def _location_exists_by_name_and_section(self, name: str, section: Optional[str]) -> bool:
+    def _location_exists_by_name_and_section(
+        self, name: str, section: Optional[str]
+    ) -> bool:
         """
         Check if a storage location exists with the given name and section.
         """
@@ -1281,7 +1416,9 @@ class StorageLocationService(BaseService[StorageLocation]):
         existing_locations = self.repository.list(**filters)
         return len(existing_locations) > 0
 
-    def get_storage_assignments(self, item_id=None, item_type=None, location_id=None, skip=0, limit=100):
+    def get_storage_assignments(
+        self, item_id=None, item_type=None, location_id=None, skip=0, limit=100
+    ):
         """
         Get storage assignments with pagination.
 
@@ -1296,7 +1433,8 @@ class StorageLocationService(BaseService[StorageLocation]):
             List of storage assignments with properly formatted fields
         """
         logger.info(
-            f"Getting storage assignments with filters: item_id={item_id}, item_type={item_type}, location_id={location_id}")
+            f"Getting storage assignments with filters: item_id={item_id}, item_type={item_type}, location_id={location_id}"
+        )
 
         try:
             # Set a safe limit to prevent memory errors
@@ -1314,9 +1452,7 @@ class StorageLocationService(BaseService[StorageLocation]):
 
             # Use repository method with pagination
             assignments_db = self.assignment_repository.list(
-                skip=skip,
-                limit=actual_limit,
-                **filters
+                skip=skip, limit=actual_limit, **filters
             )
 
             # Process assignments for API
@@ -1327,7 +1463,9 @@ class StorageLocationService(BaseService[StorageLocation]):
                 # Add material details if available
                 if self.material_service and formatted["material_id"]:
                     try:
-                        material = self.material_service.get_by_id(formatted["material_id"])
+                        material = self.material_service.get_by_id(
+                            formatted["material_id"]
+                        )
                         if material:
                             formatted["material_name"] = material.name
                             formatted["material_unit"] = material.unit
@@ -1342,6 +1480,7 @@ class StorageLocationService(BaseService[StorageLocation]):
         except Exception as e:
             logger.error(f"Error fetching storage assignments: {e}")
             import traceback
+
             logger.error(traceback.format_exc())
             return []  # Return empty list on error
 
@@ -1389,7 +1528,9 @@ class StorageLocationService(BaseService[StorageLocation]):
                 # Add material details if available
                 if self.material_service and formatted["material_id"]:
                     try:
-                        material = self.material_service.get_by_id(formatted["material_id"])
+                        material = self.material_service.get_by_id(
+                            formatted["material_id"]
+                        )
                         if material:
                             formatted["material_name"] = material.name
                             formatted["material_unit"] = material.unit
@@ -1404,7 +1545,9 @@ class StorageLocationService(BaseService[StorageLocation]):
             location["assignments"] = []
 
         # Calculate utilization statistics
-        location["utilization_stats"] = self._calculate_utilization_statistics(location_id)
+        location["utilization_stats"] = self._calculate_utilization_statistics(
+            location_id
+        )
 
         # Get recent moves
         try:
@@ -1413,21 +1556,21 @@ class StorageLocationService(BaseService[StorageLocation]):
                 from_storage_id=location_id,
                 limit=10,
                 order_by="move_date",
-                order_dir="desc"
+                order_dir="desc",
             )
 
             dest_moves = self.move_repository.list(
                 to_storage_id=location_id,
                 limit=10,
                 order_by="move_date",
-                order_dir="desc"
+                order_dir="desc",
             )
 
             # Combine and sort
             all_moves = sorted(
                 list(source_moves) + list(dest_moves),
                 key=lambda x: x.move_date if x.move_date else datetime.min,
-                reverse=True
+                reverse=True,
             )[:10]
 
             # Format moves for API
@@ -1436,16 +1579,24 @@ class StorageLocationService(BaseService[StorageLocation]):
                 formatted = self._format_move_for_api(move)
 
                 # Add direction indicator
-                formatted["direction"] = "outgoing" if formatted["from_location_id"] == location_id else "incoming"
+                formatted["direction"] = (
+                    "outgoing"
+                    if formatted["from_location_id"] == location_id
+                    else "incoming"
+                )
 
                 # Add material details if available
                 if self.material_service and formatted["material_id"]:
                     try:
-                        material = self.material_service.get_by_id(formatted["material_id"])
+                        material = self.material_service.get_by_id(
+                            formatted["material_id"]
+                        )
                         if material:
                             formatted["material_name"] = material.name
                     except Exception as material_err:
-                        logger.error(f"Error getting material info for move: {material_err}")
+                        logger.error(
+                            f"Error getting material info for move: {material_err}"
+                        )
 
                 # Add location names
                 try:
@@ -1475,7 +1626,9 @@ class StorageLocationService(BaseService[StorageLocation]):
 
         return location
 
-    def delete_storage_location(self, location_id: str, user_id: Optional[int] = None) -> None:
+    def delete_storage_location(
+        self, location_id: str, user_id: Optional[int] = None
+    ) -> None:
         """
         Delete a storage location.
 
@@ -1498,7 +1651,7 @@ class StorageLocationService(BaseService[StorageLocation]):
             if assignments:
                 raise BusinessRuleException(
                     f"Cannot delete storage location {location_id} because it has {len(assignments)} assignments",
-                    "STORAGE_DELETE_HAS_ASSIGNMENTS"
+                    "STORAGE_DELETE_HAS_ASSIGNMENTS",
                 )
 
             # Delete the location
@@ -1513,7 +1666,8 @@ class StorageLocationService(BaseService[StorageLocation]):
             if self.event_bus:
                 user_id_for_event = user_id or (
                     self.security_context.current_user.id
-                    if self.security_context else None
+                    if self.security_context
+                    else None
                 )
                 # You'll need to add this event class at the top with other events
                 self.event_bus.publish(
@@ -1542,7 +1696,7 @@ class StorageLocationService(BaseService[StorageLocation]):
             "storage_id": str(getattr(cell, "storage_id", "")),
             "position": {"row": 1, "column": 1},
             "occupied": bool(getattr(cell, "occupied", False)),
-            "material_id": getattr(cell, "material_id", None)
+            "material_id": getattr(cell, "material_id", None),
         }
 
         # Handle position data
@@ -1552,6 +1706,7 @@ class StorageLocationService(BaseService[StorageLocation]):
             if isinstance(position, str):
                 try:
                     import json
+
                     parsed_position = json.loads(position)
                     if isinstance(parsed_position, dict):
                         result["position"] = parsed_position
@@ -1563,7 +1718,9 @@ class StorageLocationService(BaseService[StorageLocation]):
 
         return result
 
-    def _create_cells_for_location(self, location_id: str, dimensions: Dict[str, Any]) -> None:
+    def _create_cells_for_location(
+        self, location_id: str, dimensions: Dict[str, Any]
+    ) -> None:
         """
         Create storage cells for a location based on dimensions.
 
@@ -1582,22 +1739,21 @@ class StorageLocationService(BaseService[StorageLocation]):
         for row in range(1, height + 1):
             for col in range(1, width + 1):
                 # Create position information
-                position = {
-                    "row": row,
-                    "column": col
-                }
+                position = {"row": row, "column": col}
 
                 # Create cell
                 cell_data = {
                     "storage_id": location_id,
                     "position": position,
-                    "occupied": False
+                    "occupied": False,
                 }
 
                 self.cell_repository.create(cell_data)
 
     @validate_input(validate_storage_location)
-    def create_storage_location(self, data: Dict[str, Any], user_id: Optional[int] = None) -> StorageLocation:
+    def create_storage_location(
+        self, data: Dict[str, Any], user_id: Optional[int] = None
+    ) -> StorageLocation:
         """
         Create a new storage location.
         """
@@ -1621,8 +1777,11 @@ class StorageLocationService(BaseService[StorageLocation]):
                 data["utilized"] = 0
 
             # Remove relationship fields that might cause issues
-            clean_data = {k: v for k, v in data.items() if k not in
-                          ['cells', 'assignments', 'moves_from', 'moves_to']}
+            clean_data = {
+                k: v
+                for k, v in data.items()
+                if k not in ["cells", "assignments", "moves_from", "moves_to"]
+            }
 
             # Create storage location
             location = self.repository.create(clean_data)
@@ -1641,7 +1800,8 @@ class StorageLocationService(BaseService[StorageLocation]):
             if self.event_bus:
                 user_id_for_event = user_id or (
                     self.security_context.current_user.id
-                    if self.security_context else None
+                    if self.security_context
+                    else None
                 )
                 self.event_bus.publish(
                     StorageLocationCreated(
@@ -1673,11 +1833,15 @@ class StorageLocationService(BaseService[StorageLocation]):
             # Get all materials with storage locations
             from app.db.models.material import Material
 
-            materials_with_location = self.session.query(Material).filter(
-                Material.storage_location.isnot(None)
-            ).all()
+            materials_with_location = (
+                self.session.query(Material)
+                .filter(Material.storage_location.isnot(None))
+                .all()
+            )
 
-            logger.info(f"Found {len(materials_with_location)} materials with storage assignments")
+            logger.info(
+                f"Found {len(materials_with_location)} materials with storage assignments"
+            )
 
             # Count materials per location
             location_counts = {}
@@ -1699,21 +1863,25 @@ class StorageLocationService(BaseService[StorageLocation]):
 
                         updated_count += 1
                         logger.debug(
-                            f"Updated location {loc.name} (ID: {loc_id}): utilized from {previous_count} to {count}")
+                            f"Updated location {loc.name} (ID: {loc_id}): utilized from {previous_count} to {count}"
+                        )
                 except Exception as loc_error:
                     logger.error(f"Error updating location {loc_id}: {loc_error}")
 
-            logger.info(f"Successfully updated utilization for {updated_count} storage locations")
+            logger.info(
+                f"Successfully updated utilization for {updated_count} storage locations"
+            )
             return True
 
         except Exception as e:
             logger.error(f"Error synchronizing storage utilization: {e}")
             import traceback
+
             logger.error(traceback.format_exc())
             return False
 
     def update_storage_location(
-            self, location_id: str, data: Dict[str, Any], user_id: Optional[int] = None
+        self, location_id: str, data: Dict[str, Any], user_id: Optional[int] = None
     ) -> StorageLocation:
         """
         Update an existing storage location.
@@ -1740,7 +1908,7 @@ class StorageLocationService(BaseService[StorageLocation]):
             # Check for duplicate name if changing name
             if "name" in data and data["name"] != location.name and "section" in data:
                 if self._location_exists_by_name_and_section(
-                        data["name"], data["section"]
+                    data["name"], data["section"]
                 ):
                     raise DuplicateEntityException(
                         f"Storage location with name '{data['name']}' already exists in section '{data['section']}'",
@@ -1763,12 +1931,21 @@ class StorageLocationService(BaseService[StorageLocation]):
             if ("capacity" in data or "utilized" in data) and self.event_bus:
                 user_id_for_event = user_id or (
                     self.security_context.current_user.id
-                    if self.security_context else None
+                    if self.security_context
+                    else None
                 )
 
                 # Get updated values from the repository result
-                new_capacity = updated_location.capacity if hasattr(updated_location, 'capacity') else 0
-                new_utilized = updated_location.utilized if hasattr(updated_location, 'utilized') else 0
+                new_capacity = (
+                    updated_location.capacity
+                    if hasattr(updated_location, "capacity")
+                    else 0
+                )
+                new_utilized = (
+                    updated_location.utilized
+                    if hasattr(updated_location, "utilized")
+                    else 0
+                )
 
                 self.event_bus.publish(
                     StorageSpaceUpdated(
@@ -1792,7 +1969,9 @@ class StorageLocationService(BaseService[StorageLocation]):
             return updated_formatted
 
     @validate_input(validate_storage_assignment)
-    def assign_material_to_location(self, data: Dict[str, Any], user_id: Optional[int] = None) -> StorageAssignment:
+    def assign_material_to_location(
+        self, data: Dict[str, Any], user_id: Optional[int] = None
+    ) -> StorageAssignment:
         """
         Assign a material to a storage location.
 
@@ -1822,12 +2001,14 @@ class StorageLocationService(BaseService[StorageLocation]):
                 material = self.material_service.get_by_id(material_id)
                 if not material:
                     from app.core.exceptions import MaterialNotFoundException
+
                     raise MaterialNotFoundException(material_id)
 
             # Check capacity constraints
             quantity = data.get("quantity", 0)
             if not self._has_sufficient_capacity(location_id, quantity):
                 from app.core.exceptions import StorageCapacityExceededException
+
                 raise StorageCapacityExceededException(
                     f"Assignment would exceed capacity of storage location {location_id}",
                     "STORAGE_002",
@@ -1861,7 +2042,8 @@ class StorageLocationService(BaseService[StorageLocation]):
             if self.event_bus:
                 user_id_for_event = user_id or (
                     self.security_context.current_user.id
-                    if self.security_context else None
+                    if self.security_context
+                    else None
                 )
                 self.event_bus.publish(
                     StorageAssignmentCreated(
@@ -1875,7 +2057,7 @@ class StorageLocationService(BaseService[StorageLocation]):
 
             # Update material's storage location if material service is available
             if self.material_service and hasattr(
-                    self.material_service, "update_storage_location"
+                self.material_service, "update_storage_location"
             ):
                 self.material_service.update_storage_location(
                     material_id=material_id, storage_location_id=location_id
@@ -1888,5 +2070,7 @@ class StorageLocationService(BaseService[StorageLocation]):
             # Format assignment for API response
             formatted_assignment = self._format_assignment_for_api(assignment)
 
-            logger.info(f"Created storage assignment for material {material_id} in location {location_id}")
+            logger.info(
+                f"Created storage assignment for material {material_id} in location {location_id}"
+            )
             return formatted_assignment

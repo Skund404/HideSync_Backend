@@ -44,19 +44,19 @@ router = APIRouter()
 
 @router.get("/locations")
 def list_storage_locations(
-        *,
-        db: Session = Depends(get_db),
-        current_user: Any = Depends(get_current_active_user),
-        skip: int = Query(0, ge=0, description="Number of records to skip"),
-        limit: int = Query(
-            100, ge=1, le=1000, description="Maximum number of records to return"
-        ),
-        type: Optional[str] = Query(None, description="Filter by location type"),
-        section: Optional[str] = Query(None, description="Filter by section"),
-        status: Optional[str] = Query(None, description="Filter by location status"),
-        search: Optional[str] = Query(None, description="Search term for name"),
-        sort_by: str = Query("name", description="Field to sort by"),
-        sort_dir: str = Query("asc", description="Sort direction (asc or desc)")
+    *,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_active_user),
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(
+        100, ge=1, le=1000, description="Maximum number of records to return"
+    ),
+    type: Optional[str] = Query(None, description="Filter by location type"),
+    section: Optional[str] = Query(None, description="Filter by section"),
+    status: Optional[str] = Query(None, description="Filter by location status"),
+    search: Optional[str] = Query(None, description="Search term for name"),
+    sort_by: str = Query("name", description="Field to sort by"),
+    sort_dir: str = Query("asc", description="Sort direction (asc or desc)"),
 ) -> Dict[str, Any]:
     """
     Retrieve storage locations with optional filtering and pagination.
@@ -93,7 +93,11 @@ def list_storage_locations(
         try:
             # Try to use repository method if available
             total = storage_service.repository.count(
-                **{k: v for k, v in search_params.items() if k not in ["sort_by", "sort_dir"]}
+                **{
+                    k: v
+                    for k, v in search_params.items()
+                    if k not in ["sort_by", "sort_dir"]
+                }
             )
         except (AttributeError, Exception) as e:
             logger.warning(f"Count method not available, will estimate total: {e}")
@@ -103,7 +107,7 @@ def list_storage_locations(
                 temp_locations = storage_service.get_storage_locations(
                     skip=0,
                     limit=10000,  # Large limit, but not unlimited to prevent memory issues
-                    search_params=search_params
+                    search_params=search_params,
                 )
                 total = len(temp_locations)
             except Exception as e2:
@@ -134,33 +138,29 @@ def list_storage_locations(
             "total": total,
             "page": page,
             "pages": pages,
-            "page_size": limit
+            "page_size": limit,
         }
 
     except Exception as e:
         logger.error(f"Error retrieving storage locations: {e}", exc_info=True)
         # Return empty paginated response to prevent frontend errors
-        return {
-            "items": [],
-            "total": 0,
-            "page": 1,
-            "pages": 0,
-            "page_size": limit
-        }
+        return {"items": [], "total": 0, "page": 1, "pages": 0, "page_size": limit}
 
 
 @router.post("/locations", status_code=status.HTTP_201_CREATED)
 def create_storage_location(
-        *,
-        db: Session = Depends(get_db),
-        location_in: StorageLocationCreate,
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    db: Session = Depends(get_db),
+    location_in: StorageLocationCreate,
+    current_user: Any = Depends(get_current_active_user),
 ) -> Dict[str, Any]:
     """
     Create a new storage location.
     """
     # Convert to dict and fix the type
-    location_dict = location_in.dict() if hasattr(location_in, 'dict') else dict(location_in)
+    location_dict = (
+        location_in.dict() if hasattr(location_in, "dict") else dict(location_in)
+    )
 
     # Fix the type field by removing enum prefix and converting to lowercase
     if "type" in location_dict and isinstance(location_dict["type"], str):
@@ -181,9 +181,9 @@ def create_storage_location(
 
 @router.post("/sync-utilization", status_code=status.HTTP_200_OK)
 def sync_storage_utilization(
-        *,
-        db: Session = Depends(get_db),
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_active_user),
 ):
     """
     Synchronize storage utilization counts from assignments.
@@ -197,25 +197,25 @@ def sync_storage_utilization(
         return {
             "success": True,
             "message": f"Successfully synchronized storage utilization. Updated {result['updated_count']} locations.",
-            "updated_locations": result["updated_locations"]
+            "updated_locations": result["updated_locations"],
         }
     except Exception as e:
         logger.error(f"Error synchronizing storage utilization: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error synchronizing storage utilization: {str(e)}"
+            detail=f"Error synchronizing storage utilization: {str(e)}",
         )
 
 
 @router.put("/locations/{location_id}")
 def update_storage_location(
-        *,
-        db: Session = Depends(get_db),
-        location_id: str = Path(
-            ..., description="The ID of the storage location to update"
-        ),
-        location_in: StorageLocationUpdate,
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    db: Session = Depends(get_db),
+    location_id: str = Path(
+        ..., description="The ID of the storage location to update"
+    ),
+    location_in: StorageLocationUpdate,
+    current_user: Any = Depends(get_current_active_user),
 ) -> Dict[str, Any]:
     """
     Update a storage location.
@@ -223,7 +223,11 @@ def update_storage_location(
     storage_service = StorageLocationService(db)
     try:
         # Update method already formats the response correctly
-        location_data = location_in.dict(exclude_unset=True) if hasattr(location_in, 'dict') else dict(location_in)
+        location_data = (
+            location_in.dict(exclude_unset=True)
+            if hasattr(location_in, "dict")
+            else dict(location_in)
+        )
         return storage_service.update_storage_location(
             location_id, location_data, current_user.id
         )
@@ -238,12 +242,12 @@ def update_storage_location(
 
 @router.delete("/locations/{location_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_storage_location(
-        *,
-        db: Session = Depends(get_db),
-        location_id: str = Path(
-            ..., description="The ID of the storage location to delete"
-        ),
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    db: Session = Depends(get_db),
+    location_id: str = Path(
+        ..., description="The ID of the storage location to delete"
+    ),
+    current_user: Any = Depends(get_current_active_user),
 ) -> None:
     """
     Delete a storage location.
@@ -263,15 +267,17 @@ def delete_storage_location(
 # Storage cells
 @router.get("/locations/{location_id}/cells")
 def list_storage_cells(
-        *,
-        db: Session = Depends(get_db),
-        location_id: str = Path(..., description="The ID of the storage location"),
-        current_user: Any = Depends(get_current_active_user),
-        occupied: Optional[bool] = Query(None, description="Filter by occupied status"),
-        skip: int = Query(0, ge=0, description="Number of records to skip"),
-        limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
-        sort_by: str = Query("position.row", description="Field to sort by"),
-        sort_dir: str = Query("asc", description="Sort direction (asc or desc)")
+    *,
+    db: Session = Depends(get_db),
+    location_id: str = Path(..., description="The ID of the storage location"),
+    current_user: Any = Depends(get_current_active_user),
+    occupied: Optional[bool] = Query(None, description="Filter by occupied status"),
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(
+        100, ge=1, le=1000, description="Maximum number of records to return"
+    ),
+    sort_by: str = Query("position.row", description="Field to sort by"),
+    sort_dir: str = Query("asc", description="Sort direction (asc or desc)"),
 ) -> Dict[str, Any]:
     """
     Retrieve cells for a storage location with pagination.
@@ -299,13 +305,15 @@ def list_storage_cells(
                     if len(fallback_grid) >= limit:
                         break
                     if (row - 1) * 4 + (col - 1) >= skip:
-                        fallback_grid.append({
-                            "id": f"cell_{location_id}_{row}_{col}",
-                            "storage_id": location_id,
-                            "position": {"row": row, "column": col},
-                            "occupied": False,
-                            "material_id": None
-                        })
+                        fallback_grid.append(
+                            {
+                                "id": f"cell_{location_id}_{row}_{col}",
+                                "storage_id": location_id,
+                                "position": {"row": row, "column": col},
+                                "occupied": False,
+                                "material_id": None,
+                            }
+                        )
 
             # Return paginated response
             return {
@@ -313,7 +321,7 @@ def list_storage_cells(
                 "total": total_cells,
                 "page": skip // limit + 1,
                 "pages": (total_cells + limit - 1) // limit,
-                "page_size": limit
+                "page_size": limit,
             }
 
         # Get total count of cells for pagination
@@ -325,20 +333,22 @@ def list_storage_cells(
 
             # Apply pagination manually since the service method doesn't
             # support pagination directly
-            cells = all_cells[skip:skip + limit]
+            cells = all_cells[skip : skip + limit]
         except Exception as e:
             logger.error(f"Error getting cells: {e}", exc_info=True)
             # Create a fallback grid as in the original code
             cells = []
             for row in range(1, 5):
                 for col in range(1, 5):
-                    cells.append({
-                        "id": f"cell_{location_id}_{row}_{col}",
-                        "storage_id": location_id,
-                        "position": {"row": row, "column": col},
-                        "occupied": False,
-                        "material_id": None
-                    })
+                    cells.append(
+                        {
+                            "id": f"cell_{location_id}_{row}_{col}",
+                            "storage_id": location_id,
+                            "position": {"row": row, "column": col},
+                            "occupied": False,
+                            "material_id": None,
+                        }
+                    )
             total = len(cells)
 
         logger.info(f"Retrieved {len(cells)} cells for location {location_id}")
@@ -349,7 +359,7 @@ def list_storage_cells(
             "total": total,
             "page": skip // limit + 1,
             "pages": (total + limit - 1) // limit,
-            "page_size": limit
+            "page_size": limit,
         }
 
     except Exception as e:
@@ -363,20 +373,22 @@ def list_storage_cells(
                 if len(fallback_grid) >= limit:
                     break
                 if (row - 1) * 4 + (col - 1) >= skip:
-                    fallback_grid.append({
-                        "id": f"cell_{location_id}_{row}_{col}",
-                        "storage_id": location_id,
-                        "position": {"row": row, "column": col},
-                        "occupied": False,
-                        "material_id": None
-                    })
+                    fallback_grid.append(
+                        {
+                            "id": f"cell_{location_id}_{row}_{col}",
+                            "storage_id": location_id,
+                            "position": {"row": row, "column": col},
+                            "occupied": False,
+                            "material_id": None,
+                        }
+                    )
 
         return {
             "items": fallback_grid,
             "total": total_cells,
             "page": skip // limit + 1,
             "pages": (total_cells + limit - 1) // limit,
-            "page_size": limit
+            "page_size": limit,
         }
 
 
@@ -385,11 +397,11 @@ def list_storage_cells(
     status_code=status.HTTP_201_CREATED,
 )
 def create_storage_cell(
-        *,
-        db: Session = Depends(get_db),
-        location_id: str = Path(..., description="The ID of the storage location"),
-        cell_in: StorageCellCreate,
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    db: Session = Depends(get_db),
+    location_id: str = Path(..., description="The ID of the storage location"),
+    cell_in: StorageCellCreate,
+    current_user: Any = Depends(get_current_active_user),
 ) -> Dict[str, Any]:
     """
     Create a new storage cell for a location.
@@ -414,16 +426,20 @@ def create_storage_cell(
 # Storage assignments
 @router.get("/assignments")
 def list_storage_assignments(
-        *,
-        db: Session = Depends(get_db),
-        current_user: Any = Depends(get_current_active_user),
-        item_id: Optional[int] = Query(None, ge=1, description="Filter by item ID"),
-        item_type: Optional[str] = Query(None, description="Filter by item type"),
-        location_id: Optional[str] = Query(None, description="Filter by storage location ID"),
-        skip: int = Query(0, ge=0, description="Number of records to skip"),
-        limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
-        sort_by: str = Query("created_at", description="Field to sort by"),
-        sort_dir: str = Query("desc", description="Sort direction (asc or desc)")
+    *,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_active_user),
+    item_id: Optional[int] = Query(None, ge=1, description="Filter by item ID"),
+    item_type: Optional[str] = Query(None, description="Filter by item type"),
+    location_id: Optional[str] = Query(
+        None, description="Filter by storage location ID"
+    ),
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(
+        100, ge=1, le=1000, description="Maximum number of records to return"
+    ),
+    sort_by: str = Query("created_at", description="Field to sort by"),
+    sort_dir: str = Query("desc", description="Sort direction (asc or desc)"),
 ) -> Dict[str, Any]:
     """
     Retrieve storage assignments with optional filtering and pagination.
@@ -438,16 +454,14 @@ def list_storage_assignments(
         # Since there's no direct pagination support in the service method,
         # we'll need to get all assignments first and paginate in memory
         assignments = storage_service.get_storage_assignments(
-            item_id=item_id,
-            item_type=item_type,
-            location_id=location_id
+            item_id=item_id, item_type=item_type, location_id=location_id
         )
 
         # Get total count for pagination
         total = len(assignments)
 
         # Apply pagination manually
-        paginated_assignments = assignments[skip:skip + limit]
+        paginated_assignments = assignments[skip : skip + limit]
 
         # Return paginated response
         return {
@@ -455,18 +469,12 @@ def list_storage_assignments(
             "total": total,
             "page": skip // limit + 1,
             "pages": (total + limit - 1) // limit,
-            "page_size": limit
+            "page_size": limit,
         }
     except Exception as e:
         logger.error(f"Error retrieving storage assignments: {e}", exc_info=True)
         # Return empty paginated response
-        return {
-            "items": [],
-            "total": 0,
-            "page": 1,
-            "pages": 0,
-            "page_size": limit
-        }
+        return {"items": [], "total": 0, "page": 1, "pages": 0, "page_size": limit}
 
 
 @router.post(
@@ -474,17 +482,21 @@ def list_storage_assignments(
     status_code=status.HTTP_201_CREATED,
 )
 def create_storage_assignment(
-        *,
-        db: Session = Depends(get_db),
-        assignment_in: StorageAssignmentCreate,
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    db: Session = Depends(get_db),
+    assignment_in: StorageAssignmentCreate,
+    current_user: Any = Depends(get_current_active_user),
 ) -> Dict[str, Any]:
     """
     Create a new storage assignment.
     """
     storage_service = StorageLocationService(db)
     try:
-        assignment_data = assignment_in.dict() if hasattr(assignment_in, 'dict') else dict(assignment_in)
+        assignment_data = (
+            assignment_in.dict()
+            if hasattr(assignment_in, "dict")
+            else dict(assignment_in)
+        )
         assignment = storage_service.create_storage_assignment(
             assignment_data, current_user.id
         )
@@ -503,12 +515,12 @@ def create_storage_assignment(
 
 @router.delete("/assignments/{assignment_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_storage_assignment(
-        *,
-        db: Session = Depends(get_db),
-        assignment_id: str = Path(
-            ..., description="The ID of the storage assignment to delete"
-        ),
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    db: Session = Depends(get_db),
+    assignment_id: str = Path(
+        ..., description="The ID of the storage assignment to delete"
+    ),
+    current_user: Any = Depends(get_current_active_user),
 ) -> None:
     """
     Delete a storage assignment.
@@ -526,15 +538,17 @@ def delete_storage_assignment(
 # Storage moves
 @router.get("/moves")
 def list_storage_moves(
-        *,
-        db: Session = Depends(get_db),
-        current_user: Any = Depends(get_current_active_user),
-        skip: int = Query(0, ge=0, description="Number of records to skip"),
-        limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
-        item_id: Optional[int] = Query(None, ge=1, description="Filter by item ID"),
-        item_type: Optional[str] = Query(None, description="Filter by item type"),
-        sort_by: str = Query("created_at", description="Field to sort by"),
-        sort_dir: str = Query("desc", description="Sort direction (asc or desc)")
+    *,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_active_user),
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(
+        100, ge=1, le=1000, description="Maximum number of records to return"
+    ),
+    item_id: Optional[int] = Query(None, ge=1, description="Filter by item ID"),
+    item_type: Optional[str] = Query(None, description="Filter by item type"),
+    sort_by: str = Query("created_at", description="Field to sort by"),
+    sort_dir: str = Query("desc", description="Sort direction (asc or desc)"),
 ) -> Dict[str, Any]:
     """
     Retrieve storage moves with optional filtering and pagination.
@@ -548,10 +562,7 @@ def list_storage_moves(
     try:
         # The service method already supports pagination
         moves = storage_service.get_storage_moves(
-            skip=skip,
-            limit=limit,
-            item_id=item_id,
-            item_type=item_type
+            skip=skip, limit=limit, item_id=item_id, item_type=item_type
         )
 
         # Try to get total count for more accurate pagination
@@ -564,7 +575,7 @@ def list_storage_moves(
                 skip=0,
                 limit=10000,  # Large but not unlimited
                 item_id=item_id,
-                item_type=item_type
+                item_type=item_type,
             )
             total = len(all_moves)
         except Exception as e:
@@ -580,33 +591,27 @@ def list_storage_moves(
             "total": total,
             "page": skip // limit + 1,
             "pages": (total + limit - 1) // limit,
-            "page_size": limit
+            "page_size": limit,
         }
     except Exception as e:
         logger.error(f"Error retrieving storage moves: {e}", exc_info=True)
         # Return empty paginated response
-        return {
-            "items": [],
-            "total": 0,
-            "page": 1,
-            "pages": 0,
-            "page_size": limit
-        }
+        return {"items": [], "total": 0, "page": 1, "pages": 0, "page_size": limit}
 
 
 @router.post("/moves", status_code=status.HTTP_201_CREATED)
 def create_storage_move(
-        *,
-        db: Session = Depends(get_db),
-        move_in: StorageMoveCreate,
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    db: Session = Depends(get_db),
+    move_in: StorageMoveCreate,
+    current_user: Any = Depends(get_current_active_user),
 ) -> Dict[str, Any]:
     """
     Create a new storage move.
     """
     storage_service = StorageLocationService(db)
     try:
-        move_data = move_in.dict() if hasattr(move_in, 'dict') else dict(move_in)
+        move_data = move_in.dict() if hasattr(move_in, "dict") else dict(move_in)
         move = storage_service.create_storage_move(move_data, current_user.id)
         return move  # The service should already format this
     except EntityNotFoundException as e:
@@ -625,11 +630,11 @@ def create_storage_move(
 
 @router.get("/occupancy")
 def get_storage_occupancy_report(
-        *,
-        db: Session = Depends(get_db),
-        current_user: Any = Depends(get_current_active_user),
-        section: Optional[str] = Query(None, description="Filter by section"),
-        type: Optional[str] = Query(None, description="Filter by location type"),
+    *,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_active_user),
+    section: Optional[str] = Query(None, description="Filter by section"),
+    type: Optional[str] = Query(None, description="Filter by location type"),
 ) -> Dict[str, Any]:
     """
     Get storage occupancy report.
@@ -639,7 +644,9 @@ def get_storage_occupancy_report(
     storage_service = StorageLocationService(db)
     try:
         report = storage_service.get_storage_occupancy_report(section, type)
-        logger.info(f"Successfully generated occupancy report with {report.get('total_locations', 0)} locations")
+        logger.info(
+            f"Successfully generated occupancy report with {report.get('total_locations', 0)} locations"
+        )
         return report
     except Exception as e:
         logger.error(f"Error generating occupancy report: {e}", exc_info=True)
@@ -657,22 +664,22 @@ def get_storage_occupancy_report(
             "locations_nearly_empty": 0,
             "most_utilized_locations": [],
             "least_utilized_locations": [],
-            "recommendations": ["Unable to generate occupancy report"]
+            "recommendations": ["Unable to generate occupancy report"],
         }
 
 
 # Add a monitoring endpoint as suggested in the guide
 @router.get("/system/memory", include_in_schema=False)
 def check_memory_usage(
-        *,
-        current_user: Any = Depends(get_current_active_user),
+    *,
+    current_user: Any = Depends(get_current_active_user),
 ):
     """Check current memory usage (admin only)."""
     # Verify the user has admin permissions
-    if not hasattr(current_user, 'is_admin') or not current_user.is_admin:
+    if not hasattr(current_user, "is_admin") or not current_user.is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required for memory usage monitoring"
+            detail="Admin access required for memory usage monitoring",
         )
 
     try:
@@ -691,7 +698,7 @@ def check_memory_usage(
         pool_info = {
             "total_connections": "N/A",
             "idle_connections": "N/A",
-            "in_use_connections": "N/A"
+            "in_use_connections": "N/A",
         }
 
         return {
@@ -700,7 +707,7 @@ def check_memory_usage(
             "db_connections": pool_info.get("total_connections", "N/A"),
             "db_idle_connections": pool_info.get("idle_connections", "N/A"),
             "db_in_use_connections": pool_info.get("in_use_connections", "N/A"),
-            "gc_counts": gc.get_count()
+            "gc_counts": gc.get_count(),
         }
     except ImportError:
         return {"error": "psutil module not available for memory monitoring"}

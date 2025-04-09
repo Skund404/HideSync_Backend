@@ -6,12 +6,12 @@ This module initializes the FastAPI application, configures middleware,
 includes API routers, and sets up global exception handlers.
 """
 
-from fastapi import FastAPI, Request, status # Add status
+from fastapi import FastAPI, Request, status  # Add status
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
-from fastapi.exceptions import RequestValidationError # Import this
-from fastapi.responses import JSONResponse # Import this
-from fastapi.encoders import jsonable_encoder # Import this
+from fastapi.exceptions import RequestValidationError  # Import this
+from fastapi.responses import JSONResponse  # Import this
+from fastapi.encoders import jsonable_encoder  # Import this
 import logging
 import json
 from datetime import datetime
@@ -25,7 +25,7 @@ from app.core.events import setup_event_handlers
 
 # Configure logging first
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("fastapi") # Use "fastapi" or your project name
+logger = logging.getLogger("fastapi")  # Use "fastapi" or your project name
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -41,7 +41,7 @@ app = FastAPI(
 # Debug the CORS origins setting
 # Ensure origins are strings, handle potential None or empty list
 origins_raw = settings.BACKEND_CORS_ORIGINS or []
-origins = [str(origin) for origin in origins_raw if origin] # Filter out empty/None
+origins = [str(origin) for origin in origins_raw if origin]  # Filter out empty/None
 logger.info(f"Raw CORS origins from settings: {origins_raw}")
 logger.info(f"Processed CORS origins: {origins}")
 
@@ -49,27 +49,30 @@ logger.info(f"Processed CORS origins: {origins}")
 if not origins:
     # Use explicit IP and localhost for development
     fallback_origins = [
-        "http://localhost:3000",          # Local frontend dev
-        "http://127.0.0.1:3000",         # Alternative local frontend dev
-        "http://192.168.178.37:3000",    # Specific dev machine access
+        "http://localhost:3000",  # Local frontend dev
+        "http://127.0.0.1:3000",  # Alternative local frontend dev
+        "http://192.168.178.37:3000",  # Specific dev machine access
         # Add local backend URLs if needed for testing directly
         "http://localhost:8001",
         "http://127.0.0.1:8001",
         "http://192.168.178.37:8001",
-        ]
-    logger.warning(f"No CORS origins configured in settings, using development fallbacks: {fallback_origins}")
+    ]
+    logger.warning(
+        f"No CORS origins configured in settings, using development fallbacks: {fallback_origins}"
+    )
     origins = fallback_origins
 
 # Add the CORS middleware FIRST
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins, # Use the processed origins list
+    allow_origins=origins,  # Use the processed origins list
     allow_credentials=True,
-    allow_methods=["*"], # Allows all standard methods
-    allow_headers=["*"], # Allows all headers
-    expose_headers=["Content-Disposition", "X-Total-Count"], # Example custom headers
-    max_age=86400, # Cache preflight response for 24 hours
+    allow_methods=["*"],  # Allows all standard methods
+    allow_headers=["*"],  # Allows all headers
+    expose_headers=["Content-Disposition", "X-Total-Count"],  # Example custom headers
+    max_age=86400,  # Cache preflight response for 24 hours
 )
+
 
 # --- NEW: Add Validation Error Handler ---
 @app.exception_handler(RequestValidationError)
@@ -77,7 +80,9 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     """
     Handles Pydantic RequestValidationErrors, logging details and returning 422.
     """
-    error_details = jsonable_encoder(exc.errors()) # Use jsonable_encoder for complex types
+    error_details = jsonable_encoder(
+        exc.errors()
+    )  # Use jsonable_encoder for complex types
     # Log the detailed validation errors for backend debugging
     logger.error(f"--- Request Validation Error ---")
     logger.error(f"URL: {request.method} {request.url}")
@@ -100,6 +105,8 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         # Return structure consistent with FastAPI's default
         content={"detail": error_details},
     )
+
+
 # --- END: Validation Error Handler ---
 
 
@@ -126,7 +133,9 @@ async def log_requests(request: Request, call_next):
     except Exception as e:
         # Log unhandled exceptions that occur during request processing
         process_time = (datetime.now() - start_time).total_seconds()
-        logger.exception(f"!! Error during request processing for {request.method} {request.url} ({process_time:.4f}s): {e}")
+        logger.exception(
+            f"!! Error during request processing for {request.method} {request.url} ({process_time:.4f}s): {e}"
+        )
         # Re-raise the exception so FastAPI's default handler can return a 500 response
         raise e
 
@@ -144,7 +153,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
         # Add security headers - Apply even to OPTIONS for consistency? Check spec.
         # Usually applied to actual content responses.
-        if request.method != "OPTIONS": # Apply only to non-preflight requests
+        if request.method != "OPTIONS":  # Apply only to non-preflight requests
             response.headers["X-Content-Type-Options"] = "nosniff"
             response.headers["X-Frame-Options"] = "DENY"
             # response.headers["X-XSS-Protection"] = "1; mode=block" # Deprecated in modern browsers
@@ -158,10 +167,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                 # HSTS for production only, over HTTPS
                 if request.url.scheme == "https":
                     response.headers["Strict-Transport-Security"] = (
-                        "max-age=31536000; includeSubDomains; preload" # Added preload
+                        "max-age=31536000; includeSubDomains; preload"  # Added preload
                     )
 
         return response
+
 
 app.add_middleware(SecurityHeadersMiddleware)
 
@@ -182,18 +192,20 @@ def read_root():
     return {
         "message": "Welcome to HideSync API",
         "project_name": settings.PROJECT_NAME,
-        "version": "1.0.0", # Consider making version dynamic
+        "version": "1.0.0",  # Consider making version dynamic
         "environment": settings.ENVIRONMENT,
         "docs_url": app.docs_url,
         "redoc_url": app.redoc_url,
         "openapi_url": app.openapi_url,
     }
 
+
 @app.get("/health", tags=["Health"], summary="API Health Check")
 def health_check():
     """Returns the operational status of the API."""
     # In a real app, you might check DB connection, external services, etc.
     return {"status": "ok", "timestamp": datetime.now().isoformat()}
+
 
 # Example of how to run (if this file is executed directly)
 # if __name__ == "__main__":

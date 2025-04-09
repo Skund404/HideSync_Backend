@@ -192,25 +192,25 @@ class RepositoryFactory:
 
     # Documentation repositories
     def create_documentation_resource_repository(
-            self,
+        self,
     ) -> DocumentationResourceRepository:
         """Create a DocumentationResourceRepository instance."""
         return DocumentationResourceRepository(self.session, self.encryption_service)
 
     def create_documentation_category_repository(
-            self,
+        self,
     ) -> DocumentationCategoryRepository:
         """Create a DocumentationCategoryRepository instance."""
         return DocumentationCategoryRepository(self.session, self.encryption_service)
 
     def create_application_context_repository(
-            self,
+        self,
     ) -> ApplicationContextRepository:
         """Create an ApplicationContextRepository instance."""
         return ApplicationContextRepository(self.session, self.encryption_service)
 
     def create_contextual_help_mapping_repository(
-            self,
+        self,
     ) -> ContextualHelpMappingRepository:
         """Create a ContextualHelpMappingRepository instance."""
         return ContextualHelpMappingRepository(self.session, self.encryption_service)
@@ -266,7 +266,7 @@ class RepositoryFactory:
         return CommunicationRepository(self.session, self.encryption_service)
 
     def create_customer_communication_repository(
-            self,
+        self,
     ) -> CustomerCommunicationRepository:
         """Create a CustomerCommunicationRepository instance."""
         return CustomerCommunicationRepository(self.session, self.encryption_service)

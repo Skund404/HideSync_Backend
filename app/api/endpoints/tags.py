@@ -38,18 +38,23 @@ from app.core.exceptions import (
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+
 @router.get("/", response_model=TagListResponse)
 async def list_tags(
-        *,
-        db: Session = Depends(get_db),
-        current_user: Any = Depends(get_current_active_user),
-        skip: int = Query(0, ge=0, description="Number of records to skip"),
-        limit: int = Query(100, ge=1, le=500, description="Maximum number of records to return"),
-        sort_by: str = Query("name", description="Field to sort by"),
-        sort_dir: str = Query("asc", description="Sort direction ('asc' or 'desc')"),
-        name: Optional[str] = Query(None, description="Filter by tag name"),
-        search: Optional[str] = Query(None, description="Search term"),
-        estimate_count: bool = Query(True, description="Use faster but approximate total count"),
+    *,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_active_user),
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(
+        100, ge=1, le=500, description="Maximum number of records to return"
+    ),
+    sort_by: str = Query("name", description="Field to sort by"),
+    sort_dir: str = Query("asc", description="Sort direction ('asc' or 'desc')"),
+    name: Optional[str] = Query(None, description="Filter by tag name"),
+    search: Optional[str] = Query(None, description="Search term"),
+    estimate_count: bool = Query(
+        True, description="Use faster but approximate total count"
+    ),
 ):
     """
     Retrieve a list of tags with optional filtering and pagination.
@@ -74,6 +79,7 @@ async def list_tags(
         try:
             import gc
             import psutil
+
             process = psutil.Process()
             mem_before = process.memory_info().rss / (1024 * 1024)
             if mem_before > 150:  # If already using > 150MB
@@ -120,12 +126,13 @@ async def list_tags(
             pages=0,
         )
 
+
 @router.post("/", response_model=TagResponse, status_code=status.HTTP_201_CREATED)
 async def create_tag(
-        *,
-        db: Session = Depends(get_db),
-        current_user: Any = Depends(get_current_active_user),
-        tag_in: TagCreate,
+    *,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_active_user),
+    tag_in: TagCreate,
 ):
     """
     Create a new tag.
@@ -152,16 +159,16 @@ async def create_tag(
         logger.error(f"Error creating tag: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred while creating the tag"
+            detail="An unexpected error occurred while creating the tag",
         )
 
 
 @router.get("/{tag_id}", response_model=TagResponse)
 async def get_tag(
-        *,
-        db: Session = Depends(get_db),
-        current_user: Any = Depends(get_current_active_user),
-        tag_id: str = Path(..., description="The ID of the tag"),
+    *,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_active_user),
+    tag_id: str = Path(..., description="The ID of the tag"),
 ):
     """
     Retrieve detailed information about a specific tag.
@@ -186,17 +193,17 @@ async def get_tag(
         logger.error(f"Error retrieving tag {tag_id}: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred while retrieving the tag"
+            detail="An unexpected error occurred while retrieving the tag",
         )
 
 
 @router.put("/{tag_id}", response_model=TagResponse)
 async def update_tag(
-        *,
-        db: Session = Depends(get_db),
-        current_user: Any = Depends(get_current_active_user),
-        tag_id: str = Path(..., description="The ID of the tag"),
-        tag_in: TagUpdate,
+    *,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_active_user),
+    tag_id: str = Path(..., description="The ID of the tag"),
+    tag_in: TagUpdate,
 ):
     """
     Update a tag.
@@ -227,16 +234,16 @@ async def update_tag(
         logger.error(f"Error updating tag {tag_id}: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred while updating the tag"
+            detail="An unexpected error occurred while updating the tag",
         )
 
 
 @router.delete("/{tag_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_tag(
-        *,
-        db: Session = Depends(get_db),
-        current_user: Any = Depends(get_current_active_user),
-        tag_id: str = Path(..., description="The ID of the tag"),
+    *,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_active_user),
+    tag_id: str = Path(..., description="The ID of the tag"),
 ):
     """
     Delete a tag.
@@ -259,18 +266,20 @@ async def delete_tag(
         logger.error(f"Error deleting tag {tag_id}: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred while deleting the tag"
+            detail="An unexpected error occurred while deleting the tag",
         )
 
 
 @router.get("/{tag_id}/assets")
 async def get_tag_assets(
-        *,
-        db: Session = Depends(get_db),
-        current_user: Any = Depends(get_current_active_user),
-        tag_id: str = Path(..., description="The ID of the tag"),
-        skip: int = Query(0, ge=0, description="Number of records to skip"),
-        limit: int = Query(100, ge=1, le=500, description="Maximum number of records to return"),
+    *,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_active_user),
+    tag_id: str = Path(..., description="The ID of the tag"),
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(
+        100, ge=1, le=500, description="Maximum number of records to return"
+    ),
 ):
     """
     Get all media assets associated with a specific tag with pagination.
@@ -305,28 +314,22 @@ async def get_tag_assets(
             "total": total,
             "page": page,
             "pages": pages,
-            "size": limit
+            "size": limit,
         }
     except EntityNotFoundException as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
         logger.error(f"Error getting assets for tag {tag_id}: {e}", exc_info=True)
         # Return empty response on error
-        return {
-            "items": [],
-            "total": 0,
-            "page": 1,
-            "pages": 0,
-            "size": limit
-        }
+        return {"items": [], "total": 0, "page": 1, "pages": 0, "size": limit}
 
 
 @router.get("/{tag_id}/count", response_model=int)
 async def get_asset_count_by_tag(
-        *,
-        db: Session = Depends(get_db),
-        current_user: Any = Depends(get_current_active_user),
-        tag_id: str = Path(..., description="The ID of the tag"),
+    *,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_active_user),
+    tag_id: str = Path(..., description="The ID of the tag"),
 ):
     """
     Get the number of media assets associated with a specific tag.
@@ -353,5 +356,5 @@ async def get_asset_count_by_tag(
         logger.error(f"Error getting asset count for tag {tag_id}: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred while counting assets"
+            detail="An unexpected error occurred while counting assets",
         )

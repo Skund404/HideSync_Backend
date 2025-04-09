@@ -30,13 +30,13 @@ class Tag(AbstractBase, TimestampMixin):
     name = Column(String(100), nullable=False, unique=True, index=True)
     description = Column(String(500), nullable=True)
     color = Column(String(7), nullable=True)  # Hex color code (e.g., #FF5733)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    created_at = Column(
+        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
+    )
 
     # Relationships
     media_assets = relationship(
-        "MediaAsset",
-        secondary="media_asset_tags",
-        back_populates="tags"
+        "MediaAsset", secondary="media_asset_tags", back_populates="tags"
     )
 
     def __repr__(self):

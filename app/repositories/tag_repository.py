@@ -18,6 +18,7 @@ from app.repositories.base_repository import BaseRepository
 
 from sqlalchemy.sql import text
 
+
 class TagRepository(BaseRepository[Tag]):
     """
     Repository for Tag entity operations.
@@ -48,8 +49,8 @@ class TagRepository(BaseRepository[Tag]):
             The created tag
         """
         # Generate a UUID for the new tag if not provided
-        if 'id' not in data:
-            data['id'] = str(uuid.uuid4())
+        if "id" not in data:
+            data["id"] = str(uuid.uuid4())
 
         return self.create(data)
 
@@ -76,25 +77,28 @@ class TagRepository(BaseRepository[Tag]):
         Returns:
             The tag with media assets if found, None otherwise
         """
-        query = self.session.query(self.model). \
-            options(joinedload(self.model.media_assets)). \
-            filter(self.model.id == id)
+        query = (
+            self.session.query(self.model)
+            .options(joinedload(self.model.media_assets))
+            .filter(self.model.id == id)
+        )
 
         entity = query.first()
 
         return self._decrypt_sensitive_fields(entity) if entity else None
 
     def search_tags(
-            self,
-            search_params: Dict[str, Any],
-            skip: int = 0,
-            limit: int = 100,
-            sort_by: str = "name",
-            sort_dir: str = "asc",
-            estimate_count: bool = True
+        self,
+        search_params: Dict[str, Any],
+        skip: int = 0,
+        limit: int = 100,
+        sort_by: str = "name",
+        sort_dir: str = "asc",
+        estimate_count: bool = True,
     ) -> Tuple[List[Tag], int]:
         import logging
         from sqlalchemy.sql import func
+
         logger = logging.getLogger(__name__)
         """
         Search for tags with filtering, sorting, and pagination.
@@ -125,7 +129,7 @@ class TagRepository(BaseRepository[Tag]):
                 query = query.filter(
                     or_(
                         Tag.name.ilike(f"%{search_term}%"),
-                        Tag.description.ilike(f"%{search_term}%")
+                        Tag.description.ilike(f"%{search_term}%"),
                     )
                 )
 
@@ -145,11 +149,14 @@ class TagRepository(BaseRepository[Tag]):
         except MemoryError:
             # Fallback if we still encounter memory errors
             import gc
+
             gc.collect()  # Force garbage collection
 
             # Return a reasonable estimate and warning
             total = limit * 10  # Assume at least 10 pages worth
-            logger.warning(f"Memory error during count operation, using estimated total: {total}")
+            logger.warning(
+                f"Memory error during count operation, using estimated total: {total}"
+            )
         except Exception as e:
             logger.error(f"Error in tag count query: {e}")
             total = 0  # Default to zero in case of errors
@@ -201,9 +208,11 @@ class TagRepository(BaseRepository[Tag]):
         Returns:
             List of tags associated with the media asset
         """
-        query = self.session.query(self.model). \
-            join(MediaAssetTag, MediaAssetTag.tag_id == self.model.id). \
-            filter(MediaAssetTag.media_asset_id == asset_id)
+        query = (
+            self.session.query(self.model)
+            .join(MediaAssetTag, MediaAssetTag.tag_id == self.model.id)
+            .filter(MediaAssetTag.media_asset_id == asset_id)
+        )
 
         tags = query.all()
 
@@ -219,6 +228,8 @@ class TagRepository(BaseRepository[Tag]):
         Returns:
             Number of associated media assets
         """
-        return self.session.query(MediaAssetTag). \
-            filter(MediaAssetTag.tag_id == tag_id). \
-            count()
+        return (
+            self.session.query(MediaAssetTag)
+            .filter(MediaAssetTag.tag_id == tag_id)
+            .count()
+        )

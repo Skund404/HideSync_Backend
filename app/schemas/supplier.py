@@ -55,7 +55,7 @@ class SupplierCreate(SupplierBase):
     Schema for creating a new supplier.
     """
 
-    @validator('phone', pre=True, always=True)
+    @validator("phone", pre=True, always=True)
     def validate_phone_number(cls, v):
         if v is None:
             return v
@@ -128,7 +128,7 @@ class SupplierInDB(SupplierBase):
     )
 
     # Add validator to handle NULL timestamps
-    @validator('created_at', 'updated_at', pre=True)
+    @validator("created_at", "updated_at", pre=True)
     def set_datetime_defaults(cls, value):
         # If value is None, return the current datetime
         if value is None:
@@ -194,7 +194,7 @@ class SupplierRatingInDB(SupplierRatingBase):
     )
 
     # Add validator for NULL timestamp
-    @validator('created_at', pre=True)
+    @validator("created_at", pre=True)
     def set_datetime_defaults(cls, value):
         # If value is None, return the current datetime
         if value is None:
@@ -248,7 +248,7 @@ class SupplierHistoryInDB(SupplierHistoryBase):
     )
 
     # Add validator for NULL timestamp
-    @validator('created_at', pre=True)
+    @validator("created_at", pre=True)
     def set_datetime_defaults(cls, value):
         # If value is None, return the current datetime
         if value is None:

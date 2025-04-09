@@ -6,7 +6,11 @@ from sqlalchemy.orm import Session
 import logging
 from datetime import datetime
 
-from app.core.exceptions import HideSyncException, EntityNotFoundException, BusinessRuleException
+from app.core.exceptions import (
+    HideSyncException,
+    EntityNotFoundException,
+    BusinessRuleException,
+)
 from app.repositories.base_repository import BaseRepository
 
 T = TypeVar("T")
@@ -28,13 +32,13 @@ class BaseService(Generic[T]):
     """
 
     def __init__(
-            self,
-            session: Session,
-            repository_class: Optional[Type[BaseRepository]] = None,
-            repository: Optional[BaseRepository] = None,
-            security_context=None,
-            event_bus=None,
-            cache_service=None,
+        self,
+        session: Session,
+        repository_class: Optional[Type[BaseRepository]] = None,
+        repository: Optional[BaseRepository] = None,
+        security_context=None,
+        event_bus=None,
+        cache_service=None,
     ):
         """
         Initialize service with dependencies.
@@ -104,11 +108,11 @@ class BaseService(Generic[T]):
             return
 
         # Store original user
-        original_user = getattr(self.security_context, 'current_user', None)
+        original_user = getattr(self.security_context, "current_user", None)
 
         try:
             # Set temporary user
-            self.security_context.current_user = type('User', (), {'id': user_id})
+            self.security_context.current_user = type("User", (), {"id": user_id})
             yield
         finally:
             # Restore original user
@@ -152,12 +156,12 @@ class BaseService(Generic[T]):
         return self.repository.list(skip=skip, limit=limit, **filters)
 
     def list_paginated(
-            self,
-            page_size: int = 100,
-            cursor: Optional[str] = None,
-            sort_by: str = "id",
-            sort_dir: str = "asc",
-            **filters,
+        self,
+        page_size: int = 100,
+        cursor: Optional[str] = None,
+        sort_by: str = "id",
+        sort_dir: str = "asc",
+        **filters,
     ) -> Dict[str, Any]:
         """
         List entities with cursor-based pagination and filtering.
@@ -229,7 +233,9 @@ class BaseService(Generic[T]):
 
             return entity
 
-    def update(self, id: int, data: Dict[str, Any], user_id: Optional[int] = None) -> Optional[T]:
+    def update(
+        self, id: int, data: Dict[str, Any], user_id: Optional[int] = None
+    ) -> Optional[T]:
         """
         Update an existing entity.
 
@@ -345,17 +351,19 @@ class BaseService(Generic[T]):
         """
         entity = self.get_by_id(id)
         if not entity:
-            entity_name = self.repository.model.__name__ if self.repository else "Entity"
+            entity_name = (
+                self.repository.model.__name__ if self.repository else "Entity"
+            )
             message = error_message or f"{entity_name} with ID {id} not found"
             raise EntityNotFoundException(message)
         return entity
 
     def _log_operation(
-            self,
-            operation: str,
-            entity_type: str,
-            entity_id: Any = None,
-            details: Dict[str, Any] = None,
+        self,
+        operation: str,
+        entity_type: str,
+        entity_id: Any = None,
+        details: Dict[str, Any] = None,
     ) -> None:
         """
         Log an operation for auditing purposes.

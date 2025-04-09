@@ -64,6 +64,7 @@ def validate_input(validator: Callable) -> Callable:
     """
     Decorator to validate service inputs.
     """
+
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         def wrapper(self, *args, **kwargs):
@@ -83,11 +84,12 @@ def validate_input(validator: Callable) -> Callable:
             return func(self, *args, **kwargs)
 
         return wrapper
+
     return decorator
 
+
 def validate_entity(
-    entity_class: Type,
-    exclude_fields: Optional[List[str]] = None
+    entity_class: Type, exclude_fields: Optional[List[str]] = None
 ) -> Callable:
     """
     Create a validator function for an entity with enhanced validation.
@@ -114,9 +116,7 @@ def validate_entity(
         result = ValidationResult()
 
         # Get field requirements from the entity class
-        field_requirements = getattr(
-            entity_class, "FIELD_REQUIREMENTS", {}
-        )
+        field_requirements = getattr(entity_class, "FIELD_REQUIREMENTS", {})
 
         for field, requirements in field_requirements.items():
             # Skip excluded fields or fields not in data
@@ -136,48 +136,45 @@ def validate_entity(
 
             # Type validation
             expected_type = requirements.get("type")
-            if (
-                expected_type
-                and not isinstance(value, expected_type)
-            ):
+            if expected_type and not isinstance(value, expected_type):
                 # Special handling for enums
-                if hasattr(expected_type, '__origin__') and expected_type.__origin__ is type(Enum):
+                if hasattr(
+                    expected_type, "__origin__"
+                ) and expected_type.__origin__ is type(Enum):
                     try:
                         # Try to convert string to enum
-                        normalize_method = getattr(expected_type, 'normalize', expected_type)
+                        normalize_method = getattr(
+                            expected_type, "normalize", expected_type
+                        )
                         normalized_value = normalize_method(value)
                     except (ValueError, TypeError):
                         result.add_error(
-                            field,
-                            f"{field} must be a valid {expected_type.__name__}"
+                            field, f"{field} must be a valid {expected_type.__name__}"
                         )
                 else:
                     result.add_error(
-                        field,
-                        f"{field} must be of type {expected_type.__name__}"
+                        field, f"{field} must be of type {expected_type.__name__}"
                     )
 
             # Enum validation
-            if hasattr(requirements, 'enum'):
-                enum_type = requirements['enum']
+            if hasattr(requirements, "enum"):
+                enum_type = requirements["enum"]
                 try:
                     # Attempt to convert/validate enum value
                     if isinstance(value, str):
                         # Use normalize method if available, otherwise use enum conversion
-                        normalize_method = getattr(enum_type, 'normalize', None)
+                        normalize_method = getattr(enum_type, "normalize", None)
                         if normalize_method:
                             normalized_value = normalize_method(value)
                         else:
                             normalized_value = enum_type(value)
                     elif not isinstance(value, enum_type):
                         result.add_error(
-                            field,
-                            f"{field} must be a valid {enum_type.__name__}"
+                            field, f"{field} must be a valid {enum_type.__name__}"
                         )
                 except (ValueError, TypeError):
                     result.add_error(
-                        field,
-                        f"{field} must be a valid {enum_type.__name__}"
+                        field, f"{field} must be a valid {enum_type.__name__}"
                     )
 
             # Min/max validation for numeric fields
@@ -270,7 +267,7 @@ def validate_phone(phone: str) -> str:
         ModelValidationError if phone number is invalid
     """
     # Remove all non-digit characters
-    cleaned_phone = re.sub(r'\D', '', phone)
+    cleaned_phone = re.sub(r"\D", "", phone)
 
     # Check if the cleaned phone number has between 7 and 15 digits
     if not (7 <= len(cleaned_phone) <= 15):

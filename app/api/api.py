@@ -54,4 +54,6 @@ api_router.include_router(
     media_assets.router, prefix="/media-assets", tags=["Media Assets"]
 )
 api_router.include_router(tags.router, prefix="/tags", tags=["Tags"])
-api_router.include_router(entity_media.router, prefix="/entity-media", tags=["entity-media"])
+api_router.include_router(
+    entity_media.router, prefix="/entity-media", tags=["entity-media"]
+)

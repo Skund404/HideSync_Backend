@@ -55,6 +55,7 @@ class Settings(BaseSettings):
             # Try to parse as JSON string
             try:
                 import json
+
                 parsed = json.loads(v)
                 if isinstance(parsed, list):
                     return parsed
@@ -84,7 +85,9 @@ class Settings(BaseSettings):
     # SQLCipher
     USE_SQLCIPHER: bool = True
     DATABASE_PATH: str = "hidesync.db"
-    DATABASE_ENCRYPTION_KEY: str = "8f353342c59546db88dd352f883e440e0a413d34149bbdced9b4fc0c84028d9e"
+    DATABASE_ENCRYPTION_KEY: str = (
+        "8f353342c59546db88dd352f883e440e0a413d34149bbdced9b4fc0c84028d9e"
+    )
 
     # Key Management
     KEY_MANAGEMENT_METHOD: str = "file"

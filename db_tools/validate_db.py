@@ -20,8 +20,7 @@ if str(project_root) not in sys.path:
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -37,43 +36,64 @@ except ImportError as e:
 # List of all expected tables in the database based on the ER diagram
 EXPECTED_TABLES = [
     # Core entities
-    "users", "roles", "permissions",
-    "customers", "suppliers",
-    "materials", "leather_materials", "hardware_materials", "supplies_materials",
-    "tools", "products", "components",
-
+    "users",
+    "roles",
+    "permissions",
+    "customers",
+    "suppliers",
+    "materials",
+    "leather_materials",
+    "hardware_materials",
+    "supplies_materials",
+    "tools",
+    "products",
+    "components",
     # Storage system
-    "storage_locations", "storage_cells", "storage_assignments", "storage_moves",
-
+    "storage_locations",
+    "storage_cells",
+    "storage_assignments",
+    "storage_moves",
     # Projects system
-    "projects", "project_templates", "project_components", "timeline_tasks",
-    "recurring_projects", "recurrence_patterns", "generated_projects",
-
+    "projects",
+    "project_templates",
+    "project_components",
+    "timeline_tasks",
+    "recurring_projects",
+    "recurrence_patterns",
+    "generated_projects",
     # Sales system
-    "sales", "sale_items", "shipments", "refunds",
-
+    "sales",
+    "sale_items",
+    "shipments",
+    "refunds",
     # Purchasing system
-    "purchases", "purchase_items", "purchase_timeline_items",
-
+    "purchases",
+    "purchase_items",
+    "purchase_timeline_items",
     # Tool management
-    "tool_maintenance", "tool_checkouts",
-
+    "tool_maintenance",
+    "tool_checkouts",
     # Planning and picking
-    "patterns", "picking_lists", "picking_list_items",
-
+    "patterns",
+    "picking_lists",
+    "picking_list_items",
     # Inventory management
-    "inventory", "component_materials",
-
+    "inventory",
+    "component_materials",
     # Documentation system
-    "documentation_categories", "documentation_resources",
-    "documentation_category_assignments", "application_contexts",
+    "documentation_categories",
+    "documentation_resources",
+    "documentation_category_assignments",
+    "application_contexts",
     "contextual_help_mappings",
-
     # Platform integration
-    "platform_integrations", "sync_events",
-
+    "platform_integrations",
+    "sync_events",
     # Media system
-    "media_assets", "media_tags", "media_asset_tags", "entity_media"
+    "media_assets",
+    "media_tags",
+    "media_asset_tags",
+    "entity_media",
 ]
 
 
@@ -134,19 +154,32 @@ def validate_database():
                 logger.info(f"  + {table}")
 
         # Check media system tables specifically
-        media_tables = {'media_assets', 'entity_media', 'media_tags', 'media_asset_tags'}
+        media_tables = {
+            "media_assets",
+            "entity_media",
+            "media_tags",
+            "media_asset_tags",
+        }
         missing_media_tables = media_tables - existing_tables
 
         if missing_media_tables:
-            logger.warning(f"Missing media system tables: {', '.join(sorted(missing_media_tables))}")
+            logger.warning(
+                f"Missing media system tables: {', '.join(sorted(missing_media_tables))}"
+            )
         else:
             logger.info("All media system tables are present")
 
         # Check for data in key tables
         key_tables = [
-            "users", "roles", "permissions",
-            "customers", "suppliers", "materials",
-            "projects", "sales", "purchases"
+            "users",
+            "roles",
+            "permissions",
+            "customers",
+            "suppliers",
+            "materials",
+            "projects",
+            "sales",
+            "purchases",
         ]
 
         for table in key_tables:
@@ -161,7 +194,9 @@ def validate_database():
         # Check for admin user
         if "users" in existing_tables:
             try:
-                cursor.execute("SELECT id, email, is_superuser FROM users WHERE is_superuser = 1")
+                cursor.execute(
+                    "SELECT id, email, is_superuser FROM users WHERE is_superuser = 1"
+                )
                 admin_users = cursor.fetchall()
                 if admin_users:
                     logger.info(f"Found {len(admin_users)} admin users:")
@@ -181,6 +216,7 @@ def validate_database():
     except Exception as e:
         logger.error(f"Error validating database: {e}")
         import traceback
+
         logger.error(traceback.format_exc())
         return False
 
@@ -190,11 +226,7 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="Validate HideSync database")
-    parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Enable verbose output"
-    )
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
 
     args = parser.parse_args()
 

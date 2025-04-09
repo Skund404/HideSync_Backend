@@ -66,7 +66,9 @@ class StorageCellInDB(StorageCellBase):
     Schema for storage cell information as stored in the database.
     """
 
-    id: str = Field(..., description="Unique identifier for the storage cell") # Added ID
+    id: str = Field(
+        ..., description="Unique identifier for the storage cell"
+    )  # Added ID
     storage_id: str = Field(
         ..., description="ID of the storage location this cell belongs to"
     )
@@ -174,7 +176,11 @@ class StorageLocationUpdate(BaseModel):
     def validate_utilized(cls, v, values):
         # Ensure capacity is present and a number before comparison
         capacity = values.get("capacity")
-        if v is not None and capacity is not None and isinstance(capacity, (int, float)):
+        if (
+            v is not None
+            and capacity is not None
+            and isinstance(capacity, (int, float))
+        ):
             if v > capacity:
                 raise ValueError("Utilized space cannot exceed capacity")
         return v
@@ -226,7 +232,9 @@ class StorageLocationList(BaseModel):
         ..., description="Total number of storage locations matching the query"
     )
     page: int = Field(..., description="Current page number")
-    size: int = Field(..., description="Number of items per page") # Use 'size' to match frontend
+    size: int = Field(
+        ..., description="Number of items per page"
+    )  # Use 'size' to match frontend
     pages: int = Field(..., description="Total number of pages")
 
 
@@ -381,71 +389,91 @@ class StorageMoveList(BaseModel):
         ..., description="Total number of storage moves matching the query"
     )
     page: int = Field(..., description="Current page number")
-    size: int = Field(..., description="Number of items per page") # Use 'size' to match frontend
+    size: int = Field(
+        ..., description="Number of items per page"
+    )  # Use 'size' to match frontend
     pages: int = Field(..., description="Total number of pages")
 
 
 # --- Occupancy Report Schema ---
 class OccupancyStats(BaseModel):
     """Sub-schema for capacity/utilization stats."""
+
     capacity: float = 0.0
     utilized: float = 0.0
     locations: int = 0
     utilization_percentage: float = 0.0
 
+
 class LocationUtilizationInfo(BaseModel):
     """Sub-schema for most/least utilized locations."""
+
     id: str
     name: str
-    capacity: int # Keep as int for display?
-    utilized: int # Keep as int for display?
+    capacity: int  # Keep as int for display?
+    utilized: int  # Keep as int for display?
     utilization_percentage: float
+
 
 class StorageOccupancyReport(BaseModel):
     """
     Schema for storage occupancy report.
     """
+
     total_locations: int = Field(..., description="Total number of storage locations")
     total_capacity: float = Field(..., description="Total storage capacity")
     total_utilized: float = Field(..., description="Total utilized storage")
-    total_items: Optional[int] = Field(None, description="Total number of distinct assigned items") # Made optional
-    utilization_percentage: float = Field(..., description="Overall storage utilization percentage based on capacity")
-    overall_usage_percentage: float = Field(..., description="Overall usage percentage (might be same as utilization)")
+    total_items: Optional[int] = Field(
+        None, description="Total number of distinct assigned items"
+    )  # Made optional
+    utilization_percentage: float = Field(
+        ..., description="Overall storage utilization percentage based on capacity"
+    )
+    overall_usage_percentage: float = Field(
+        ..., description="Overall usage percentage (might be same as utilization)"
+    )
 
-    by_section: Dict[str, OccupancyStats] = Field( # Use sub-schema
+    by_section: Dict[str, OccupancyStats] = Field(  # Use sub-schema
         default_factory=dict, description="Storage utilization grouped by section"
     )
-    by_type: Dict[str, OccupancyStats] = Field( # Use sub-schema
+    by_type: Dict[str, OccupancyStats] = Field(  # Use sub-schema
         default_factory=dict, description="Storage utilization grouped by location type"
     )
 
-    locations_by_type: Dict[str, int] = Field( # Just the count here
+    locations_by_type: Dict[str, int] = Field(  # Just the count here
         default_factory=dict, description="Count of locations grouped by type"
     )
-    locations_by_section: Dict[str, int] = Field( # Just the count here
+    locations_by_section: Dict[str, int] = Field(  # Just the count here
         default_factory=dict, description="Count of locations grouped by section"
     )
 
-    items_by_type: Dict[str, int] = Field( # Count of items by type
+    items_by_type: Dict[str, int] = Field(  # Count of items by type
         default_factory=dict, description="Count of items grouped by material type"
     )
 
-    locations_at_capacity: int = Field(..., description="Number of locations at or near full capacity (e.g., >= 95%)")
-    locations_nearly_empty: int = Field(..., description="Number of locations nearly empty (e.g., <= 10%)")
-
-    most_utilized_locations: List[LocationUtilizationInfo] = Field( # Use sub-schema
-        default_factory=list, description="List of most utilized locations (e.g., top 5)"
+    locations_at_capacity: int = Field(
+        ..., description="Number of locations at or near full capacity (e.g., >= 95%)"
     )
-    least_utilized_locations: List[LocationUtilizationInfo] = Field( # Use sub-schema
-        default_factory=list, description="List of least utilized locations (e.g., bottom 5, non-empty)"
+    locations_nearly_empty: int = Field(
+        ..., description="Number of locations nearly empty (e.g., <= 10%)"
     )
 
-    recommendations: List[str] = Field( # Changed to non-optional list
+    most_utilized_locations: List[LocationUtilizationInfo] = Field(  # Use sub-schema
+        default_factory=list,
+        description="List of most utilized locations (e.g., top 5)",
+    )
+    least_utilized_locations: List[LocationUtilizationInfo] = Field(  # Use sub-schema
+        default_factory=list,
+        description="List of least utilized locations (e.g., bottom 5, non-empty)",
+    )
+
+    recommendations: List[str] = Field(  # Changed to non-optional list
         default_factory=list, description="Storage optimization recommendations"
     )
 
     class Config:
-        from_attributes = True # Keep this if needed for ORM mapping
+        from_attributes = True  # Keep this if needed for ORM mapping
+
 
 # --- Search Parameters ---
 class StorageSearchParams(BaseModel):

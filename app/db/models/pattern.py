@@ -27,7 +27,9 @@ from app.db.models.base import AbstractBase, ValidationMixin, TimestampMixin
 # Import the necessary Enums
 from app.db.models.enums import ProjectType, SkillLevel, FileType  # <<< ADD FileType
 import logging
+
 logger = logging.getLogger(__name__)
+
 
 class Pattern(AbstractBase, ValidationMixin, TimestampMixin):
     """

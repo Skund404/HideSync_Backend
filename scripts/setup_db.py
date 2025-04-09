@@ -69,7 +69,13 @@ except Exception as e:
 
 # --- Imports (after path setup and patching) ---
 try:
-    from app.db.session import SessionLocal, engine, EncryptionManager, use_sqlcipher, init_db
+    from app.db.session import (
+        SessionLocal,
+        engine,
+        EncryptionManager,
+        use_sqlcipher,
+        init_db,
+    )
     from app.core.config import settings
     from app.core.key_manager import KeyManager
     from app.db.models.base import Base
@@ -182,7 +188,7 @@ model_map = {
 
 # --- SQL statements for media system tables ---
 MEDIA_SYSTEM_TABLE_STATEMENTS = {
-    'media_assets': """
+    "media_assets": """
     CREATE TABLE IF NOT EXISTS media_assets (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         filename TEXT NOT NULL,
@@ -205,7 +211,7 @@ MEDIA_SYSTEM_TABLE_STATEMENTS = {
         metadata TEXT
     );
     """,
-    'entity_media': """
+    "entity_media": """
     CREATE TABLE IF NOT EXISTS entity_media (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         media_asset_id INTEGER NOT NULL,
@@ -221,7 +227,7 @@ MEDIA_SYSTEM_TABLE_STATEMENTS = {
         FOREIGN KEY (media_asset_id) REFERENCES media_assets(id) ON DELETE CASCADE
     );
     """,
-    'media_tags': """
+    "media_tags": """
     CREATE TABLE IF NOT EXISTS media_tags (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL UNIQUE,
@@ -230,7 +236,7 @@ MEDIA_SYSTEM_TABLE_STATEMENTS = {
         updated_at TIMESTAMP
     );
     """,
-    'media_asset_tags': """
+    "media_asset_tags": """
     CREATE TABLE IF NOT EXISTS media_asset_tags (
         media_asset_id INTEGER NOT NULL,
         tag_id INTEGER NOT NULL,
@@ -238,49 +244,70 @@ MEDIA_SYSTEM_TABLE_STATEMENTS = {
         FOREIGN KEY (media_asset_id) REFERENCES media_assets(id) ON DELETE CASCADE,
         FOREIGN KEY (tag_id) REFERENCES media_tags(id) ON DELETE CASCADE
     );
-    """
+    """,
 }
 
 # List of all expected tables in the database based on the ER diagram
 EXPECTED_TABLES = [
     # Core entities
-    "users", "roles", "permissions",
-    "customers", "suppliers",
-    "materials", "leather_materials", "hardware_materials", "supplies_materials",
-    "tools", "products", "components",
-
+    "users",
+    "roles",
+    "permissions",
+    "customers",
+    "suppliers",
+    "materials",
+    "leather_materials",
+    "hardware_materials",
+    "supplies_materials",
+    "tools",
+    "products",
+    "components",
     # Storage system
-    "storage_locations", "storage_cells", "storage_assignments", "storage_moves",
-
+    "storage_locations",
+    "storage_cells",
+    "storage_assignments",
+    "storage_moves",
     # Projects system
-    "projects", "project_templates", "project_components", "timeline_tasks",
-    "recurring_projects", "recurrence_patterns", "generated_projects",
-
+    "projects",
+    "project_templates",
+    "project_components",
+    "timeline_tasks",
+    "recurring_projects",
+    "recurrence_patterns",
+    "generated_projects",
     # Sales system
-    "sales", "sale_items", "shipments", "refunds",
-
+    "sales",
+    "sale_items",
+    "shipments",
+    "refunds",
     # Purchasing system
-    "purchases", "purchase_items", "purchase_timeline_items",
-
+    "purchases",
+    "purchase_items",
+    "purchase_timeline_items",
     # Tool management
-    "tool_maintenance", "tool_checkouts",
-
+    "tool_maintenance",
+    "tool_checkouts",
     # Planning and picking
-    "patterns", "picking_lists", "picking_list_items",
-
+    "patterns",
+    "picking_lists",
+    "picking_list_items",
     # Inventory management
-    "inventory", "component_materials",
-
+    "inventory",
+    "component_materials",
     # Documentation system
-    "documentation_categories", "documentation_resources",
-    "documentation_category_assignments", "application_contexts",
+    "documentation_categories",
+    "documentation_resources",
+    "documentation_category_assignments",
+    "application_contexts",
     "contextual_help_mappings",
-
     # Platform integration
-    "platform_integrations", "sync_events",
-
+    "platform_integrations",
+    "sync_events",
     # Media system
-    "media_assets", "media_tags", "media_asset_tags", "entity_media"
+    "media_assets",
+    "media_tags",
+    "media_asset_tags",
+    "entity_media",
 ]
 
 # --- Define Field Overrides ---
@@ -313,6 +340,7 @@ overrides_by_entity = {
 
 
 # --- Helper Functions ---
+
 
 def camel_to_snake(name: str) -> str:
     """Convert a camelCase string to snake_case."""
@@ -376,6 +404,7 @@ def map_material_attributes(data: Dict[str, Any], material_type: str) -> Dict[st
 
 
 # --- Command Line Argument Parsing ---
+
 
 def parse_arguments():
     """Parse command line arguments."""
@@ -448,6 +477,7 @@ Examples:
 
 # --- Database Operations ---
 
+
 def reset_database():
     """Reset the database by deleting the existing database file."""
     db_path = os.path.abspath(settings.DATABASE_PATH)
@@ -488,7 +518,9 @@ def initialize_database_schema():
     logger.info("Registered models (from Base.metadata):")
     table_names = sorted(Base.metadata.tables.keys())
     if not table_names:
-        logger.warning("No tables found in Base.metadata. Ensure models are imported correctly.")
+        logger.warning(
+            "No tables found in Base.metadata. Ensure models are imported correctly."
+        )
 
     for table_name in table_names:
         logger.info(f"- {table_name}")
@@ -527,6 +559,7 @@ def initialize_database_schema():
             logger.error(f"Error creating database tables: {str(e)}")
             logger.error(f"Detailed create_all error: {e}")
             import traceback
+
             logger.error(traceback.format_exc())
             return False
 
@@ -575,7 +608,12 @@ def create_media_tables_direct_sql():
 
         # Create tables in the right order to respect foreign key constraints
         tables_to_create = []
-        for table_name in ['media_assets', 'entity_media', 'media_tags', 'media_asset_tags']:
+        for table_name in [
+            "media_assets",
+            "entity_media",
+            "media_tags",
+            "media_asset_tags",
+        ]:
             if table_name not in existing_tables:
                 tables_to_create.append(table_name)
 
@@ -587,7 +625,12 @@ def create_media_tables_direct_sql():
 
         # Create tables (in the right order for foreign key constraints)
         created_tables = []
-        for table_name in ['media_assets', 'media_tags', 'media_asset_tags', 'entity_media']:
+        for table_name in [
+            "media_assets",
+            "media_tags",
+            "media_asset_tags",
+            "entity_media",
+        ]:
             if table_name in tables_to_create:
                 try:
                     cursor.execute(MEDIA_SYSTEM_TABLE_STATEMENTS[table_name])
@@ -619,11 +662,13 @@ def create_media_tables_direct_sql():
     except Exception as e:
         logger.error(f"Error ensuring media tables exist: {e}")
         import traceback
+
         logger.error(traceback.format_exc())
         return False
 
 
 # --- Database Diagnostics ---
+
 
 def run_database_diagnostics(verbose=False, fix_missing=False):
     """Run a comprehensive database diagnostic check."""
@@ -677,7 +722,9 @@ def run_database_diagnostics(verbose=False, fix_missing=False):
 
         # Get database file info
         db_size = os.path.getsize(db_path)
-        logger.info(f"Database file size: {db_size} bytes ({db_size / 1024 / 1024:.2f} MB)")
+        logger.info(
+            f"Database file size: {db_size} bytes ({db_size / 1024 / 1024:.2f} MB)"
+        )
 
         # Get all tables in the database
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
@@ -704,11 +751,18 @@ def run_database_diagnostics(verbose=False, fix_missing=False):
                 logger.info(f"  + {table}")
 
         # Check media system tables specifically
-        media_tables = {'media_assets', 'entity_media', 'media_tags', 'media_asset_tags'}
+        media_tables = {
+            "media_assets",
+            "entity_media",
+            "media_tags",
+            "media_asset_tags",
+        }
         missing_media_tables = media_tables - existing_tables
 
         if missing_media_tables:
-            logger.warning(f"Missing media system tables: {', '.join(sorted(missing_media_tables))}")
+            logger.warning(
+                f"Missing media system tables: {', '.join(sorted(missing_media_tables))}"
+            )
 
             if fix_missing:
                 logger.info("Attempting to create missing media tables...")
@@ -730,7 +784,9 @@ def run_database_diagnostics(verbose=False, fix_missing=False):
                 for col in columns:
                     pk_str = "PK" if col[5] else "  "
                     nn_str = "NN" if col[3] else "  "
-                    logger.info(f"  - {col[1]:<20} {col[2]:<10} {pk_str} {nn_str} {col[4] or ''}")
+                    logger.info(
+                        f"  - {col[1]:<20} {col[2]:<10} {pk_str} {nn_str} {col[4] or ''}"
+                    )
 
                 # Check row count
                 try:
@@ -757,11 +813,13 @@ def run_database_diagnostics(verbose=False, fix_missing=False):
     except Exception as e:
         logger.error(f"Error running diagnostics: {e}")
         import traceback
+
         logger.error(traceback.format_exc())
         return False
 
 
 # --- Database Seeding ---
+
 
 def get_enum_class_for_field(entity_type: str, field_name: str) -> Optional[Type[Enum]]:
     """
@@ -1079,7 +1137,9 @@ def resolve_seed_file_path(seed_file_path_arg):
             logger.info(f"Found seed file at: {location}")
             return str(location)
 
-    logger.error(f"Could not find seed file '{seed_file_path_arg}' in any standard location")
+    logger.error(
+        f"Could not find seed file '{seed_file_path_arg}' in any standard location"
+    )
     return None
 
 
@@ -1150,7 +1210,11 @@ def seed_with_direct_sqlcipher(seed_data, entities_order):
                             data[key] = json.dumps(value)
 
                         # Special handling for dimensions field in storage_locations
-                        if entity_type == "storage_locations" and key == "dimensions" and isinstance(value, dict):
+                        if (
+                            entity_type == "storage_locations"
+                            and key == "dimensions"
+                            and isinstance(value, dict)
+                        ):
                             # Some SQLite schemas might store these as separate columns
                             for dim_key, dim_value in value.items():
                                 # Add individual dimension fields
@@ -1160,45 +1224,68 @@ def seed_with_direct_sqlcipher(seed_data, entities_order):
 
                     # 5. Convert date strings to datetime objects
                     for key, value in list(data.items()):
-                        if isinstance(value, str) and (key.endswith("_date") or key.endswith("_at") or key == "date"):
+                        if isinstance(value, str) and (
+                            key.endswith("_date")
+                            or key.endswith("_at")
+                            or key == "date"
+                        ):
                             try:
                                 if value.endswith("Z"):
                                     value = value[:-1] + "+00:00"
                                 data[key] = datetime.fromisoformat(value).isoformat()
                             except ValueError:
-                                logger.warning(f"Invalid date format for {key}: {value}")
+                                logger.warning(
+                                    f"Invalid date format for {key}: {value}"
+                                )
                                 data[key] = None
 
                     # 6. Enhanced enum handling - debug version
                     for key, value in list(data.items()):
                         # Log original value for diagnosis
-                        if key in ['status', 'payment_status', 'fulfillment_status', 'channel']:
-                            logger.debug(f"Processing enum field: {key}={value} (type: {type(value)})")
+                        if key in [
+                            "status",
+                            "payment_status",
+                            "fulfillment_status",
+                            "channel",
+                        ]:
+                            logger.debug(
+                                f"Processing enum field: {key}={value} (type: {type(value)})"
+                            )
 
                         if isinstance(value, str):
                             enum_class = get_enum_class_for_field(entity_type, key)
                             if enum_class:
                                 # Log enum class for diagnosis
-                                logger.debug(f"Found enum class {enum_class.__name__} for field {key}")
+                                logger.debug(
+                                    f"Found enum class {enum_class.__name__} for field {key}"
+                                )
 
                                 enum_value = get_enum_member_by_value(enum_class, value)
                                 if enum_value:
                                     # For direct SQL, store the string value of the enum
-                                    logger.debug(f"Converting enum {key} from {value} to {enum_value.value}")
+                                    logger.debug(
+                                        f"Converting enum {key} from {value} to {enum_value.value}"
+                                    )
                                     data[key] = enum_value.value
                                 else:
                                     # If we can't find the enum value, use the original string
                                     # This is safer than failing
                                     logger.warning(
-                                        f"Could not find enum value '{value}' in {enum_class.__name__}, using as-is")
+                                        f"Could not find enum value '{value}' in {enum_class.__name__}, using as-is"
+                                    )
                                     # Ensure it's a string
                                     data[key] = str(value)
 
                     # Special handling for payment status fields
-                    if entity_type == 'sales':
+                    if entity_type == "sales":
                         # Handle payment_status and other enums specifically for sales
                         # Make sure all values are strings or integers
-                        for key in ['status', 'payment_status', 'fulfillment_status', 'channel']:
+                        for key in [
+                            "status",
+                            "payment_status",
+                            "fulfillment_status",
+                            "channel",
+                        ]:
                             if key in data and not isinstance(data[key], (str, int)):
                                 # Convert to string representation if it's an enum or other object
                                 data[key] = str(data[key])
@@ -1238,23 +1325,31 @@ def seed_with_direct_sqlcipher(seed_data, entities_order):
                                 fk_entity_type = "project_templates"
 
                             # If we know the referenced entity type and have an ID mapping
-                            if fk_entity_type and fk_entity_type in entity_ids and original_id in entity_ids[
-                                fk_entity_type]:
+                            if (
+                                fk_entity_type
+                                and fk_entity_type in entity_ids
+                                and original_id in entity_ids[fk_entity_type]
+                            ):
                                 data[key] = entity_ids[fk_entity_type][original_id]
-                                logger.debug(f"Mapped FK {key}: {original_id} -> {data[key]}")
+                                logger.debug(
+                                    f"Mapped FK {key}: {original_id} -> {data[key]}"
+                                )
 
                     # 8. Handle special fields for certain entity types
                     if entity_type == "users" and "password" in data:
                         # Handle password hashing
                         from app.core.security import get_password_hash
-                        data["hashed_password"] = get_password_hash(data.pop("password"))
+
+                        data["hashed_password"] = get_password_hash(
+                            data.pop("password")
+                        )
 
                     # 9. Handle lists and array fields
                     for key, value in list(data.items()):
                         if isinstance(value, list):
                             # For now, we'll just join list values with commas
                             # This is a simplification - in a real app, you'd use a proper m2m relationship
-                            data[key] = ','.join(str(item) for item in value)
+                            data[key] = ",".join(str(item) for item in value)
 
                     # 10. Generate and execute INSERT statement
                     # Remove any keys that aren't actual columns
@@ -1263,7 +1358,9 @@ def seed_with_direct_sqlcipher(seed_data, entities_order):
                         if key in valid_columns:
                             filtered_data[key] = value
                         else:
-                            logger.debug(f"Removed field '{key}' not in {entity_type} table schema")
+                            logger.debug(
+                                f"Removed field '{key}' not in {entity_type} table schema"
+                            )
 
                     if filtered_data:
                         # Make sure we have all required columns
@@ -1275,13 +1372,22 @@ def seed_with_direct_sqlcipher(seed_data, entities_order):
                             is_pk = col_info[5] == 1  # "pk" flag
 
                             # Column is required if it's NOT NULL, has no default, and is not an autoincrement PK
-                            if is_not_null and not has_default and not is_pk and col_name not in filtered_data:
+                            if (
+                                is_not_null
+                                and not has_default
+                                and not is_pk
+                                and col_name not in filtered_data
+                            ):
                                 missing_required.append(col_name)
 
                         if missing_required:
-                            logger.warning(f"Missing required columns for {entity_type}: {missing_required}")
+                            logger.warning(
+                                f"Missing required columns for {entity_type}: {missing_required}"
+                            )
                             logger.warning(f"Available data keys: {data.keys()}")
-                            logger.warning(f"Skipping {entity_type} record due to missing required fields")
+                            logger.warning(
+                                f"Skipping {entity_type} record due to missing required fields"
+                            )
                             continue
 
                         columns = list(filtered_data.keys())
@@ -1289,19 +1395,27 @@ def seed_with_direct_sqlcipher(seed_data, entities_order):
 
                         # Convert Python types to SQLite compatible types
                         for key, value in filtered_data.items():
-                            logger.debug(f"Converting value for {key}: {value} (type: {type(value).__name__})")
+                            logger.debug(
+                                f"Converting value for {key}: {value} (type: {type(value).__name__})"
+                            )
 
                             if isinstance(value, bool):
                                 # SQLite doesn't have a boolean type, so convert to 0/1
-                                logger.debug(f"  Converting boolean {value} to {1 if value else 0}")
+                                logger.debug(
+                                    f"  Converting boolean {value} to {1 if value else 0}"
+                                )
                                 values.append(1 if value else 0)
                             elif isinstance(value, dict) or isinstance(value, list):
                                 # Convert dictionaries and lists to JSON strings
-                                logger.debug(f"  Converting complex type to JSON string")
+                                logger.debug(
+                                    f"  Converting complex type to JSON string"
+                                )
                                 values.append(json.dumps(value))
                             elif isinstance(value, Enum):
                                 # Handle enum objects directly
-                                logger.debug(f"  Converting Enum {value} to {value.value}")
+                                logger.debug(
+                                    f"  Converting Enum {value} to {value.value}"
+                                )
                                 values.append(value.value)
                             elif value is None:
                                 logger.debug(f"  Passing None value as is")
@@ -1309,10 +1423,14 @@ def seed_with_direct_sqlcipher(seed_data, entities_order):
                             else:
                                 # Force any other types to strings to avoid binding issues
                                 if not isinstance(value, (str, int, float)):
-                                    logger.debug(f"  Converting {type(value).__name__} to string")
+                                    logger.debug(
+                                        f"  Converting {type(value).__name__} to string"
+                                    )
                                     values.append(str(value))
                                 else:
-                                    logger.debug(f"  Passing {type(value).__name__} value as is")
+                                    logger.debug(
+                                        f"  Passing {type(value).__name__} value as is"
+                                    )
                                     values.append(value)
 
                         # Build and execute INSERT statement
@@ -1322,7 +1440,9 @@ def seed_with_direct_sqlcipher(seed_data, entities_order):
                         # Debug print SQL and values
                         logger.debug(f"Executing SQL: {sql}")
                         for i, val in enumerate(values):
-                            logger.debug(f"  Parameter {i + 1}: {val} (type: {type(val).__name__})")
+                            logger.debug(
+                                f"  Parameter {i + 1}: {val} (type: {type(val).__name__})"
+                            )
 
                         try:
                             cursor.execute(sql, values)
@@ -1332,12 +1452,18 @@ def seed_with_direct_sqlcipher(seed_data, entities_order):
                             logger.error(f"Values: {values}")
 
                             # Try converting all values to strings as a fallback
-                            string_values = [str(v) if v is not None else None for v in values]
-                            logger.warning("Attempting to retry with all values converted to strings")
+                            string_values = [
+                                str(v) if v is not None else None for v in values
+                            ]
+                            logger.warning(
+                                "Attempting to retry with all values converted to strings"
+                            )
 
                             try:
                                 cursor.execute(sql, string_values)
-                                logger.info("SQL retry succeeded with string conversion")
+                                logger.info(
+                                    "SQL retry succeeded with string conversion"
+                                )
                             except Exception as retry_error:
                                 logger.error(f"SQL Retry Error: {str(retry_error)}")
                                 raise  # Re-raise the original error for consistent error messages
@@ -1352,9 +1478,13 @@ def seed_with_direct_sqlcipher(seed_data, entities_order):
                         entity_ids[entity_type][idx] = new_id
 
                         entity_count += 1
-                        logger.debug(f"Inserted {entity_type} at index {idx} with ID {new_id}")
+                        logger.debug(
+                            f"Inserted {entity_type} at index {idx} with ID {new_id}"
+                        )
                     else:
-                        logger.warning(f"Skipping {entity_type} at index {idx}: no valid columns found")
+                        logger.warning(
+                            f"Skipping {entity_type} at index {idx}: no valid columns found"
+                        )
 
                 except Exception as e:
                     logger.error(f"Error creating {entity_type} at index {idx}: {e}")
@@ -1396,27 +1526,35 @@ def seed_with_sqlalchemy(seed_data, entities_order):
                 entities_data = seed_data[entity_type]
 
                 if not isinstance(entities_data, list):
-                    logger.warning(f"Seed data for '{entity_type}' is not a list. Skipping.")
+                    logger.warning(
+                        f"Seed data for '{entity_type}' is not a list. Skipping."
+                    )
                     continue
 
                 # Process each entity one at a time
                 entity_count = 0
                 for idx, item_data in enumerate(entities_data, 1):
                     if not isinstance(item_data, dict):
-                        logger.warning(f"Item at index {idx} for '{entity_type}' is not a dictionary. Skipping.")
+                        logger.warning(
+                            f"Item at index {idx} for '{entity_type}' is not a dictionary. Skipping."
+                        )
                         continue
 
                     try:
                         # 1. Get the model class
                         model = model_map.get(entity_type)
                         if not model:
-                            logger.warning(f"Unknown entity type '{entity_type}'. Skipping.")
+                            logger.warning(
+                                f"Unknown entity type '{entity_type}'. Skipping."
+                            )
                             continue
 
                         # 2. Decamelize keys and apply overrides
                         data = decamelize_keys(item_data)
                         if entity_type in overrides_by_entity:
-                            data = apply_overrides(data, overrides_by_entity[entity_type])
+                            data = apply_overrides(
+                                data, overrides_by_entity[entity_type]
+                            )
 
                         # 3. Handle special processing for materials
                         if entity_type == "materials" and "material_type" in data:
@@ -1437,7 +1575,9 @@ def seed_with_sqlalchemy(seed_data, entities_order):
                             if isinstance(value, str):
                                 enum_class = get_enum_class_for_field(entity_type, key)
                                 if enum_class:
-                                    enum_value = get_enum_member_by_value(enum_class, value)
+                                    enum_value = get_enum_member_by_value(
+                                        enum_class, value
+                                    )
                                     if enum_value:
                                         data[key] = enum_value
 
@@ -1455,14 +1595,21 @@ def seed_with_sqlalchemy(seed_data, entities_order):
                                 # Add other mappings as needed...
 
                                 # If we know the referenced entity type and have an ID mapping
-                                if fk_entity_type and fk_entity_type in entity_ids and original_id in entity_ids[
-                                    fk_entity_type]:
+                                if (
+                                    fk_entity_type
+                                    and fk_entity_type in entity_ids
+                                    and original_id in entity_ids[fk_entity_type]
+                                ):
                                     data[key] = entity_ids[fk_entity_type][original_id]
-                                    logger.debug(f"Mapped FK {key}: {original_id} -> {data[key]}")
+                                    logger.debug(
+                                        f"Mapped FK {key}: {original_id} -> {data[key]}"
+                                    )
 
                         # 7. Handle password hashing for users
                         if entity_type == "users" and "password" in data:
-                            data["hashed_password"] = get_password_hash(data.pop("password"))
+                            data["hashed_password"] = get_password_hash(
+                                data.pop("password")
+                            )
 
                         # 8. Create and add the entity
                         entity = model(**data)
@@ -1478,7 +1625,9 @@ def seed_with_sqlalchemy(seed_data, entities_order):
                         logger.debug(f"Created {entity_type} with ID {entity.id}")
 
                     except Exception as e:
-                        logger.error(f"Error creating {entity_type} at index {idx}: {e}")
+                        logger.error(
+                            f"Error creating {entity_type} at index {idx}: {e}"
+                        )
                         logger.error(f"Data: {item_data}")
                         logger.exception("Details:")
                         db.rollback()
@@ -1507,14 +1656,16 @@ def main():
 
     # Enable debug logging if requested
     if args.debug:
-        logging.getLogger('__main__').setLevel(logging.DEBUG)
+        logging.getLogger("__main__").setLevel(logging.DEBUG)
         logger.setLevel(logging.DEBUG)
         logger.debug("Debug logging enabled")
 
     # See if we need to diagnose the database
     if args.diagnose:
         logger.info("Running database diagnostics...")
-        success = run_database_diagnostics(args.verbose_diagnostics, args.fix_missing_tables)
+        success = run_database_diagnostics(
+            args.verbose_diagnostics, args.fix_missing_tables
+        )
         if success:
             logger.info("Database diagnostics completed successfully.")
             return
@@ -1522,7 +1673,9 @@ def main():
             logger.info("Database diagnostics completed with fixes applied.")
             return
         else:
-            logger.error("Database diagnostics found issues. Run with --fix-missing-tables to attempt repair.")
+            logger.error(
+                "Database diagnostics found issues. Run with --fix-missing-tables to attempt repair."
+            )
             sys.exit(1)
 
     # Check if we're only ensuring media tables exist

@@ -24,8 +24,7 @@ if str(project_root) not in sys.path:
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -66,7 +65,7 @@ ENTITIES_ORDER = [
     "picking_list_items",
     "storage_assignments",
     "tool_maintenance",
-    "tool_checkouts"
+    "tool_checkouts",
 ]
 
 # Field overrides for specific entities
@@ -187,7 +186,7 @@ def load_seed_data(seed_file_path: str) -> Dict[str, List[Dict[str, Any]]]:
                     return {}
 
         logger.info(f"Loading seed data from: {file_path}")
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
         logger.info(f"Successfully loaded seed data with {len(data)} entity types")
@@ -251,7 +250,9 @@ def seed_database(seed_data: Dict[str, List[Dict[str, Any]]], db_path: str) -> b
                 logger.debug(f"Table schema for {entity_type}: {valid_columns}")
 
                 if not valid_columns:
-                    logger.warning(f"Table {entity_type} not found in database or has no columns")
+                    logger.warning(
+                        f"Table {entity_type} not found in database or has no columns"
+                    )
                     continue
             except Exception as e:
                 logger.warning(f"Error getting schema for {entity_type}: {e}")
@@ -283,21 +284,33 @@ def seed_database(seed_data: Dict[str, List[Dict[str, Any]]], db_path: str) -> b
                                 filtered_data[key] = json.dumps(value)
                             # Handle date/time strings
                             elif isinstance(value, str) and (
-                                    key.endswith("_date") or key.endswith("_at") or key == "date"):
+                                key.endswith("_date")
+                                or key.endswith("_at")
+                                or key == "date"
+                            ):
                                 try:
                                     if value.endswith("Z"):
                                         value = value[:-1] + "+00:00"
-                                    filtered_data[key] = datetime.fromisoformat(value).isoformat()
+                                    filtered_data[key] = datetime.fromisoformat(
+                                        value
+                                    ).isoformat()
                                 except ValueError:
-                                    filtered_data[key] = value  # Keep original if parsing fails
+                                    filtered_data[key] = (
+                                        value  # Keep original if parsing fails
+                                    )
                             # Special handling for password hashing
                             elif entity_type == "users" and key == "password":
                                 try:
                                     from app.core.security import get_password_hash
-                                    filtered_data["hashed_password"] = get_password_hash(value)
+
+                                    filtered_data["hashed_password"] = (
+                                        get_password_hash(value)
+                                    )
                                 except ImportError:
                                     # If security module not available, use the hashed_password directly
-                                    filtered_data["hashed_password"] = data.get("hashed_password", "")
+                                    filtered_data["hashed_password"] = data.get(
+                                        "hashed_password", ""
+                                    )
                             else:
                                 filtered_data[key] = value
 
@@ -336,14 +349,23 @@ def seed_database(seed_data: Dict[str, List[Dict[str, Any]]], db_path: str) -> b
                                 fk_entity_type = "project_templates"
 
                             # If we know the referenced entity type and have an ID mapping
-                            if fk_entity_type and fk_entity_type in entity_ids and original_id in entity_ids[
-                                fk_entity_type]:
-                                filtered_data[key] = entity_ids[fk_entity_type][original_id]
-                                logger.debug(f"Mapped FK {key}: {original_id} -> {filtered_data[key]}")
+                            if (
+                                fk_entity_type
+                                and fk_entity_type in entity_ids
+                                and original_id in entity_ids[fk_entity_type]
+                            ):
+                                filtered_data[key] = entity_ids[fk_entity_type][
+                                    original_id
+                                ]
+                                logger.debug(
+                                    f"Mapped FK {key}: {original_id} -> {filtered_data[key]}"
+                                )
 
                     # 6. Check if we have any data to insert after filtering
                     if not filtered_data:
-                        logger.warning(f"No valid data for {entity_type} at index {idx} after filtering")
+                        logger.warning(
+                            f"No valid data for {entity_type} at index {idx} after filtering"
+                        )
                         continue
 
                     # 7. Generate and execute INSERT statement
@@ -390,6 +412,7 @@ def seed_database(seed_data: Dict[str, List[Dict[str, Any]]], db_path: str) -> b
     except Exception as e:
         logger.error(f"Error seeding database: {e}")
         import traceback
+
         logger.error(traceback.format_exc())
         return False
 
@@ -403,12 +426,12 @@ def main():
         "--seed-file",
         type=str,
         default="app/db/seed_data.json",
-        help="Path to the seed data JSON file (relative to project root or absolute)"
+        help="Path to the seed data JSON file (relative to project root or absolute)",
     )
     parser.add_argument(
         "--debug",
         action="store_true",
-        help="Enable debug logging for more detailed output"
+        help="Enable debug logging for more detailed output",
     )
 
     args = parser.parse_args()
