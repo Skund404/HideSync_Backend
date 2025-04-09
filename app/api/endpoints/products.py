@@ -327,6 +327,7 @@ def get_product(
             detail="An unexpected error occurred while retrieving the product.",
         )
 
+
 @router.put(
     "/{product_id}",
     response_model=ProductResponse,
@@ -335,18 +336,19 @@ def get_product(
     # dependencies=[Depends(PermissionsChecker(["product:update"]))],
 )
 def update_product(
-    *,
-    product_id: int = Path(..., ge=1),
-    product_in: ProductUpdate,
-    product_service: ProductService = Depends(get_product_service),
-    current_user: Any = Depends(get_current_active_user),
+        *,
+        product_id: int = Path(..., ge=1),
+        product_in: ProductUpdate,
+        product_service: ProductService = Depends(get_product_service),
+        current_user: Any = Depends(get_current_active_user),
 ) -> ProductResponse:
     """
     Endpoint to update an existing product.
     Refetches the product with inventory loaded before returning response.
     """
     user_id = getattr(current_user, 'id', None)
-    logger.info(f"Update product request received for ID: {product_id} by user: {user_id}. Data: {product_in.model_dump(exclude_unset=True)}")
+    logger.info(
+        f"Update product request received for ID: {product_id} by user: {user_id}. Data: {product_in.model_dump(exclude_unset=True)}")
     try:
         # 1. Call service update method (this handles DB update and commit)
         #    The returned object here might not have relationships loaded reliably yet.
@@ -362,30 +364,94 @@ def update_product(
         logger.debug(f"Refetching product {product_id} with inventory for response.")
         refreshed_product_orm = product_service.get_product_by_id(product_id=product_id, load_inventory=True)
         if not refreshed_product_orm:
-             # This would be highly unusual if the update succeeded
-             logger.error(f"CRITICAL: Could not retrieve product {product_id} immediately after successful update.")
-             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve product details after update.")
+            # This would be highly unusual if the update succeeded
+            logger.error(f"CRITICAL: Could not retrieve product {product_id} immediately after successful update.")
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                                detail="Failed to retrieve product details after update.")
         # --- END REFETCH ---
 
-        # --- Prepare data using .to_dict() from the REFETCHED object ---
-        try:
-             logger.debug(f"Preparing response dictionary for product {product_id} using to_dict().")
-             product_data_dict = refreshed_product_orm.to_dict()
-             validated_response = ProductResponse.model_validate(product_data_dict)
-             logger.info(f"Successfully prepared response for updated product {product_id}.")
-             return validated_response
-        except Exception as validation_err:
-             logger.error(f"Pydantic validation failed using to_dict() for updated product ID {refreshed_product_orm.id}: {validation_err}", exc_info=True)
-             # Log the dict that failed validation
-             try:
-                 logger.debug(f"Data from to_dict() that failed validation: {product_data_dict}")
-             except NameError: # If product_data_dict wasn't assigned due to to_dict() error
-                  logger.debug("to_dict() itself might have failed before validation.")
+        # --- Prepare data with manual status normalization ---
+        product_data_dict = refreshed_product_orm.to_dict()
 
-             raise HTTPException(
-                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                 detail=f"Failed to serialize updated product data for ID {refreshed_product_orm.id}."
-             )
+        # Manual normalization of status if needed
+        if 'status' in product_data_dict and product_data_dict['status']:
+            # If status is a string in uppercase format, convert to lowercase
+            if isinstance(product_data_dict['status'], str):
+                product_data_dict['status'] = product_data_dict['status'].lower()
+            # If status is an enum object, ensure we get the value
+            elif hasattr(product_data_dict['status'], 'value'):
+                product_data_dict['status'] = product_data_dict['status'].value
+
+        try:
+            validated_response = ProductResponse.model_validate(product_data_dict)
+            logger.info(f"Successfully prepared response for updated product {product_id}.")
+            return validated_response
+        except Exception as validation_err:
+            logger.error(
+                f"Pydantic validation failed for updated product ID {refreshed_product_orm.id}: {validation_err}",
+                exc_info=True)
+            logger.debug(f"Data that failed validation: {product_data_dict}")
+
+            # Attempt a more direct approach if to_dict() method is problematic
+            try:
+                # Manually construct the response data
+                manual_data = {
+                    "id": refreshed_product_orm.id,
+                    "name": refreshed_product_orm.name,
+                    "sku": refreshed_product_orm.sku,
+                    "product_type": refreshed_product_orm.product_type,
+                    "description": refreshed_product_orm.description,
+                    "materials": refreshed_product_orm.materials,
+                    "color": refreshed_product_orm.color,
+                    "dimensions": refreshed_product_orm.dimensions,
+                    "weight": refreshed_product_orm.weight,
+                    "pattern_id": refreshed_product_orm.pattern_id,
+                    "reorder_point": refreshed_product_orm.reorder_point,
+                    "selling_price": refreshed_product_orm.selling_price,
+                    "total_cost": refreshed_product_orm.total_cost,
+                    "thumbnail": refreshed_product_orm.thumbnail,
+                    "notes": refreshed_product_orm.notes,
+                    "batch_number": refreshed_product_orm.batch_number,
+                    "customizations": refreshed_product_orm.customizations,
+                    "project_id": refreshed_product_orm.project_id,
+                    "cost_breakdown": refreshed_product_orm.cost_breakdown,
+                    "profit_margin": getattr(refreshed_product_orm, 'profit_margin', None),
+                    "created_at": getattr(refreshed_product_orm, 'created_at', None),
+                    "updated_at": getattr(refreshed_product_orm, 'updated_at', None),
+                    "last_sold": getattr(refreshed_product_orm, 'last_sold', None),
+                    "sales_velocity": getattr(refreshed_product_orm, 'sales_velocity', None),
+                }
+
+                # Add inventory-related fields with careful normalization
+                if hasattr(refreshed_product_orm, 'inventory') and refreshed_product_orm.inventory:
+                    manual_data["quantity"] = refreshed_product_orm.inventory.quantity
+
+                    # Handle status with special care - ensure it's lowercase string value
+                    status_value = refreshed_product_orm.inventory.status
+                    if hasattr(status_value, 'value'):
+                        manual_data["status"] = status_value.value  # Get string value from enum
+                    elif isinstance(status_value, str):
+                        manual_data["status"] = status_value.lower()  # Ensure lowercase
+                    else:
+                        manual_data["status"] = None  # Default if unhandled type
+
+                    manual_data["storage_location"] = refreshed_product_orm.inventory.storage_location
+                else:
+                    # Default inventory values if relationship not loaded
+                    manual_data["quantity"] = 0.0
+                    manual_data["status"] = "out_of_stock"  # Safe default
+                    manual_data["storage_location"] = None
+
+                validated_response = ProductResponse.model_validate(manual_data)
+                logger.info(f"Successfully prepared response using manual approach for product {product_id}.")
+                return validated_response
+            except Exception as manual_err:
+                logger.error(f"Manual approach also failed for product ID {refreshed_product_orm.id}: {manual_err}",
+                             exc_info=True)
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed to serialize updated product data. Technical details: {str(manual_err)}"
+                )
         # --- End Prepare Data ---
 
     # --- Exception Handling ---
@@ -405,14 +471,14 @@ def update_product(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail=error_message
         )
-    except HideSyncException as e: # Catch internal service errors
+    except HideSyncException as e:  # Catch internal service errors
         logger.error(f"Internal service error updating product ID {product_id}: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
         )
-    except HTTPException as http_exc: # Re-raise HTTP exceptions from validation block
+    except HTTPException as http_exc:  # Re-raise HTTP exceptions from validation block
         raise http_exc
-    except Exception as e: # Catch unexpected errors
+    except Exception as e:  # Catch unexpected errors
         logger.error(f"Unexpected error updating product ID {product_id}: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

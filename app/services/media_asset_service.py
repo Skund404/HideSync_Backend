@@ -67,7 +67,37 @@ class MediaAssetService(BaseService[MediaAsset]):
         """
         return self.repository.get_by_id_with_tags(asset_id)
 
-    # Update MediaAssetService.list_media_assets
+    def find_file_path(self, asset_id: str) -> Optional[str]:
+        """Finds the actual file path on the server for an asset."""
+        asset = self.repository.get_by_id(asset_id)
+        if not asset or not asset.storage_location:
+            raise EntityNotFoundException(f"Media asset {asset_id} or its storage location not found.")
+
+        # Try the stored path directly
+        if os.path.exists(asset.storage_location):
+            return asset.storage_location
+
+        # Try relative paths common in the project structure
+        base_dir = "media_assets"
+        candidates = [
+            os.path.join(base_dir, f"{asset_id}_{asset.file_name}"),
+            os.path.join(base_dir, asset.file_name),
+            os.path.join(os.getcwd(), "media_assets", f"{asset_id}_{asset.file_name}"),
+            os.path.join(os.getcwd(), asset.storage_location),
+            # Add more potential paths if necessary
+        ]
+
+        for path in candidates:
+            if os.path.exists(path):
+                logger.info(f"Found asset {asset_id} file at alternative path: {path}")
+                # Optionally update storage_location if found elsewhere? Be careful with this.
+                # self.repository.update(asset_id, {"storage_location": path})
+                return path
+
+        logger.error(
+            f"Could not find file for asset {asset_id} at any expected location based on storage: {asset.storage_location}")
+        return None  # Or raise FileNotFoundError
+
     def list_media_assets(
             self,
             skip: int = 0,

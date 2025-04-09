@@ -181,6 +181,29 @@ class ProductResponse(ProductBase):
     created_at: Optional[datetime] = Field(None, alias="createdAt")
     updated_at: Optional[datetime] = Field(None, alias="updatedAt")
 
+    @field_validator('status')
+    @classmethod
+    def normalize_status(cls, v: Optional[InventoryStatus]) -> Optional[InventoryStatus]:
+        """Normalize status values to ensure correct case format."""
+        if v is None:
+            return None
+
+        # If we have a string value, handle possible uppercase format
+        if isinstance(v, str):
+            try:
+                # Try converting to lowercase if it's uppercase
+                lowercase_value = v.lower()
+                return InventoryStatus(lowercase_value)
+            except ValueError:
+                # If that doesn't work, try direct enum lookup
+                try:
+                    return InventoryStatus[v]  # This will try to find an enum member with name v
+                except KeyError:
+                    raise ValueError(f"Invalid status value: {v}")
+
+        # If it's already an InventoryStatus enum, return it
+        return v
+
     class Config:
         from_attributes = True # Enable reading data from ORM objects
         populate_by_name = True

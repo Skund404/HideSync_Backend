@@ -261,6 +261,226 @@ class ToolService(BaseService[Tool]):
         self.project_service = project_service
         self.supplier_service = supplier_service
 
+    # Add these methods to the ToolService class in app/services/tool_service.py
+
+    def get_tools(self, skip: int = 0, limit: int = 100, search_params=None) -> List[Tool]:
+        """
+        Get tools with filtering and pagination.
+
+        Args:
+            skip: Number of records to skip
+            limit: Maximum number of records to return
+            search_params: Optional search parameters for filtering
+
+        Returns:
+            List of tools matching the criteria
+        """
+        # Initialize empty filters dictionary
+        filters = {}
+
+        # Apply filters if search_params is provided
+        if search_params:
+            if search_params.category:
+                # Convert string category to enum if needed
+                try:
+                    if isinstance(search_params.category, str):
+                        category = ToolCategory[search_params.category]
+                    else:
+                        category = search_params.category
+                    filters["category"] = category
+                except (KeyError, ValueError):
+                    raise ValidationException(f"Invalid tool category: {search_params.category}")
+
+            if search_params.status:
+                filters["status"] = search_params.status
+
+            if search_params.location:
+                filters["location"] = search_params.location
+
+        # If search text is provided, use the search method
+        if search_params and search_params.search:
+            return self.repository.search_tools(search_params.search, skip=skip, limit=limit)
+
+        # Otherwise use the list method with filters
+        return self.repository.list(skip=skip, limit=limit, **filters)
+
+    def get_tool(self, tool_id: int) -> Tool:
+        """
+        Get a tool by ID.
+
+        Args:
+            tool_id: ID of the tool to retrieve
+
+        Returns:
+            Tool entity
+
+        Raises:
+            EntityNotFoundException: If tool not found
+        """
+        tool = self.repository.get_by_id(tool_id)
+        if not tool:
+            from app.core.exceptions import EntityNotFoundException
+            raise EntityNotFoundException(f"Tool with ID {tool_id} not found")
+        return tool
+
+    def get_checkouts(
+            self,
+            status: Optional[str] = None,
+            tool_id: Optional[int] = None,
+            project_id: Optional[int] = None,
+            user_id: Optional[int] = None
+    ) -> List[ToolCheckout]:
+        """
+        Get tool checkouts with optional filtering.
+
+        Args:
+            status: Optional filter by checkout status
+            tool_id: Optional filter by tool ID
+            project_id: Optional filter by project ID
+            user_id: Optional filter by user ID
+
+        Returns:
+            List of tool checkout records
+        """
+        filters = {}
+
+        if status:
+            filters["status"] = status
+        if tool_id:
+            filters["tool_id"] = tool_id
+        if project_id:
+            filters["project_id"] = project_id
+        if user_id:
+            # This might need to be mapped to checked_out_by depending on your data model
+            filters["user_id"] = user_id
+
+        return self.checkout_repository.list(**filters)
+
+    def get_maintenance_records(
+            self,
+            status: Optional[str] = None,
+            tool_id: Optional[int] = None,
+            upcoming_only: bool = False
+    ) -> List[ToolMaintenance]:
+        """
+        Get tool maintenance records with optional filtering.
+
+        Args:
+            status: Optional filter by maintenance status
+            tool_id: Optional filter by tool ID
+            upcoming_only: Filter to show only upcoming maintenance
+
+        Returns:
+            List of tool maintenance records
+        """
+        filters = {}
+
+        if status:
+            filters["status"] = status
+        if tool_id:
+            filters["tool_id"] = tool_id
+
+        # Get basic filtered list
+        records = self.maintenance_repository.list(**filters)
+
+        # Apply upcoming filter if needed
+        if upcoming_only:
+            today = datetime.now().date()
+            # Only keep maintenance records with dates in the future
+            records = [
+                record for record in records
+                if record.date and isinstance(record.date, str) and
+                   datetime.fromisoformat(record.date.replace('Z', '+00:00')).date() >= today
+            ]
+
+        return records
+
+    def get_maintenance_schedule(
+            self,
+            start_date: Optional[str] = None,
+            end_date: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Get tool maintenance schedule.
+
+        Args:
+            start_date: Optional start date (YYYY-MM-DD)
+            end_date: Optional end date (YYYY-MM-DD)
+
+        Returns:
+            Maintenance schedule data
+        """
+        # Convert string dates to date objects if provided
+        from_date = None
+        to_date = None
+
+        if start_date:
+            try:
+                from_date = datetime.strptime(start_date, "%Y-%m-%d").date()
+            except ValueError:
+                raise ValidationException("Invalid start date format. Use YYYY-MM-DD.")
+        else:
+            # Default to current date
+            from_date = datetime.now().date()
+
+        if end_date:
+            try:
+                to_date = datetime.strptime(end_date, "%Y-%m-%d").date()
+            except ValueError:
+                raise ValidationException("Invalid end date format. Use YYYY-MM-DD.")
+        else:
+            # Default to 30 days from start date
+            to_date = from_date + timedelta(days=30)
+
+        # Get all scheduled maintenance in date range
+        scheduled_maintenance = self.maintenance_repository.get_by_date_range(
+            start_date=from_date.isoformat(),
+            end_date=to_date.isoformat()
+        )
+
+        # Organize by date
+        schedule_by_date = {}
+        for record in scheduled_maintenance:
+            if not record.date:
+                continue
+
+            date_str = record.date
+            if date_str not in schedule_by_date:
+                schedule_by_date[date_str] = []
+
+            # Get the associated tool
+            tool = self.repository.get_by_id(record.tool_id)
+            tool_name = tool.name if tool else f"Tool #{record.tool_id}"
+
+            schedule_by_date[date_str].append({
+                "maintenance_id": record.id,
+                "tool_id": record.tool_id,
+                "tool_name": tool_name,
+                "maintenance_type": record.maintenance_type,
+                "status": record.status,
+                "performed_by": record.performed_by
+            })
+
+        # Calculate schedule summary
+        total_scheduled = len(scheduled_maintenance)
+        scheduled_by_type = {}
+        for record in scheduled_maintenance:
+            mtype = record.maintenance_type
+            if mtype not in scheduled_by_type:
+                scheduled_by_type[mtype] = 0
+            scheduled_by_type[mtype] += 1
+
+        # Return complete schedule data
+        return {
+            "date_range": {
+                "start_date": from_date.isoformat(),
+                "end_date": to_date.isoformat(),
+                "days": (to_date - from_date).days
+            },
+            "total_scheduled": total_scheduled,
+            "scheduled_by_type": scheduled_by_type,
+            "schedule": schedule_by_date
+        }
     @validate_input(validate_tool)
     def create_tool(self, data: Dict[str, Any]) -> Tool:
         """

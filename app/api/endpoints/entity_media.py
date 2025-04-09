@@ -145,60 +145,10 @@ async def create_entity_media(
         )
 
 
-@router.patch("/{id}", response_model=EntityMediaResponse)
-async def update_entity_media(
-        id: str = Path(..., description="The ID of the entity media association"),
-        updates: EntityMediaUpdate = Body(...),
-        db: Session = Depends(get_db),
-        current_user: dict = Depends(get_current_active_user),
-):
-    """
-    Update an entity media association.
-    """
-    try:
-        service_factory = ServiceFactory(db)
-        entity_media_service = service_factory.get_entity_media_service()
-
-        # First, get the existing entity media
-        existing_media = entity_media_service.get_by_id(id)
-        if not existing_media:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Entity media with ID {id} not found"
-            )
-
-        # Update the entity media with the new values
-        result = entity_media_service.update_entity_media(
-            entity_type=existing_media.entity_type,
-            entity_id=existing_media.entity_id,
-            media_asset_id=updates.media_asset_id or existing_media.media_asset_id,
-            media_type=updates.media_type or existing_media.media_type,
-            display_order=updates.display_order if updates.display_order is not None else existing_media.display_order,
-            caption=updates.caption if updates.caption is not None else existing_media.caption,
-        )
-
-        return result
-    except EntityNotFoundException as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        )
-    except BusinessRuleException as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
-    except Exception as e:
-        logger.error(f"Error updating entity media: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update entity media: {str(e)}"
-        )
 
 
 from fastapi import Response  # Add this import at the top
 
-# Fix the DELETE endpoint
 @router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_entity_media(
         id: str = Path(..., description="The ID of the entity media association"),
@@ -209,8 +159,8 @@ async def delete_entity_media(
         service_factory = ServiceFactory(db)
         entity_media_service = service_factory.get_entity_media_service()
 
-        # Delete the entity media
-        success = entity_media_service.delete_entity_media(id)
+        # Call the CORRECT service method
+        success = entity_media_service.delete_entity_media(id) # <--- FIX
 
         if not success:
             raise HTTPException(
@@ -218,7 +168,7 @@ async def delete_entity_media(
                 detail=f"Entity media with ID {id} not found"
             )
 
-        # Return a proper 204 No Content response instead of None
+        # Return a proper 204 No Content response
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     except HTTPException:
         raise

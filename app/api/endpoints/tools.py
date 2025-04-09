@@ -1,4 +1,3 @@
-# File: app/api/endpoints/tools.py
 """
 Tools API endpoints for HideSync.
 
@@ -34,7 +33,7 @@ from app.core.exceptions import (
 
 router = APIRouter()
 
-
+# Root routes first
 @router.get("/", response_model=List[Tool])
 def list_tools(
     *,
@@ -103,103 +102,7 @@ def create_tool(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.get("/{tool_id}", response_model=Tool)
-def get_tool(
-    *,
-    db: Session = Depends(get_db),
-    tool_id: int = Path(..., ge=1, description="The ID of the tool to retrieve"),
-    current_user: Any = Depends(get_current_active_user),
-) -> Tool:
-    """
-    Get detailed information about a specific tool.
-
-    Args:
-        db: Database session
-        tool_id: ID of the tool to retrieve
-        current_user: Currently authenticated user
-
-    Returns:
-        Tool information
-
-    Raises:
-        HTTPException: If the tool doesn't exist
-    """
-    tool_service = ToolService(db)
-    try:
-        return tool_service.get_tool(tool_id)
-    except EntityNotFoundException:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Tool with ID {tool_id} not found",
-        )
-
-
-@router.put("/{tool_id}", response_model=Tool)
-def update_tool(
-    *,
-    db: Session = Depends(get_db),
-    tool_id: int = Path(..., ge=1, description="The ID of the tool to update"),
-    tool_in: ToolUpdate,
-    current_user: Any = Depends(get_current_active_user),
-) -> Tool:
-    """
-    Update a tool.
-
-    Args:
-        db: Database session
-        tool_id: ID of the tool to update
-        tool_in: Updated tool data
-        current_user: Currently authenticated user
-
-    Returns:
-        Updated tool information
-
-    Raises:
-        HTTPException: If the tool doesn't exist or update violates business rules
-    """
-    tool_service = ToolService(db)
-    try:
-        return tool_service.update_tool(tool_id, tool_in, current_user.id)
-    except EntityNotFoundException:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Tool with ID {tool_id} not found",
-        )
-    except BusinessRuleException as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-
-
-@router.delete("/{tool_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_tool(
-    *,
-    db: Session = Depends(get_db),
-    tool_id: int = Path(..., ge=1, description="The ID of the tool to delete"),
-    current_user: Any = Depends(get_current_active_user),
-) -> None:
-    """
-    Delete a tool.
-
-    Args:
-        db: Database session
-        tool_id: ID of the tool to delete
-        current_user: Currently authenticated user
-
-    Raises:
-        HTTPException: If the tool doesn't exist or can't be deleted
-    """
-    tool_service = ToolService(db)
-    try:
-        tool_service.delete_tool(tool_id, current_user.id)
-    except EntityNotFoundException:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Tool with ID {tool_id} not found",
-        )
-    except BusinessRuleException as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-
-
-# Tool checkouts
+# Tool checkouts routes
 @router.get("/checkouts", response_model=List[ToolCheckout])
 def list_checkouts(
     *,
@@ -303,7 +206,7 @@ def return_tool(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-# Tool maintenance
+# Tool maintenance routes
 @router.get("/maintenance", response_model=List[ToolMaintenance])
 def list_maintenance(
     *,
@@ -330,6 +233,30 @@ def list_maintenance(
     return tool_service.get_maintenance_records(
         status=status, tool_id=tool_id, upcoming_only=upcoming_only
     )
+
+
+@router.get("/maintenance/schedule", response_model=MaintenanceSchedule)
+def get_maintenance_schedule(
+    *,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_active_user),
+    start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
+) -> MaintenanceSchedule:
+    """
+    Get tool maintenance schedule.
+
+    Args:
+        db: Database session
+        current_user: Currently authenticated user
+        start_date: Optional start date
+        end_date: Optional end date
+
+    Returns:
+        Maintenance schedule
+    """
+    tool_service = ToolService(db)
+    return tool_service.get_maintenance_schedule(start_date, end_date)
 
 
 @router.post(
@@ -406,30 +333,6 @@ def update_maintenance(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.get("/maintenance/schedule", response_model=MaintenanceSchedule)
-def get_maintenance_schedule(
-    *,
-    db: Session = Depends(get_db),
-    current_user: Any = Depends(get_current_active_user),
-    start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
-    end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
-) -> MaintenanceSchedule:
-    """
-    Get tool maintenance schedule.
-
-    Args:
-        db: Database session
-        current_user: Currently authenticated user
-        start_date: Optional start date
-        end_date: Optional end date
-
-    Returns:
-        Maintenance schedule
-    """
-    tool_service = ToolService(db)
-    return tool_service.get_maintenance_schedule(start_date, end_date)
-
-
 @router.post("/maintenance/{maintenance_id}/complete", response_model=ToolMaintenance)
 def complete_maintenance(
     *,
@@ -470,6 +373,103 @@ def complete_maintenance(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Maintenance record with ID {maintenance_id} not found",
+        )
+    except BusinessRuleException as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+# Tool-specific routes (with ID parameter) come last
+@router.get("/{tool_id}", response_model=Tool)
+def get_tool(
+    *,
+    db: Session = Depends(get_db),
+    tool_id: int = Path(..., ge=1, description="The ID of the tool to retrieve"),
+    current_user: Any = Depends(get_current_active_user),
+) -> Tool:
+    """
+    Get detailed information about a specific tool.
+
+    Args:
+        db: Database session
+        tool_id: ID of the tool to retrieve
+        current_user: Currently authenticated user
+
+    Returns:
+        Tool information
+
+    Raises:
+        HTTPException: If the tool doesn't exist
+    """
+    tool_service = ToolService(db)
+    try:
+        return tool_service.get_tool(tool_id)
+    except EntityNotFoundException:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Tool with ID {tool_id} not found",
+        )
+
+
+@router.put("/{tool_id}", response_model=Tool)
+def update_tool(
+    *,
+    db: Session = Depends(get_db),
+    tool_id: int = Path(..., ge=1, description="The ID of the tool to update"),
+    tool_in: ToolUpdate,
+    current_user: Any = Depends(get_current_active_user),
+) -> Tool:
+    """
+    Update a tool.
+
+    Args:
+        db: Database session
+        tool_id: ID of the tool to update
+        tool_in: Updated tool data
+        current_user: Currently authenticated user
+
+    Returns:
+        Updated tool information
+
+    Raises:
+        HTTPException: If the tool doesn't exist or update violates business rules
+    """
+    tool_service = ToolService(db)
+    try:
+        return tool_service.update_tool(tool_id, tool_in, current_user.id)
+    except EntityNotFoundException:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Tool with ID {tool_id} not found",
+        )
+    except BusinessRuleException as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.delete("/{tool_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_tool(
+    *,
+    db: Session = Depends(get_db),
+    tool_id: int = Path(..., ge=1, description="The ID of the tool to delete"),
+    current_user: Any = Depends(get_current_active_user),
+) -> None:
+    """
+    Delete a tool.
+
+    Args:
+        db: Database session
+        tool_id: ID of the tool to delete
+        current_user: Currently authenticated user
+
+    Raises:
+        HTTPException: If the tool doesn't exist or can't be deleted
+    """
+    tool_service = ToolService(db)
+    try:
+        tool_service.delete_tool(tool_id, current_user.id)
+    except EntityNotFoundException:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Tool with ID {tool_id} not found",
         )
     except BusinessRuleException as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

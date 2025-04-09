@@ -48,273 +48,6 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-# Add these to app/api/endpoints/media_assets.py
-
-@router.get("/public-preview/{asset_id}")
-async def public_preview_media_asset(
-        asset_id: str,
-        db: Session = Depends(get_db)
-):
-    """Public preview endpoint without auth for debugging"""
-    try:
-        # Get asset info
-        service_factory = ServiceFactory(db)
-        media_asset_service = service_factory.get_media_asset_service()
-        asset = media_asset_service.get_media_asset(asset_id)
-
-        if not asset:
-            raise HTTPException(status_code=404, detail="Asset not found")
-
-        # Try to serve the actual file first
-        storage_path = asset.storage_location
-        if os.path.exists(storage_path):
-            logger.info(f"Serving existing file from: {storage_path}")
-            return FileResponse(
-                path=storage_path,
-                media_type=asset.content_type
-            )
-
-        # Try alternative paths
-        alt_paths = [
-            f"media_assets/{asset_id}_{asset.file_name}",
-            f"media_assets/{asset.file_name}",
-            os.path.join(os.getcwd(), "media_assets", f"{asset_id}_{asset.file_name}")
-        ]
-
-        for path in alt_paths:
-            if os.path.exists(path):
-                logger.info(f"Serving existing file from alt path: {path}")
-                return FileResponse(
-                    path=path,
-                    media_type=asset.content_type
-                )
-
-        # If we get here, no existing file was found, create a test file
-        test_file = f"media_assets/preview_{asset_id}.txt"
-        os.makedirs("media_assets", exist_ok=True)
-
-        with open(test_file, "w") as f:
-            f.write(f"This is a preview file for asset {asset_id}\n")
-            f.write(f"Original filename: {asset.file_name}\n")
-            f.write(f"Storage path: {storage_path}\n")
-            f.write(f"Content type: {asset.content_type}\n")
-
-        # Return test file directly
-        return FileResponse(
-            path=test_file,
-            media_type="text/plain"
-        )
-    except Exception as e:
-        logger.error(f"Public preview error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/public-download/{asset_id}")
-async def public_download_media_asset(
-        asset_id: str,
-        db: Session = Depends(get_db)
-):
-    """Public download endpoint without auth for debugging"""
-    try:
-        # Get asset info
-        service_factory = ServiceFactory(db)
-        media_asset_service = service_factory.get_media_asset_service()
-        asset = media_asset_service.get_media_asset(asset_id)
-
-        if not asset:
-            raise HTTPException(status_code=404, detail="Asset not found")
-
-        # Try to serve the actual file first
-        storage_path = asset.storage_location
-        if os.path.exists(storage_path):
-            logger.info(f"Serving existing file from: {storage_path}")
-            return FileResponse(
-                path=storage_path,
-                media_type=asset.content_type,
-                filename=asset.file_name
-            )
-
-        # Try alternative paths
-        alt_paths = [
-            f"media_assets/{asset_id}_{asset.file_name}",
-            f"media_assets/{asset.file_name}",
-            os.path.join(os.getcwd(), "media_assets", f"{asset_id}_{asset.file_name}")
-        ]
-
-        for path in alt_paths:
-            if os.path.exists(path):
-                logger.info(f"Serving existing file from alt path: {path}")
-                return FileResponse(
-                    path=path,
-                    media_type=asset.content_type,
-                    filename=asset.file_name
-                )
-
-        # If we get here, no existing file was found, create a test file
-        test_file = f"media_assets/download_{asset_id}.txt"
-        os.makedirs("media_assets", exist_ok=True)
-
-        with open(test_file, "w") as f:
-            f.write(f"This is a download file for asset {asset_id}\n")
-            f.write(f"Original filename: {asset.file_name}\n")
-            f.write(f"Storage path: {storage_path}\n")
-            f.write(f"Content type: {asset.content_type}\n")
-
-        # Return test file directly
-        return FileResponse(
-            path=test_file,
-            media_type="text/plain",
-            filename=f"test_{asset.file_name}"
-        )
-    except Exception as e:
-        logger.error(f"Public download error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-
-@router.get("/diagnostic/{asset_id}")
-async def file_diagnostic(
-        *,
-        db: Session = Depends(get_db),
-        current_user: Any = Depends(get_current_active_user),
-        asset_id: str = Path(...),
-):
-    """Diagnostic endpoint to check file paths"""
-    try:
-        # Get services
-        service_factory = ServiceFactory(db)
-        media_asset_service = service_factory.get_media_asset_service()
-
-        # Get asset
-        asset = media_asset_service.get_media_asset(asset_id)
-        if not asset:
-            return {"error": f"Asset {asset_id} not found"}
-
-        # Get stored path
-        stored_path = asset.storage_location
-
-        # Check if file exists at the stored path
-        stored_path_exists = os.path.exists(stored_path)
-
-        # Try alternative paths
-        base_dir = "media_assets"
-        alternative_paths = [
-            f"{base_dir}/{asset_id}_{asset.file_name}",
-            f"{base_dir}/{asset.file_name}",
-            f"{base_dir}/{asset_id}/{asset.file_name}",
-            f"uploads/{asset_id}_{asset.file_name}",
-            f"uploads/{asset.file_name}"
-        ]
-
-        found_paths = []
-        for path in alternative_paths:
-            if os.path.exists(path):
-                found_paths.append(path)
-
-        # Check working directory
-        working_dir = os.getcwd()
-
-        # Check if media_assets folder exists
-        media_dir_exists = os.path.exists("media_assets")
-
-        # Check what files are in the media_assets folder
-        media_dir_files = os.listdir("media_assets") if media_dir_exists else []
-
-        return {
-            "asset_id": asset_id,
-            "file_name": asset.file_name,
-            "content_type": asset.content_type,
-            "stored_path": stored_path,
-            "stored_path_exists": stored_path_exists,
-            "working_directory": working_dir,
-            "media_dir_exists": media_dir_exists,
-            "media_dir_files": media_dir_files,
-            "alternative_paths_checked": alternative_paths,
-            "found_paths": found_paths
-        }
-    except Exception as e:
-        logger.error(f"Diagnostic error: {str(e)}", exc_info=True)
-        return {"error": str(e)}
-
-
-@router.get("/file-locator/{asset_id}")
-async def locate_file(
-        *,
-        db: Session = Depends(get_db),
-        current_user: Any = Depends(get_current_active_user),
-        asset_id: str = Path(...),
-):
-    """Diagnostic endpoint to find files in the filesystem."""
-    try:
-        # Get asset info
-        service_factory = ServiceFactory(db)
-        media_asset_service = service_factory.get_media_asset_service()
-        asset = media_asset_service.get_media_asset(asset_id)
-
-        if not asset:
-            return {"error": "Asset not found"}
-
-        # Get the storage location from DB
-        db_path = asset.storage_location
-
-        # Look for the file in various locations
-        results = {
-            "asset_id": asset_id,
-            "db_path": db_path,
-            "file_name": asset.file_name,
-            "content_type": asset.content_type,
-            "paths_checked": [],
-            "file_found": False,
-            "found_at": None
-        }
-
-        # Get the current working directory
-        cwd = os.getcwd()
-        results["cwd"] = cwd
-
-        # Check if common directories exist
-        media_dir = os.path.join(cwd, "media_assets")
-        results["media_dir_exists"] = os.path.exists(media_dir)
-
-        # List all files in the media directory
-        if results["media_dir_exists"]:
-            results["media_dir_files"] = os.listdir(media_dir)
-
-        # Use glob to find any files with this asset ID
-        import glob
-
-        # Try different search patterns
-        search_patterns = [
-            f"{cwd}/**/{asset_id}*",
-            f"{cwd}/media_assets/**/{asset_id}*",
-            f"{media_dir}/**/{asset_id}*",
-            f"{media_dir}/{asset_id}*",
-        ]
-
-        all_matches = []
-        for pattern in search_patterns:
-            results["paths_checked"].append(pattern)
-            matches = glob.glob(pattern, recursive=True)
-            if matches:
-                all_matches.extend(matches)
-
-        # Process and deduplicate the matches
-        unique_matches = list(set(all_matches))
-        results["all_matching_files"] = unique_matches
-
-        if unique_matches:
-            results["file_found"] = True
-            results["found_at"] = unique_matches
-
-            # Update the database path if we found a file
-            if len(unique_matches) == 1:
-                # Maybe update the path in the database?
-                pass
-
-        return results
-    except Exception as e:
-        logger.error(f"File locator error: {str(e)}", exc_info=True)
-        return {"error": str(e)}
 
 @router.get("/", response_model=MediaAssetListResponse)
 async def list_media_assets(
@@ -456,9 +189,8 @@ async def preview_media_asset(
         current_user: Any = Depends(get_current_active_user),
         asset_id: str = Path(...),
 ):
-    """Preview a media asset file directly in browser."""
+    """Preview a media asset file directly in browser (inline)."""
     try:
-        # Get asset
         service_factory = ServiceFactory(db)
         media_asset_service = service_factory.get_media_asset_service()
         asset = media_asset_service.get_media_asset(asset_id)
@@ -466,68 +198,33 @@ async def preview_media_asset(
         if not asset:
             raise HTTPException(status_code=404, detail="Asset not found")
 
-        logger.info(f"Preview request for: {asset_id}, storage path: {asset.storage_location}")
+        if not asset.storage_location:
+             raise HTTPException(status_code=404, detail="Asset has no associated file location")
 
-        # Get working directory and base paths
-        cwd = os.getcwd()
-        media_dir = os.path.join(cwd, "media_assets")
+        logger.info(f"Preview request for: {asset_id}, path: {asset.storage_location}")
 
-        # Create directory if it doesn't exist
-        os.makedirs(media_dir, exist_ok=True)
-
-        # Try multiple paths
-        paths_to_try = [
-            asset.storage_location,
-            os.path.join(cwd, asset.storage_location),
-            os.path.join(media_dir, f"{asset_id}_{asset.file_name}"),
-            os.path.join(media_dir, asset_id[:2], asset_id[2:4], f"{asset_id}{os.path.splitext(asset.file_name)[1]}"),
-        ]
-
-        # Look for the file
-        for path in paths_to_try:
-            logger.info(f"Checking path: {path}")
-            if os.path.exists(path):
-                logger.info(f"Found file at: {path}")
-                return FileResponse(
-                    path=path,
-                    media_type=asset.content_type
-                )
-
-        # Create placeholder if not found (for development/testing)
-        placeholder_path = os.path.join(media_dir, f"placeholder_{asset_id}.png")
-
+        # Use service to get file path (handles finding it)
+        # This assumes get_file_content returns a path or raises an error
         try:
-            # Create simple placeholder image
-            from PIL import Image, ImageDraw
+             file_path = media_asset_service.find_file_path(asset_id) # Add find_file_path to service
+             if not file_path or not os.path.exists(file_path):
+                 raise FileNotFoundError("File not found on server.")
 
-            # Create a colored background based on asset ID for uniqueness
-            # This helps visually distinguish different assets
-            hue = int(asset_id.replace("-", "")[:8], 16) % 360
-
-            img = Image.new('RGB', (300, 200), color=hsv_to_rgb(hue / 360, 0.3, 0.95))
-            d = ImageDraw.Draw(img)
-
-            # Draw asset info
-            d.text((10, 10), f"Asset ID: {asset_id[:8]}...", fill=(0, 0, 0))
-            d.text((10, 30), f"File: {asset.file_name[:30]}", fill=(0, 0, 0))
-            d.text((10, 160), "Placeholder Image", fill=(0, 0, 0))
-
-            # Save the placeholder
-            img.save(placeholder_path)
-            logger.info(f"Created placeholder at: {placeholder_path}")
-
-            return FileResponse(
-                path=placeholder_path,
-                media_type="image/png"
-            )
-        except Exception as e:
-            logger.error(f"Error creating placeholder: {str(e)}")
-            raise HTTPException(status_code=404, detail="File not found")
+             logger.info(f"Serving preview from: {file_path}")
+             return FileResponse(
+                 path=file_path,
+                 media_type=asset.content_type,
+                 # Use inline for preview
+                 headers={"Content-Disposition": f'inline; filename="{asset.file_name}"'}
+             )
+        except (EntityNotFoundException, FileStorageException, FileNotFoundError) as e:
+             logger.error(f"File not found for preview {asset_id}: {e}")
+             raise HTTPException(status_code=404, detail="File not found")
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Preview error: {str(e)}", exc_info=True)
+        logger.error(f"Preview error for {asset_id}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -620,63 +317,6 @@ async def download_media_asset(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/{asset_id}/download")
-async def download_media_asset(
-        *,
-        db: Session = Depends(get_db),
-        current_user: Any = Depends(get_current_active_user),
-        asset_id: str = Path(...),
-):
-    """Download a media asset file."""
-    try:
-        # Get asset
-        service_factory = ServiceFactory(db)
-        media_asset_service = service_factory.get_media_asset_service()
-        asset = media_asset_service.get_media_asset(asset_id)
-
-        if not asset:
-            raise HTTPException(status_code=404, detail="Asset not found")
-
-        # Log the access attempt
-        logger.info(f"Download request for: {asset_id}, path: {asset.storage_location}")
-
-        # Direct file access - try multiple possible paths
-        file_path = asset.storage_location
-        found_path = None
-
-        # Check if the direct path exists
-        if os.path.exists(file_path):
-            found_path = file_path
-        else:
-            # Try alternative paths
-            candidates = [
-                f"media_assets/{asset_id}_{asset.file_name}",
-                f"media_assets/{asset.file_name}",
-                os.path.join(os.getcwd(), "media_assets", f"{asset_id}_{asset.file_name}"),
-                os.path.join(os.getcwd(), asset.storage_location)
-            ]
-
-            for path in candidates:
-                logger.info(f"Checking path: {path}")
-                if os.path.exists(path):
-                    found_path = path
-                    logger.info(f"Found file at: {path}")
-                    break
-
-        if not found_path:
-            logger.error(f"File not found at any location for {asset_id}")
-            raise HTTPException(status_code=404, detail="File not found")
-
-        # Serve the file as a download attachment
-        return FileResponse(
-            found_path,
-            media_type=asset.content_type,
-            filename=asset.file_name,
-            headers={"Content-Disposition": f'attachment; filename="{asset.file_name}"'}
-        )
-    except Exception as e:
-        logger.error(f"Download error for {asset_id}: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/{asset_id}/direct-file")
@@ -816,65 +456,45 @@ async def download_media_asset(
         *,
         db: Session = Depends(get_db),
         current_user: Any = Depends(get_current_active_user),
-        asset_id: str = Path(..., description="The ID of the media asset"),
+        asset_id: str = Path(...),
 ):
-    """
-    Download a media asset file.
-    """
+    """Download a media asset file as an attachment."""
     try:
-        # Get services
         service_factory = ServiceFactory(db)
         media_asset_service = service_factory.get_media_asset_service()
-
-        # Get asset
         asset = media_asset_service.get_media_asset(asset_id)
+
         if not asset:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Media asset with ID {asset_id} not found",
-            )
+            raise HTTPException(status_code=404, detail="Asset not found")
 
-        # Log the asset details for debugging
-        logger.info(f"Downloading asset: {asset_id}, storage: {asset.storage_location}")
+        if not asset.storage_location:
+             raise HTTPException(status_code=404, detail="Asset has no associated file location")
 
-        # Get file content using a more direct approach
-        file_path = asset.storage_location
+        logger.info(f"Download request for: {asset_id}, path: {asset.storage_location}")
 
-        # Try both absolute and relative paths
-        if not os.path.isfile(file_path):
-            # Try relative path
-            base_dir = "media_assets"
-            possible_paths = [
-                f"{base_dir}/{asset_id}_{asset.file_name}",
-                f"{base_dir}/{asset.file_name}",
-                f"{base_dir}/{asset_id}/{asset.file_name}"
-            ]
+        # Use service to get file path
+        try:
+             file_path = media_asset_service.find_file_path(asset_id) # Add find_file_path to service
+             if not file_path or not os.path.exists(file_path):
+                 raise FileNotFoundError("File not found on server.")
 
-            for path in possible_paths:
-                if os.path.isfile(path):
-                    file_path = path
-                    logger.info(f"Found file at alternative path: {file_path}")
-                    break
-            else:
-                logger.error(f"File not found for asset {asset_id} at any of the expected locations")
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"File not found for asset {asset_id}"
-                )
+             logger.info(f"Serving download from: {file_path}")
+             # Serve the file as an attachment
+             return FileResponse(
+                 file_path,
+                 media_type=asset.content_type,
+                 filename=asset.file_name,
+                 # Use attachment for download
+                 headers={"Content-Disposition": f'attachment; filename="{asset.file_name}"'}
+             )
+        except (EntityNotFoundException, FileStorageException, FileNotFoundError) as e:
+             logger.error(f"File not found for download {asset_id}: {e}")
+             raise HTTPException(status_code=404, detail="File not found")
 
-        # Return file as attachment for download
-        return FileResponse(
-            file_path,
-            media_type=asset.content_type,
-            filename=asset.file_name,
-            headers={"Content-Disposition": f'attachment; filename="{asset.file_name}"'}
-        )
     except Exception as e:
-        logger.error(f"Error downloading asset {asset_id}: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error downloading asset: {str(e)}"
-        )
+        logger.error(f"Download error for {asset_id}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.put("/{asset_id}", response_model=MediaAssetResponse)
 async def update_media_asset(
