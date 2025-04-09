@@ -254,6 +254,19 @@ class ToolBase(BaseModel):
         if len(v.strip()) < 3: raise ValueError("Tool name must be at least 3 characters")
         return v.strip()
 
+    @field_validator("category", mode='before')
+    @classmethod
+    def validate_category_case(cls, v: Any):
+        if isinstance(v, str):
+            try:
+                # Convert incoming string to lowercase before validating against the enum
+                return ToolCategory(v.lower())
+            except ValueError:
+                # Re-raise with a potentially clearer message if needed
+                raise ValueError(f"Invalid tool category value: '{v}'")
+        elif isinstance(v, ToolCategory):
+            return v  # Already the correct enum type
+        raise TypeError("Category must be a string or ToolCategory enum")
 
 class ToolCreate(ToolBase):
     name: str = Field(..., min_length=3, description="Tool name")

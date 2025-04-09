@@ -1,4 +1,4 @@
-# app/sqlcipher_dialect.py (moved from app/db/sqlcipher_dialect.py)
+# app/sqlcipher_dialect.py
 
 from sqlalchemy.dialects.sqlite.pysqlite import SQLiteDialect_pysqlite
 from typing import Optional, Any, Callable
@@ -32,7 +32,6 @@ class SQLCipherDialect(SQLiteDialect_pysqlite):
         """Return the database API module."""
         try:
             import pysqlcipher3.dbapi2 as sqlcipher
-
             return sqlcipher
         except ImportError as e:
             raise ImportError(
@@ -97,7 +96,6 @@ class SQLCipherDialect(SQLiteDialect_pysqlite):
         try:
             # Import here to avoid circular imports
             from app.core.key_manager import KeyManager
-
             return KeyManager.get_database_encryption_key()
         except ImportError:
             logger.error("Could not import KeyManager")
@@ -109,5 +107,4 @@ class SQLCipherDialect(SQLiteDialect_pysqlite):
 
 # Register the dialect with SQLAlchemy
 from sqlalchemy.dialects import registry
-
 registry.register("sqlcipher", __name__, "SQLCipherDialect")
