@@ -291,6 +291,13 @@ class SaleService(BaseService[Sale]):
 
             return sale
 
+    def get_sales(self, skip: int = 0, limit: int = 100, search_params: dict = None):
+        # TODO: Implement actual logic to query sales
+        print(f"Placeholder: Fetching sales with skip={skip}, limit={limit}, params={search_params}")
+        return {"items": [], "total": 0}
+
+    # ... other methods ...
+
     def _calculate_totals(
         self, sale_data: Dict[str, Any], items_data: List[Dict[str, Any]]
     ) -> None:

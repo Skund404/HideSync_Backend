@@ -1,4 +1,3 @@
-# File: app/db/models/__init__.py
 """
 Initializes the models package for SQLAlchemy declarative base.
 
@@ -11,7 +10,7 @@ is called.
 # Import the Base for declarative models
 from app.db.models.base import Base
 
-# Import all Enums defined in enums.py
+# Import all Python Enum DEFINITIONS defined in enums.py
 from app.db.models.enums import (
     SaleStatus,
     PaymentStatus,
@@ -46,13 +45,13 @@ from app.db.models.enums import (
     MaterialStatus,
     PatternFileType,
     FulfillmentStatus,
-    UserRole,
+    UserRole, PurchaseStatus,
 )
 
 # Create alias for backward compatibility
 HardwareMaterial = HardwareMaterialEnum
 
-# Import Enums defined within documentation.py
+# Import Enums defined within documentation.py (assuming these are also Python Enums)
 from app.db.models.documentation import (
     DocumentationType,
     DocumentationStatus,
@@ -88,13 +87,13 @@ from app.db.models.storage import (
 from app.db.models.tool import Tool, ToolMaintenance, ToolCheckout
 
 # Import Design & Project Models
-from app.db.models.pattern import Pattern  # Only Pattern is in pattern.py
+from app.db.models.pattern import Pattern
 from app.db.models.component import Component, ComponentMaterial
 from app.db.models.project import (
     Project,
     ProjectComponent,
-    ProjectTemplate,  # Correctly imported from project.py
-    ProjectTemplateComponent,  # Correctly imported from project.py
+    ProjectTemplate,
+    ProjectTemplateComponent,
 )
 from app.db.models.timeline_task import TimelineTask
 from app.db.models.recurring_project import (
@@ -116,19 +115,23 @@ from app.db.models.communication import CustomerCommunication
 
 # Import Media & Asset Management Models
 from app.db.models.media_asset import MediaAsset
-from app.db.models.entity_media import EntityMedia  # Add this import
+from app.db.models.entity_media import EntityMedia
 from app.db.models.tag import Tag
-from app.db.models.association_media import MediaAssetTag
+from app.db.models.association_media import MediaAssetTag # Check if this model exists
 
 # Import Documentation & Utility Models
 from app.db.models.documentation import (
-    DocumentationCategory,
+    DocumentationCategory, # This seems like a model, not just an Enum
     DocumentationResource,
     ApplicationContext,
     ContextualHelpMapping,
     # Enums already imported above
 )
 from app.db.models.file_metadata import FileMetadata
+
+# --- Import Dynamic Enum Management Models ---
+from app.db.models.dynamic_enum import EnumType, EnumTranslation
+# --- End Dynamic Enum Management Models ---
 
 # Define __all__ for explicit namespace export
 __all__ = [
@@ -166,8 +169,8 @@ __all__ = [
     "ComponentMaterial",
     "Project",
     "ProjectComponent",
-    "ProjectTemplate",  # Correctly exported
-    "ProjectTemplateComponent",  # Correctly exported
+    "ProjectTemplate",
+    "ProjectTemplateComponent",
     "TimelineTask",
     "RecurrencePattern",
     "RecurringProject",
@@ -187,19 +190,23 @@ __all__ = [
     "CustomerCommunication",
     # Media & Asset Management Models
     "MediaAsset",
-    "EntityMedia",  # Add this to __all__
+    "EntityMedia",
     "Tag",
-    "MediaAssetTag",
+    "MediaAssetTag", # Make sure this model is defined if exported
     # Documentation & Utility Models
-    "DocumentationCategory",
+    "DocumentationCategory", # Exporting model
     "DocumentationResource",
     "ApplicationContext",
     "ContextualHelpMapping",
     "FileMetadata",
-    # Enums (Exporting all imported enums)
+    # Dynamic Enum Models
+    "EnumType",
+    "EnumTranslation",
+    # Python Enums (Exporting all imported definitions)
     "SaleStatus",
     "PaymentStatus",
-    "PurchaseStatus",
+    "PurchaseStatus", # Exporting this as well as PurchaseOrderStatus
+    "PurchaseOrderStatus",
     "CustomerStatus",
     "CustomerTier",
     "CustomerSource",
@@ -207,8 +214,8 @@ __all__ = [
     "MaterialType",
     "MaterialQualityGrade",
     "HardwareType",
-    "HardwareMaterial",  # Still export HardwareMaterial for backward compatibility
-    "HardwareMaterialEnum",  # Also export the original enum name
+    "HardwareMaterial",  # Exporting alias
+    "HardwareMaterialEnum",  # Exporting original enum name
     "HardwareFinish",
     "LeatherType",
     "LeatherFinish",
@@ -232,6 +239,6 @@ __all__ = [
     "PatternFileType",
     "FulfillmentStatus",
     "UserRole",
-    "DocumentationType",
-    "DocumentationStatus",
+    "DocumentationType", # Exporting Python Enum from documentation.py
+    "DocumentationStatus", # Exporting Python Enum from documentation.py
 ]

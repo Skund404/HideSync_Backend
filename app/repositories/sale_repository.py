@@ -22,7 +22,7 @@ class SaleRepository(BaseRepository[Sale]):
         """
         Initialize the SaleRepository.
 
-        Args:
+        Args:A
             session (Session): SQLAlchemy database session
             encryption_service (Optional): Service for handling field encryption/decryption
         """
