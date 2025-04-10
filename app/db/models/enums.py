@@ -1655,3 +1655,28 @@ class PurchaseStatus(Enum):
     ORDERED = "ordered"
     PARTIALLY_RECEIVED = "partially_received"
     RECEIVED = "received"
+
+
+from enum import Enum # Ensure Enum is imported
+
+class ToolCondition(Enum):
+    """Represents the physical condition of a tool, typically upon checkout or return."""
+    EXCELLENT = "excellent"
+    GOOD = "good"
+    FAIR = "fair"
+    POOR = "poor"
+    DAMAGED = "damaged" # Note: Same code as ToolStatus.DAMAGED, context differentiates
+    NEEDS_REPLACEMENT = "needs_replacement"
+    # Add 'other' if applicable
+    # OTHER = "other"
+
+class MaintenanceType(Enum):
+    """Represents the type of maintenance performed or scheduled for a tool."""
+    ROUTINE = "routine"
+    REPAIR = "repair"
+    CALIBRATION = "calibration"
+    INSPECTION = "inspection"
+    CLEANING = "cleaning"
+    REPLACEMENT = "replacement" # e.g., Parts Replacement
+    # Add 'other' if applicable
+    OTHER = "other"
