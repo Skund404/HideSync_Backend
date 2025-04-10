@@ -47,6 +47,7 @@ MODEL_MODULES = [
     "app.db.models.component",
     "app.db.models.customer",
     "app.db.models.documentation",
+    "app.db.models.dynamic_enum",
     "app.db.models.entity_media",
     "app.db.models.enums",
     "app.db.models.file_metadata",
