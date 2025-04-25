@@ -6,14 +6,14 @@ This module defines the Material model and its specialized subtypes:
 - LeatherMaterial: For leather inventory
 - HardwareMaterial: For hardware components like buckles, rivets, etc.
 - SuppliesMaterial: For other supplies like thread, dye, etc.
+- WoodMaterial: For wood inventory
 
 The models use SQLAlchemy's single-table inheritance to represent the
 different material types, with a discriminator column to identify the type.
 """
 
-from __future__ import annotations  # Allows type hinting models defined later
+from __future__ import annotations
 
-# Removed uuid import as it was only used by the removed table
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, ClassVar, Dict, List, Optional, Set
@@ -29,14 +29,11 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
-    # Removed Table import as it's no longer used here
-    # Removed UniqueConstraint import as it was only used by the removed table
     and_,
 )
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import foreign, relationship, validates
 
-# Assuming these base classes and enums are correctly defined elsewhere
 from app.db.models.base import (
     AbstractBase,
     CostingMixin,
@@ -53,13 +50,11 @@ from app.db.models.enums import (
     MaterialQualityGrade,
     MaterialType,
     MeasurementUnit,
-    SkillLevel,  # Added SkillLevel if needed by other imports, check usage
+    SkillLevel,
+    WoodType,
+    WoodGrain,
+    WoodFinish,
 )
-
-# --- REMOVED Association Table Definition ---
-# The documentation_category_assignment table definition was removed from here.
-# It should be defined only once, likely in the file containing the
-# DocumentationCategory and DocumentationResource models.
 
 
 class Material(AbstractBase, ValidationMixin, CostingMixin, TimestampMixin):
@@ -69,23 +64,8 @@ class Material(AbstractBase, ValidationMixin, CostingMixin, TimestampMixin):
     Attributes:
         id: Primary key.
         name: Name of the material.
-        material_type: Discriminator for subtypes (leather, hardware, supplies).
-        status: Current inventory status (e.g., IN_STOCK).
-        quantity: Current quantity on hand.
-        unit: Unit of measurement (e.g., SQUARE_FOOT, PIECE).
-        quality: Quality grade (e.g., STANDARD, PREMIUM).
-        supplier_id: Foreign key to the Supplier.
-        supplier: Denormalized supplier name.
-        sku: Stock Keeping Unit identifier.
-        description: Detailed description of the material.
-        reorder_point: Quantity level at which to reorder.
-        supplier_sku: Supplier's SKU for this material.
-        cost_price: The purchase cost per unit (from CostingMixin).
-        price: The selling price per unit.
-        last_purchased: Date of the last purchase (consider DateTime).
-        storage_location: Primary storage location identifier.
-        notes: Additional notes about the material.
-        thumbnail: URL or path to a thumbnail image.
+        material_type: Discriminator for subtypes (leather, hardware, supplies, wood).
+        ... (see below for all fields)
     """
 
     __tablename__ = "materials"
@@ -94,7 +74,7 @@ class Material(AbstractBase, ValidationMixin, CostingMixin, TimestampMixin):
         "quantity",
         "reorder_point",
         "price",
-    }  # Added price
+    }
 
     # --- Primary Key ---
     id = Column(Integer, primary_key=True)
@@ -111,7 +91,7 @@ class Material(AbstractBase, ValidationMixin, CostingMixin, TimestampMixin):
 
     # Supplier information
     supplier_id = Column(Integer, ForeignKey("suppliers.id"), nullable=True)
-    supplier = Column(String(255))  # Denormalized name
+    supplier = Column(String(255))
     sku = Column(String(100), index=True)
     description = Column(Text)
 
@@ -120,19 +100,56 @@ class Material(AbstractBase, ValidationMixin, CostingMixin, TimestampMixin):
     supplier_sku = Column(String(100))
 
     # --- Pricing ---
-    # cost_price is inherited from CostingMixin
     price = Column(Float, default=0.0)  # Selling price per unit
 
     # --- Other ---
-    last_purchased = Column(String(50))  # Consider using DateTime type
+    last_purchased = Column(String(50))
     storage_location = Column(String(100))
     notes = Column(Text)
-    thumbnail = Column(String(255))  # URL or path to thumbnail image
+    thumbnail = Column(String(255))
+
+    # --- Leather-specific fields ---
+    leather_type = Column(Enum(LeatherType), nullable=True)
+    tannage = Column(String(50), nullable=True)
+    animal_source = Column(String(50), nullable=True)
+    leather_thickness = Column(Float, nullable=True)
+    area = Column(Float, nullable=True)
+    is_full_hide = Column(Boolean, default=False)
+    leather_color = Column(String(50), nullable=True)
+    leather_finish = Column(Enum(LeatherFinish), nullable=True)
+    leather_grade = Column(String(20), nullable=True)
+
+    # --- Hardware-specific fields ---
+    hardware_type = Column(Enum(HardwareType), nullable=True)
+    hardware_material = Column(Enum(HardwareMaterialEnum), nullable=True)
+    hardware_finish = Column(Enum(HardwareFinish), nullable=True)
+    hardware_size = Column(String(50), nullable=True)
+    hardware_color = Column(String(50), nullable=True)
+
+    # --- Supplies-specific fields ---
+    supplies_material_type = Column(String(50), nullable=True)
+    supplies_color = Column(String(50), nullable=True)
+    thread_thickness = Column(String(50), nullable=True)
+    material_composition = Column(String(100), nullable=True)
+    volume = Column(Float, nullable=True)
+    length = Column(Float, nullable=True)
+    drying_time = Column(String(50), nullable=True)
+    application_method = Column(String(100), nullable=True)
+    supplies_finish = Column(String(50), nullable=True)
+
+    # --- Wood-specific fields ---
+    wood_type = Column(Enum(WoodType), nullable=True)
+    wood_grain = Column(Enum(WoodGrain), nullable=True)
+    wood_finish = Column(Enum(WoodFinish), nullable=True)
+    wood_color = Column(String(50), nullable=True)
+    thickness = Column(Float, nullable=True)  # Used for wood, leather, etc.
+    width = Column(Float, nullable=True)
+    # length is already defined above
 
     # Inheritance configuration
     __mapper_args__ = {
         "polymorphic_on": material_type,
-        "polymorphic_identity": "material",  # Base identity
+        "polymorphic_identity": "material",
     }
 
     # --- RELATIONSHIPS ---
@@ -141,7 +158,6 @@ class Material(AbstractBase, ValidationMixin, CostingMixin, TimestampMixin):
     picking_list_items = relationship(
         "PickingListItem", back_populates="material", cascade="save-update, merge"
     )
-    # Assuming Inventory model exists and relationship is needed
     inventory = relationship(
         "Inventory",
         primaryjoin="and_(Inventory.item_type=='material', foreign(Inventory.item_id)==Material.id)",
@@ -150,13 +166,10 @@ class Material(AbstractBase, ValidationMixin, CostingMixin, TimestampMixin):
         cascade="all, delete-orphan",
         lazy="joined",
         passive_deletes=True,
-        # overlaps="inventory", # Removed overlaps if causing issues, check necessity
     )
-    # --- End Relationships ---
 
     @validates("quantity")
     def validate_quantity(self, key: str, quantity: float) -> float:
-        """Validate quantity and update status based on reorder point."""
         if quantity < 0:
             raise ValueError("Quantity cannot be negative")
         reorder_point = self.reorder_point if self.reorder_point is not None else 0.0
@@ -169,10 +182,7 @@ class Material(AbstractBase, ValidationMixin, CostingMixin, TimestampMixin):
         return quantity
 
     @validates("reorder_point")
-    def validate_reorder_point(
-        self, key: str, value: Optional[float]
-    ) -> Optional[float]:
-        """Validate reorder point (cannot be negative)."""
+    def validate_reorder_point(self, key: str, value: Optional[float]) -> Optional[float]:
         if value is None:
             return value
         if value < 0:
@@ -181,7 +191,6 @@ class Material(AbstractBase, ValidationMixin, CostingMixin, TimestampMixin):
 
     @validates("price")
     def validate_price(self, key: str, value: Optional[float]) -> Optional[float]:
-        """Validate selling price (cannot be negative)."""
         if value is None:
             return value
         if value < 0:
@@ -190,39 +199,26 @@ class Material(AbstractBase, ValidationMixin, CostingMixin, TimestampMixin):
 
     @hybrid_property
     def value(self) -> Optional[float]:
-        """Calculate the total cost value of this material in inventory."""
-        # Ensure cost_price exists and is not None before calculation
         cost_price = getattr(self, "cost_price", None)
         if cost_price is None:
             return None
-        # Ensure quantity is not None
         quantity = self.quantity if self.quantity is not None else 0.0
         return quantity * cost_price
 
     @hybrid_property
     def total_selling_value(self) -> Optional[float]:
-        """Calculate the total selling value of this material in inventory."""
         if self.price is None:
             return None
-        # Ensure quantity is not None
         quantity = self.quantity if self.quantity is not None else 0.0
         return quantity * self.price
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert Material instance to a dictionary."""
-        # Assumes base class has a to_dict or you implement one here
-        # If AbstractBase doesn't have to_dict, you might need:
-        # result = {c.name: getattr(self, c.name) for c in self.__table__.columns}
-        # Or use a more robust serialization method
         result = {}
         if hasattr(super(), "to_dict"):
             result = super().to_dict()
         else:
-            # Basic implementation if super doesn't have to_dict
             for c in self.__table__.columns:
                 result[c.name] = getattr(self, c.name)
-
-        # Add specific fields and calculated properties
         if self.status:
             result["status"] = self.status.name
         if self.unit:
@@ -231,79 +227,66 @@ class Material(AbstractBase, ValidationMixin, CostingMixin, TimestampMixin):
             result["quality"] = self.quality.name
         result["value"] = self.value
         result["total_selling_value"] = self.total_selling_value
-
-        # Handle inventory relationship data
         inv_record = self.inventory
         if inv_record:
             result["inventory_quantity"] = inv_record.quantity
             result["inventory_status"] = (
                 inv_record.status.name if inv_record.status else None
             )
-            # Prefer inventory's storage location if available
             result["storage_location"] = (
-                inv_record.storage_location or self.storage_location
+                    inv_record.storage_location or self.storage_location
             )
         else:
-            # Fallback to material's field if no inventory record
             result["storage_location"] = self.storage_location
-            result["inventory_quantity"] = None  # Indicate no separate inventory record
+            result["inventory_quantity"] = None
             result["inventory_status"] = None
-
         return result
 
     def __repr__(self) -> str:
-        """Return string representation of the Material."""
-        return f"<Material(id={getattr(self, 'id', None)}, name='{self.name}', type='{self.material_type}', quantity={self.quantity})>"
+        return (
+            f"<Material(id={getattr(self, 'id', None)}, name='{self.name}', "
+            f"type='{self.material_type}', quantity={self.quantity}, "
+            f"wood_type={self.wood_type}, leather_type={self.leather_type}, "
+            f"hardware_type={self.hardware_type})>"
+        )
 
 
-# --- Subclasses ---
-
+# --- Subclasses (no columns, just identity and optional __repr__) ---
 
 class LeatherMaterial(Material):
-    """Specialized Material model for leather inventory."""
-
     __mapper_args__ = {"polymorphic_identity": "leather"}
-    leather_type = Column(Enum(LeatherType))
-    tannage = Column(String(50))
-    animal_source = Column(String(50))
-    thickness = Column(Float)
-    area = Column(Float)
-    is_full_hide = Column(Boolean, default=False)
-    color = Column(String(50))
-    finish = Column(Enum(LeatherFinish))
-    grade = Column(String(20))
 
     def __repr__(self) -> str:
-        return f"<LeatherMaterial(id={getattr(self, 'id', None)}, name='{self.name}', type='{self.leather_type.name if self.leather_type else None}', thickness={self.thickness})>"
+        return f"<LeatherMaterial(id={getattr(self, 'id', None)}, name='{self.name}', type='{self.leather_type}', thickness={self.leather_thickness})>"
 
 
 class HardwareMaterial(Material):
-    """Specialized Material model for hardware inventory."""
-
     __mapper_args__ = {"polymorphic_identity": "hardware"}
-    hardware_type = Column(Enum(HardwareType))
-    hardware_material = Column(Enum(HardwareMaterialEnum))
-    hardware_finish = Column(Enum(HardwareFinish))
-    size = Column(String(50))
-    hardware_color = Column(String(50))
 
     def __repr__(self) -> str:
-        return f"<HardwareMaterial(id={getattr(self, 'id', None)}, name='{self.name}', type='{self.hardware_type.name if self.hardware_type else None}')>"
+        return f"<HardwareMaterial(id={getattr(self, 'id', None)}, name='{self.name}', type='{self.hardware_type}')>"
 
 
 class SuppliesMaterial(Material):
-    """Specialized Material model for supplies inventory."""
-
     __mapper_args__ = {"polymorphic_identity": "supplies"}
-    supplies_material_type = Column(String(50))
-    supplies_color = Column(String(50))
-    thread_thickness = Column(String(50))
-    material_composition = Column(String(100))
-    volume = Column(Float)
-    length = Column(Float)
-    drying_time = Column(String(50))
-    application_method = Column(String(100))
-    supplies_finish = Column(String(50))
 
     def __repr__(self) -> str:
         return f"<SuppliesMaterial(id={getattr(self, 'id', None)}, name='{self.name}', type='{self.supplies_material_type}')>"
+
+
+class WoodMaterial(Material):
+    """
+    Wood material subclass.
+
+    This class represents wood materials in the inventory system.
+    All wood-specific fields are defined in the base Material class.
+    """
+    __mapper_args__ = {"polymorphic_identity": "wood"}
+
+    def __repr__(self) -> str:
+        return (
+            f"<WoodMaterial(id={getattr(self, 'id', None)}, name='{self.name}', "
+            f"wood_type='{self.wood_type}', grain='{self.wood_grain}', "
+            f"thickness={self.thickness}, length={self.length}, width={self.width}, "
+            f"finish='{self.wood_finish}', color='{self.wood_color}')>"
+        )

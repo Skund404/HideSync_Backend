@@ -11,8 +11,17 @@ from app.db.models.material import (
     LeatherMaterial,
     HardwareMaterial,
     SuppliesMaterial,
+    WoodMaterial,  # Import WoodMaterial from the material module
 )
-from app.db.models.enums import MaterialType, MaterialStatus, InventoryStatus
+
+from app.db.models.enums import (
+    MaterialType,
+    MaterialStatus,
+    InventoryStatus,
+    WoodType,
+    WoodGrain,
+    WoodFinish,
+)
 from app.repositories.material_repository import MaterialRepository
 from app.core.exceptions import (
     EntityNotFoundException,
@@ -119,6 +128,7 @@ validate_material = validate_entity(Material)
 validate_leather_material = validate_entity(LeatherMaterial)
 validate_hardware_material = validate_entity(HardwareMaterial)
 validate_supplies_material = validate_entity(SuppliesMaterial)
+validate_wood_material = validate_entity(WoodMaterial)  # Add validation function for wood materials
 
 
 class MaterialService(BaseService[Material]):
@@ -158,6 +168,23 @@ class MaterialService(BaseService[Material]):
         self.cache_service = cache_service
         self.key_service = key_service
 
+    @validate_input(validate_wood_material)
+    def create_wood_material(self, data: Dict[str, Any]) -> WoodMaterial:
+        """
+        Create a wood material with type-specific validation.
+
+        Args:
+            data: Wood material data
+
+        Returns:
+            Created wood material entity
+
+        Raises:
+            ValidationException: If data validation fails
+        """
+        data["material_type"] = MaterialType.WOOD.value
+        return self.repository.create_wood(data)
+
     def get_materials(
         self,
         skip: int = 0,
@@ -193,7 +220,7 @@ class MaterialService(BaseService[Material]):
 
         # Add material_type filter if provided
         if search_params.material_type:
-            filters["materialType"] = search_params.material_type
+            filters["material_type"] = search_params.material_type
 
         # Add quality filter if provided
         if search_params.quality:
@@ -353,7 +380,7 @@ class MaterialService(BaseService[Material]):
 
     @validate_input(validate_material)
     def create_material(
-        self, data: Dict[str, Any], user_id: Optional[int] = None
+            self, data: Dict[str, Any], user_id: Optional[int] = None
     ) -> Material:
         """
         Create a new material with type-specific handling.
@@ -368,25 +395,23 @@ class MaterialService(BaseService[Material]):
         Raises:
             ValidationException: If data validation fails
         """
-        # Store user_id in security context if provided
         original_user = None
         if user_id and self.security_context:
             original_user = getattr(self.security_context, "current_user", None)
             self.security_context.current_user = type("User", (), {"id": user_id})
 
         try:
-            material_type = data.get("material_type")
-
+            material_type = data.get("material_type") or data.get("materialType")
             with self.transaction():
-                # Create appropriate material type
                 if material_type == MaterialType.LEATHER.value:
                     material = self.create_leather_material(data)
                 elif material_type == MaterialType.HARDWARE.value:
                     material = self.create_hardware_material(data)
                 elif material_type == MaterialType.SUPPLIES.value:
                     material = self.create_supplies_material(data)
+                elif material_type == MaterialType.WOOD.value:
+                    material = self.create_wood_material(data)
                 else:
-                    # Generic material creation
                     material = self.repository.create(data)
 
                 # Publish event if event bus exists
@@ -399,14 +424,13 @@ class MaterialService(BaseService[Material]):
                     self.event_bus.publish(
                         MaterialCreated(
                             material_id=material.id,
-                            material_type=material.materialType,
+                            material_type=getattr(material, "material_type", None),
                             user_id=user_id,
                         )
                     )
 
                 return material
         finally:
-            # Restore original user in security context
             if user_id and self.security_context and original_user:
                 self.security_context.current_user = original_user
 
@@ -424,7 +448,7 @@ class MaterialService(BaseService[Material]):
         Raises:
             ValidationException: If data validation fails
         """
-        data["materialType"] = MaterialType.LEATHER.value
+        data["material_type"] = MaterialType.LEATHER.value
         return self.repository.create_leather(data)
 
     @validate_input(validate_hardware_material)
@@ -441,7 +465,7 @@ class MaterialService(BaseService[Material]):
         Raises:
             ValidationException: If data validation fails
         """
-        data["materialType"] = MaterialType.HARDWARE.value
+        data["material_type"] = MaterialType.HARDWARE.value
         return self.repository.create_hardware(data)
 
     @validate_input(validate_supplies_material)
@@ -458,7 +482,7 @@ class MaterialService(BaseService[Material]):
         Raises:
             ValidationException: If data validation fails
         """
-        data["materialType"] = MaterialType.SUPPLIES.value
+        data["material_type"] = MaterialType.SUPPLIES.value
         return self.repository.create_supplies(data)
 
     def adjust_inventory(
@@ -505,7 +529,7 @@ class MaterialService(BaseService[Material]):
             # Update material status based on new quantity
             if new_quantity == 0:
                 new_status = InventoryStatus.OUT_OF_STOCK.value
-            elif new_quantity <= material.reorderPoint:
+            elif new_quantity <= material.reorder_point:
                 new_status = InventoryStatus.LOW_STOCK.value
             else:
                 new_status = InventoryStatus.IN_STOCK.value
@@ -606,7 +630,7 @@ class MaterialService(BaseService[Material]):
                     # Update material status based on new quantity
                     if new_quantity == 0:
                         new_status = InventoryStatus.OUT_OF_STOCK.value
-                    elif new_quantity <= material.reorderPoint:
+                    elif new_quantity <= material.reorder_point:
                         new_status = InventoryStatus.LOW_STOCK.value
                     else:
                         new_status = InventoryStatus.IN_STOCK.value
@@ -824,7 +848,7 @@ class MaterialService(BaseService[Material]):
             self.security_context.current_user.id if self.security_context else None
         )
         return MaterialCreated(
-            material_id=entity.id, material_type=entity.materialType, user_id=user_id
+            material_id=entity.id, material_type=entity.material_type, user_id=user_id
         )
 
     def _create_updated_event(

@@ -117,6 +117,24 @@ MANAGED_ENUM_DEFINITIONS = [
         "table_name": "enum_values_maintenance_type", # DB table name
         "description": "Type of maintenance action for a tool"
     },
+{
+        "name": "WoodType",
+        "system_name": "woodType",
+        "table_name": "enum_values_wood_type",
+        "description": "Species or type of wood"
+    },
+    {
+        "name": "WoodGrain",
+        "system_name": "woodGrain",
+        "table_name": "enum_values_wood_grain",
+        "description": "Grain pattern of wood"
+    },
+    {
+        "name": "WoodFinish",
+        "system_name": "woodFinish",
+        "table_name": "enum_values_wood_finish",
+        "description": "Surface finish applied to wood"
+    },
     # --- END ADDED ENUMS ---
 ]
 # --- End Enum Definitions ---

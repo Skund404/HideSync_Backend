@@ -12,6 +12,9 @@ from app.db.models.base import Base
 
 # Import all Python Enum DEFINITIONS defined in enums.py
 from app.db.models.enums import (
+    WoodType,
+    WoodGrain,
+    WoodFinish,
     SaleStatus,
     PaymentStatus,
     PurchaseOrderStatus,
@@ -46,6 +49,8 @@ from app.db.models.enums import (
     PatternFileType,
     FulfillmentStatus,
     UserRole, PurchaseStatus,
+    # If you have a WoodType enum, import it here:
+    # WoodType,
 )
 
 # Create alias for backward compatibility
@@ -76,6 +81,7 @@ from app.db.models.material import (
     HardwareMaterial as HardwareMaterialModel,  # Alias class to avoid enum conflict
     SuppliesMaterial,
 )
+
 from app.db.models.inventory import Inventory, InventoryTransaction
 from app.db.models.product import Product
 from app.db.models.storage import (
@@ -153,6 +159,7 @@ __all__ = [
     "LeatherMaterial",
     "HardwareMaterialModel",  # Use aliased class name
     "SuppliesMaterial",
+    "WoodMaterial",           # <--- ADDED THIS LINE
     "Inventory",
     "InventoryTransaction",
     "Product",
@@ -241,4 +248,8 @@ __all__ = [
     "UserRole",
     "DocumentationType", # Exporting Python Enum from documentation.py
     "DocumentationStatus", # Exporting Python Enum from documentation.py
+    # If you have a WoodType enum, add it here:
+    "WoodType",
+    "WoodGrain",
+    "WoodFinish",
 ]

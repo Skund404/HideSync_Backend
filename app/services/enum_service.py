@@ -82,7 +82,7 @@ class EnumService:
                 et.enum_type = :enum_type_name AND
                 et.enum_value = ev.code AND
                 et.locale = :locale
-            WHERE ev.is_active = TRUE
+            WHERE ev.is_active = 1  
             ORDER BY ev.display_order, ev.code
             """) # Added is_active to SELECT
 
@@ -508,7 +508,7 @@ class EnumService:
          """Internal helper to fetch a single dynamic enum value by ID, with optional translation."""
          logger.debug(f"Fetching dynamic value ID {value_id} from table '{table_name}' for type '{enum_type_name}' with locale '{locale}'.")
          try:
-            # Construct SQL to fetch the specific value and its 'en' translation
+            # Construct SQL to fetch the specific value and its translation
             sql = text(f"""
                 SELECT ev.id, ev.code, ev.display_order, ev.is_system, ev.parent_id, ev.is_active,
                        COALESCE(et.display_text, ev.code) as display_text,
@@ -519,7 +519,7 @@ class EnumService:
                     et.enum_value = ev.code AND
                     et.locale = :locale
                 WHERE ev.id = :value_id
-                {'AND ev.is_active = TRUE' if check_active else ''}
+                {'AND ev.is_active = 1' if check_active else ''}  
             """)
             params = {"enum_type_name": enum_type_name, "locale": locale, "value_id": value_id}
             result = self.db.execute(sql, params).first()
