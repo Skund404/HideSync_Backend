@@ -15,6 +15,7 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
 from pydantic import ValidationError, BaseModel
 from sqlalchemy.orm import Session
+from app.services.settings_service import SettingsService
 
 # --- App Imports ---
 # Core components
@@ -148,6 +149,9 @@ def get_current_active_superuser(
     )
     return current_user
 
+def get_settings_service(db: Session = Depends(get_db)) -> SettingsService:
+    """Provides an instance of SettingsService."""
+    return SettingsService(db)
 
 # --- Permissions Checker Dependency (Example) ---
 class PermissionsChecker:
