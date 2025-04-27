@@ -23,7 +23,9 @@ router = APIRouter()
 
 def get_dynamic_material_service(
         db: Session = Depends(get_db),
-        enum_service: EnumService = Depends(get_enum_service)
+        enum_service: EnumService = Depends(get_enum_service),
+        settings_service: SettingsService = Depends(get_settings_service),
+        security_context=Depends(get_security_context)
 ) -> DynamicMaterialService:
     """Provide DynamicMaterialService instance."""
     property_service = PropertyDefinitionService(db, enum_service=enum_service)
@@ -32,7 +34,9 @@ def get_dynamic_material_service(
     return DynamicMaterialService(
         db,
         property_service=property_service,
-        material_type_service=material_type_service
+        material_type_service=material_type_service,
+        security_context=security_context,
+        settings_service=settings_service
     )
 
 
@@ -47,7 +51,8 @@ def list_materials(
         material_type_id: Optional[int] = Query(None, description="Filter by material type ID"),
         search: Optional[str] = Query(None, description="Search term for name, description, and SKU"),
         status: Optional[str] = Query(None, description="Filter by status"),
-        tags: Optional[List[str]] = Query(None, description="Filter by tag names")
+        tags: Optional[List[str]] = Query(None, description="Filter by tag names"),
+        apply_settings: bool = Query(True, description="Whether to apply user settings")
 ):
     """
     List materials with optional filtering and pagination.
@@ -58,7 +63,8 @@ def list_materials(
         material_type_id=material_type_id,
         search=search,
         status=status,
-        tags=tags
+        tags=tags,
+        apply_settings=apply_settings
     )
 
     return {
@@ -68,6 +74,7 @@ def list_materials(
         "size": limit,
         "pages": (total + limit - 1) // limit if limit > 0 else 1
     }
+
 
 
 @router.post("/", response_model=DynamicMaterialRead, status_code=status.HTTP_201_CREATED)

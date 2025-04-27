@@ -34,6 +34,7 @@ from app.core.exceptions import (
 from app.core.events import DomainEvent
 from app.core.validation import validate_input, validate_entity
 from app.schemas.material import MaterialSearchParams
+from app.services.settings_service import SettingsService
 
 
 # Define domain events
@@ -41,7 +42,7 @@ class MaterialCreated(DomainEvent):
     """Event emitted when a material is created."""
 
     def __init__(
-        self, material_id: int, material_type: str, user_id: Optional[int] = None
+            self, material_id: int, material_type: str, user_id: Optional[int] = None
     ):
         """
         Initialize material created event.
@@ -61,7 +62,7 @@ class MaterialUpdated(DomainEvent):
     """Event emitted when a material is updated."""
 
     def __init__(
-        self, material_id: int, changes: Dict[str, Any], user_id: Optional[int] = None
+            self, material_id: int, changes: Dict[str, Any], user_id: Optional[int] = None
     ):
         """
         Initialize material updated event.
@@ -97,12 +98,12 @@ class MaterialStockChanged(DomainEvent):
     """Event emitted when material stock level changes."""
 
     def __init__(
-        self,
-        material_id: int,
-        previous_quantity: float,
-        new_quantity: float,
-        reason: str,
-        user_id: Optional[int] = None,
+            self,
+            material_id: int,
+            previous_quantity: float,
+            new_quantity: float,
+            reason: str,
+            user_id: Optional[int] = None,
     ):
         """
         Initialize material stock changed event.
@@ -142,13 +143,14 @@ class MaterialService(BaseService[Material]):
     """
 
     def __init__(
-        self,
-        session: Session,
-        repository=None,
-        security_context=None,
-        event_bus=None,
-        cache_service=None,
-        key_service=None,
+            self,
+            session: Session,
+            repository=None,
+            security_context=None,
+            event_bus=None,
+            cache_service=None,
+            key_service=None,
+            settings_service=None,
     ):
         """
         Initialize MaterialService with dependencies.
@@ -160,6 +162,7 @@ class MaterialService(BaseService[Material]):
             event_bus: Optional event bus for publishing domain events
             cache_service: Optional cache service for data caching
             key_service: Optional key service for encryption/decryption
+            settings_service: Optional settings service for user settings
         """
         self.session = session
         self.repository = repository or MaterialRepository(session, key_service)
@@ -167,6 +170,7 @@ class MaterialService(BaseService[Material]):
         self.event_bus = event_bus
         self.cache_service = cache_service
         self.key_service = key_service
+        self.settings_service = settings_service
 
     @validate_input(validate_wood_material)
     def create_wood_material(self, data: Dict[str, Any]) -> WoodMaterial:
@@ -186,10 +190,11 @@ class MaterialService(BaseService[Material]):
         return self.repository.create_wood(data)
 
     def get_materials(
-        self,
-        skip: int = 0,
-        limit: int = 100,
-        search_params: Optional[MaterialSearchParams] = None,
+            self,
+            skip: int = 0,
+            limit: int = 100,
+            search_params: Optional[MaterialSearchParams] = None,
+            apply_settings: bool = True
     ) -> List[Material]:
         """
         Retrieve materials with optional filtering and pagination.
@@ -202,6 +207,7 @@ class MaterialService(BaseService[Material]):
                 - quality: Optional filter by material quality
                 - in_stock: Optional filter by stock availability
                 - search: Optional search term for name
+            apply_settings: Whether to apply user settings to results
 
         Returns:
             List of material records matching the criteria
@@ -211,36 +217,115 @@ class MaterialService(BaseService[Material]):
 
         # If search term is provided, use search_materials method
         if search_params.search:
-            return self.repository.search_materials(
+            materials = self.repository.search_materials(
                 query=search_params.search, skip=skip, limit=limit
             )
+        else:
+            # Create filter criteria based on search params
+            filters = {}
 
-        # Create filter criteria based on search params
-        filters = {}
+            # Add material_type filter if provided
+            if search_params.material_type:
+                filters["material_type"] = search_params.material_type
 
-        # Add material_type filter if provided
-        if search_params.material_type:
-            filters["material_type"] = search_params.material_type
+            # Add quality filter if provided
+            if search_params.quality:
+                filters["quality"] = search_params.quality
 
-        # Add quality filter if provided
-        if search_params.quality:
-            filters["quality"] = search_params.quality
+            # Add in_stock filter if provided
+            if search_params.in_stock is not None:
+                if search_params.in_stock:
+                    filters["status"] = InventoryStatus.IN_STOCK
+                else:
+                    # If not in_stock, look for both OUT_OF_STOCK and LOW_STOCK
+                    # This needs to be handled specially since it's not a simple equality
+                    return self.repository.get_materials_by_status(
+                        status=[InventoryStatus.OUT_OF_STOCK, InventoryStatus.LOW_STOCK],
+                        skip=skip,
+                        limit=limit,
+                    )
 
-        # Add in_stock filter if provided
-        if search_params.in_stock is not None:
-            if search_params.in_stock:
-                filters["status"] = InventoryStatus.IN_STOCK
-            else:
-                # If not in_stock, look for both OUT_OF_STOCK and LOW_STOCK
-                # This needs to be handled specially since it's not a simple equality
-                return self.repository.get_materials_by_status(
-                    status=[InventoryStatus.OUT_OF_STOCK, InventoryStatus.LOW_STOCK],
-                    skip=skip,
-                    limit=limit,
-                )
+            # Use the BaseService list method which will use repository.list under the hood
+            materials = self.list(skip=skip, limit=limit, **filters)
 
-        # Use the BaseService list method which will use repository.list under the hood
-        return self.list(skip=skip, limit=limit, **filters)
+        # Apply settings if requested and security context is available
+        if apply_settings and self.security_context and self.settings_service:
+            user_id = getattr(getattr(self.security_context, 'current_user', None), 'id', None)
+            if user_id:
+                materials = self.apply_settings_to_materials(materials, user_id)
+
+        return materials
+
+    def apply_settings_to_materials(self, materials: List[Material], user_id: int) -> List[Material]:
+        """
+        Apply user settings to materials.
+
+        Args:
+            materials: List of materials to apply settings to
+            user_id: ID of the user whose settings to apply
+
+        Returns:
+            List of materials with settings applied
+        """
+        if not self.settings_service or not materials:
+            return materials
+
+        try:
+            # Get materials settings
+            material_ui = self.settings_service.get_setting(
+                key="material_ui",
+                scope_type="user",
+                scope_id=str(user_id)
+            )
+
+            # System settings (for defaults)
+            material_system = self.settings_service.get_setting(
+                key="material_system",
+                scope_type="system",
+                scope_id="1"
+            )
+
+            # If no settings found, return materials as is
+            if not material_ui:
+                return materials
+
+            # Extract list view settings
+            list_view = material_ui.get("list_view", {})
+            list_columns = list_view.get("default_columns", ["name", "sku", "quantity", "unit", "supplier"])
+            show_list_thumbnail = list_view.get("show_thumbnail", True)
+
+            # Get default material type
+            default_material_type = "supplies"
+            if material_system and "default_units" in material_system:
+                material_system_settings = material_system.get("system", {})
+                default_material_type = material_system_settings.get("default_material_type", "supplies")
+
+            # Apply settings to each material
+            for material in materials:
+                # Add ui_settings property if not exists
+                if not hasattr(material, "ui_settings"):
+                    material.ui_settings = {}
+
+                # Apply default material type if needed
+                if not getattr(material, "material_type", None):
+                    material.material_type = default_material_type
+
+                # Apply list view settings
+                material.ui_settings["list_view"] = {
+                    "columns": list_columns,
+                    "show_thumbnail": show_list_thumbnail
+                }
+
+                # Apply any system-wide settings like units
+                if material_system:
+                    default_units = material_system.get("default_units", {})
+                    # Could use these for formatting values with proper units
+                    material.ui_settings["default_units"] = default_units
+        except Exception as e:
+            # Log error but don't fail if settings can't be applied
+            print(f"Error applying settings: {str(e)}")
+
+        return materials
 
     def get_material(self, material_id: int) -> Material:
         """
@@ -262,7 +347,7 @@ class MaterialService(BaseService[Material]):
         return material
 
     def update_material(
-        self, material_id: int, data: Dict[str, Any], user_id: Optional[int] = None
+            self, material_id: int, data: Dict[str, Any], user_id: Optional[int] = None
     ) -> Material:
         """
         Update a material.
@@ -334,11 +419,11 @@ class MaterialService(BaseService[Material]):
                 self.security_context.current_user = original_user
 
     def adjust_stock(
-        self,
-        material_id: int,
-        quantity: float,
-        notes: Optional[str] = None,
-        user_id: Optional[int] = None,
+            self,
+            material_id: int,
+            quantity: float,
+            notes: Optional[str] = None,
+            user_id: Optional[int] = None,
     ) -> Material:
         """
         Adjust the stock quantity of a material.
@@ -486,11 +571,11 @@ class MaterialService(BaseService[Material]):
         return self.repository.create_supplies(data)
 
     def adjust_inventory(
-        self,
-        material_id: int,
-        quantity_change: float,
-        reason: str,
-        project_id: Optional[int] = None,
+            self,
+            material_id: int,
+            quantity_change: float,
+            reason: str,
+            project_id: Optional[int] = None,
     ) -> Material:
         """
         Adjust inventory level for a material.
@@ -571,13 +656,13 @@ class MaterialService(BaseService[Material]):
             return updated
 
     def adjust_inventory_with_optimistic_locking(
-        self,
-        material_id: int,
-        quantity_change: float,
-        version: int,
-        reason: str,
-        project_id: Optional[int] = None,
-        max_retries: int = 3,
+            self,
+            material_id: int,
+            quantity_change: float,
+            version: int,
+            reason: str,
+            project_id: Optional[int] = None,
+            max_retries: int = 3,
     ) -> Material:
         """
         Adjust inventory with optimistic locking to prevent conflicts.
@@ -683,7 +768,7 @@ class MaterialService(BaseService[Material]):
                     raise
 
                 # Wait with exponential backoff
-                time.sleep(0.1 * (2**retry_count))
+                time.sleep(0.1 * (2 ** retry_count))
 
                 # Refresh material for next attempt
                 material = self.repository.get_by_id(material_id)
@@ -695,7 +780,7 @@ class MaterialService(BaseService[Material]):
         )
 
     def get_low_stock_materials(
-        self, threshold_percentage: float = 20.0
+            self, threshold_percentage: float = 20.0
     ) -> List[Material]:
         """
         Get materials that are low in stock (below reorder threshold).
@@ -739,11 +824,11 @@ class MaterialService(BaseService[Material]):
         return material
 
     def search_materials(
-        self,
-        query: str,
-        material_type: Optional[str] = None,
-        sort_by: str = "name",
-        limit: int = 50,
+            self,
+            query: str,
+            material_type: Optional[str] = None,
+            sort_by: str = "name",
+            limit: int = 50,
     ) -> List[Material]:
         """
         Search materials by query string.
@@ -760,10 +845,10 @@ class MaterialService(BaseService[Material]):
         return self.repository.search_materials(query, skip=0, limit=limit)
 
     def calculate_material_usage_statistics(
-        self,
-        material_id: int,
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None,
+            self,
+            material_id: int,
+            start_date: Optional[datetime] = None,
+            end_date: Optional[datetime] = None,
     ) -> Dict[str, Any]:
         """
         Calculate usage statistics for a material.
@@ -801,11 +886,11 @@ class MaterialService(BaseService[Material]):
         }
 
     def _record_inventory_transaction(
-        self,
-        material_id: int,
-        quantity_change: float,
-        reason: str,
-        project_id: Optional[int] = None,
+            self,
+            material_id: int,
+            quantity_change: float,
+            reason: str,
+            project_id: Optional[int] = None,
     ) -> None:
         """
         Record an inventory transaction in the transaction log.
@@ -852,7 +937,7 @@ class MaterialService(BaseService[Material]):
         )
 
     def _create_updated_event(
-        self, original: Material, updated: Material
+            self, original: Material, updated: Material
     ) -> DomainEvent:
         """
         Create event for material update.

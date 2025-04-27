@@ -314,6 +314,7 @@ def list_materials(
     *,
     db: Session = Depends(get_db),
     current_user: Any = Depends(get_current_active_user),
+    service: MaterialService = Depends(get_material_service),
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(
         100, ge=1, le=1000, description="Maximum number of records to return"
@@ -322,16 +323,15 @@ def list_materials(
     quality: Optional[str] = Query(None, description="Filter by material quality"),
     in_stock: Optional[bool] = Query(None, description="Filter by availability"),
     search: Optional[str] = Query(None, description="Search term for name"),
-    wood_type: Optional[str] = Query(None, description="Filter by wood type"),
+    apply_settings: bool = Query(True, description="Whether to apply user settings"),
 ):
     """Retrieve materials with optional filtering and pagination."""
     search_params = MaterialSearchParams(
         material_type=material_type, quality=quality, in_stock=in_stock, search=search
     )
 
-    material_service = MaterialService(db)
-    materials = material_service.get_materials(
-        skip=skip, limit=limit, search_params=search_params
+    materials = service.get_materials(
+        skip=skip, limit=limit, search_params=search_params, apply_settings=apply_settings
     )
     return [serialize_for_response(m) for m in materials]
 
@@ -528,6 +528,17 @@ def get_low_stock_materials(
     materials = material_service.get_low_stock_materials(threshold_percentage)
     return [serialize_for_response(m) for m in materials]
 
+def get_material_service(
+    db: Session = Depends(get_db),
+    settings_service: SettingsService = Depends(get_settings_service),
+    security_context=Depends(get_security_context)
+) -> MaterialService:
+    """Provide MaterialService instance."""
+    return MaterialService(
+        db,
+        security_context=security_context,
+        settings_service=settings_service
+    )
 
 @router.get("/by-storage/{location_id}")
 def get_materials_by_storage_location(

@@ -3,6 +3,8 @@
 from typing import List, Optional, Dict, Any, Tuple
 from sqlalchemy.orm import Session
 from datetime import datetime
+import uuid
+import re
 
 from app.services.base_service import BaseService
 from app.db.models.dynamic_material import (
@@ -10,6 +12,7 @@ from app.db.models.dynamic_material import (
 )
 from app.repositories.dynamic_material_repository import DynamicMaterialRepository
 from app.core.exceptions import EntityNotFoundException, InsufficientInventoryException, ValidationException
+from app.services.settings_service import SettingsService
 
 
 class DynamicMaterialService(BaseService[DynamicMaterial]):
@@ -31,6 +34,7 @@ class DynamicMaterialService(BaseService[DynamicMaterial]):
             security_context=None,
             event_bus=None,
             cache_service=None,
+            settings_service=None,
     ):
         """
         Initialize DynamicMaterialService with dependencies.
@@ -43,6 +47,7 @@ class DynamicMaterialService(BaseService[DynamicMaterial]):
             security_context: Optional security context for authorization
             event_bus: Optional event bus for publishing domain events
             cache_service: Optional cache service for data caching
+            settings_service: Optional settings service for user settings
         """
         self.session = session
         self.repository = repository or DynamicMaterialRepository(session)
@@ -51,6 +56,7 @@ class DynamicMaterialService(BaseService[DynamicMaterial]):
         self.security_context = security_context
         self.event_bus = event_bus
         self.cache_service = cache_service
+        self.settings_service = settings_service
 
     def get_materials(
             self,
@@ -60,6 +66,7 @@ class DynamicMaterialService(BaseService[DynamicMaterial]):
             search: Optional[str] = None,
             status: Optional[str] = None,
             tags: Optional[List[str]] = None,
+            apply_settings: bool = True,
             **filters
     ) -> Tuple[List[DynamicMaterial], int]:
         """
@@ -72,12 +79,13 @@ class DynamicMaterialService(BaseService[DynamicMaterial]):
             search: Optional search string for names and descriptions
             status: Optional filter by status
             tags: Optional list of tag names to filter by
+            apply_settings: Whether to apply user settings
             **filters: Additional filters
 
         Returns:
             Tuple of (list of materials, total count)
         """
-        return self.repository.list_with_properties(
+        materials, total = self.repository.list_with_properties(
             skip=skip,
             limit=limit,
             material_type_id=material_type_id,
@@ -86,6 +94,14 @@ class DynamicMaterialService(BaseService[DynamicMaterial]):
             tags=tags,
             **filters
         )
+
+        # Apply settings if requested and security context is available
+        if apply_settings and self.security_context and self.settings_service:
+            user_id = getattr(getattr(self.security_context, 'current_user', None), 'id', None)
+            if user_id:
+                materials = self.apply_settings_to_materials(materials, user_id)
+
+        return materials, total
 
     def get_material(self, material_id: int) -> Optional[DynamicMaterial]:
         """
@@ -380,14 +396,6 @@ class DynamicMaterialService(BaseService[DynamicMaterial]):
             # Adjust stock
             material = self.repository.adjust_stock(material_id, quantity_change)
 
-            # Record inventory transaction (if we want to keep a transaction log)
-            # self._record_inventory_transaction(
-            #     material_id=material_id,
-            #     quantity_change=quantity_change,
-            #     reason=notes or "Manual inventory adjustment",
-            #     user_id=user_id
-            # )
-
             # Emit event if event bus is available
             if self.event_bus:
                 self.event_bus.publish({
@@ -448,6 +456,119 @@ class DynamicMaterialService(BaseService[DynamicMaterial]):
             List of matching materials
         """
         return self.repository.search_materials(query, skip=skip, limit=limit)
+
+    def apply_settings_to_materials(self, materials: List[DynamicMaterial], user_id: int) -> List[DynamicMaterial]:
+        """
+        Apply user settings to materials.
+
+        Args:
+            materials: List of materials to apply settings to
+            user_id: ID of the user whose settings to apply
+
+        Returns:
+            List of materials with settings applied
+        """
+        if not self.settings_service or not materials:
+            return materials
+
+        try:
+            # Get UI settings
+            material_ui = self.settings_service.get_setting(
+                key="material_ui",
+                scope_type="user",
+                scope_id=str(user_id)
+            )
+
+            # If no settings found, return materials as is
+            if not material_ui:
+                return materials
+
+            # Card view settings
+            card_view = material_ui.get("card_view", {})
+            show_card_thumbnail = card_view.get("display_thumbnail", True)
+            max_card_properties = card_view.get("max_properties", 4)
+
+            # List view settings
+            list_view = material_ui.get("list_view", {})
+            list_columns = list_view.get("default_columns", ["name", "quantity", "unit", "status", "supplier"])
+            show_list_thumbnail = list_view.get("show_thumbnail", True)
+
+            # Apply settings to each material
+            for material in materials:
+                # Create UI settings object if not exists
+                if not hasattr(material, "ui_settings"):
+                    material.ui_settings = {}
+
+                # Set card view settings
+                material.ui_settings["card_view"] = {
+                    "max_properties": max_card_properties,
+                    "show_thumbnail": show_card_thumbnail,
+                    "properties": self._get_card_properties(material, max_card_properties)
+                }
+
+                # Set list view settings
+                material.ui_settings["list_view"] = {
+                    "columns": list_columns,
+                    "show_thumbnail": show_list_thumbnail
+                }
+        except Exception as e:
+            # Log error but don't fail if settings can't be applied
+            print(f"Error applying settings: {str(e)}")
+
+        return materials
+
+    def _get_card_properties(self, material: DynamicMaterial, max_props: int) -> List[Dict]:
+        """Get properties for card view based on settings."""
+        # Process property values for card display
+        card_props = []
+
+        if hasattr(material, 'property_values') and material.property_values:
+            for prop_value in material.property_values:
+                # Check if should be displayed in card view
+                show_in_card = True
+
+                # Check if material type defines display rules for this property
+                if (hasattr(material, 'material_type') and
+                        material.material_type and
+                        hasattr(material.material_type, 'properties')):
+                    for type_prop in material.material_type.properties:
+                        if hasattr(type_prop, 'property_id') and type_prop.property_id == prop_value.property_id:
+                            if hasattr(type_prop, 'is_displayed_in_card'):
+                                show_in_card = type_prop.is_displayed_in_card
+
+                if show_in_card:
+                    # Get property definition if available
+                    prop_def = getattr(prop_value, 'property', None)
+
+                    card_props.append({
+                        "id": getattr(prop_value, 'id', None),
+                        "property_id": prop_value.property_id,
+                        "name": getattr(prop_def, 'name', f"Property {prop_value.property_id}"),
+                        "value": self._get_property_value(prop_value)
+                    })
+
+                    if len(card_props) >= max_props:
+                        break
+
+        return card_props
+
+    def _get_property_value(self, prop_value):
+        """Extract property value from a MaterialPropertyValue object."""
+        # Try to get the value based on data type
+        if hasattr(prop_value, 'value_string') and prop_value.value_string is not None:
+            return prop_value.value_string
+        elif hasattr(prop_value, 'value_number') and prop_value.value_number is not None:
+            return prop_value.value_number
+        elif hasattr(prop_value, 'value_boolean') and prop_value.value_boolean is not None:
+            return "Yes" if prop_value.value_boolean else "No"
+        elif hasattr(prop_value, 'value_date') and prop_value.value_date is not None:
+            return prop_value.value_date
+        elif hasattr(prop_value, 'value_enum_id') and prop_value.value_enum_id is not None:
+            return prop_value.value_enum_id
+        elif hasattr(prop_value, 'value') and prop_value.value is not None:
+            return prop_value.value
+        else:
+            return None
 
     def attach_media(self, material_id: int, media_id: str, is_primary: bool = False) -> Any:
         """

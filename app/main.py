@@ -1,53 +1,41 @@
-# File: app/main.py
+# app/main.py
 """
 Main application file for HideSync.
-
-This module initializes the FastAPI application, configures middleware,
-includes API routers, and sets up global exception handlers.
 """
 
-from fastapi import FastAPI, Request, status  # Add status
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
-from fastapi.exceptions import RequestValidationError  # Import this
-from fastapi.responses import JSONResponse  # Import this
-from fastapi.encoders import jsonable_encoder  # Import this
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from fastapi.encoders import jsonable_encoder
 import logging
 import json
 from datetime import datetime
 from enum import Enum
 from typing import Any, Dict
-import os # Import os
+import os
 
 from app.api.api import api_router
 from app.core.config import settings
 from app.core.metrics_middleware import MetricsMiddleware
 from app.core.events import setup_event_handlers
+from scripts.register_material_settings import register_settings
 
-# --- START: Updated Logging Configuration ---
-# Determine log level from environment or default to INFO
-# Set LOG_LEVEL=DEBUG in your environment to enable debug logging globally
+# --- Logging Configuration ---
 LOG_LEVEL_NAME = os.environ.get("LOG_LEVEL", "INFO").upper()
 LOG_LEVEL = getattr(logging, LOG_LEVEL_NAME, logging.INFO)
 
-# Configure root logger
-# Using INFO as default, but DEBUG during troubleshooting is helpful
 logging.basicConfig(level=LOG_LEVEL, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger("app")
+logger.setLevel(LOG_LEVEL)
 
-# Get the root logger for FastAPI/Uvicorn related messages
-logger = logging.getLogger("app") # Use a consistent name like 'app' or settings.PROJECT_NAME
-logger.setLevel(LOG_LEVEL) # Ensure this logger also respects the environment setting
-
-# Specifically set the level for the service logger to DEBUG
-# This ensures we see DEBUG messages from tool_service even if root is INFO
 logging.getLogger("app.services.tool_service").setLevel(logging.DEBUG)
 
-# Log the effective levels for verification
 logger.info(f"Configured root logger ('{logger.name}') effective level: {logger.getEffectiveLevel()} ({logging.getLevelName(logger.getEffectiveLevel())})")
 tool_service_logger = logging.getLogger('app.services.tool_service')
 logger.info(f"Configured ToolService logger ('{tool_service_logger.name}') effective level: {tool_service_logger.getEffectiveLevel()} ({logging.getLevelName(tool_service_logger.getEffectiveLevel())})")
-# --- END: Updated Logging Configuration ---
-
+# --- END: Logging Configuration ---
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -59,7 +47,7 @@ app = FastAPI(
     redoc_url=f"{settings.API_V1_STR}/redoc",
 )
 
-# Set up CORS - THIS MUST BE THE FIRST MIDDLEWARE
+# Set up CORS
 origins_raw = settings.BACKEND_CORS_ORIGINS or []
 origins = [str(origin) for origin in origins_raw if origin]
 logger.info(f"Raw CORS origins from settings: {origins_raw}")
@@ -85,17 +73,14 @@ app.add_middleware(
     max_age=86400,
 )
 
-
 # --- Validation Error Handler ---
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    """ Handles Pydantic RequestValidationErrors, logging details and returning 422. """
     error_details = jsonable_encoder(exc.errors())
     logger.error(f"--- Request Validation Error ---")
     logger.error(f"URL: {request.method} {request.url}")
     try:
         body = await request.json()
-        # Be mindful of logging sensitive data in production
         logger.error(f"Request Body: {json.dumps(body, indent=2)}")
     except json.JSONDecodeError:
         logger.error("Request Body: Could not parse as JSON (or empty body).")
@@ -107,23 +92,16 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={"detail": error_details},
     )
-# --- END: Validation Error Handler ---
 
-
-# Log requests AFTER CORS middleware and BEFORE other processing
+# Log requests
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
-    """Logs incoming request method/URL and outgoing response code."""
     start_time = datetime.now()
-    # Use the configured logger instance
-    logger.info(f"-> Request: {request.method} {request.url.path}") # Log only path for brevity
-    # Uncomment below to log headers (be careful with sensitive info)
-    # logger.debug(f"   Headers: {dict(request.headers)}")
+    logger.info(f"-> Request: {request.method} {request.url.path}")
     try:
         response = await call_next(request)
         process_time = (datetime.now() - start_time).total_seconds()
         logger.info(f"<- Response: {response.status_code} ({process_time:.4f}s)")
-        # logger.debug(f"   Response Headers: {dict(response.headers)}")
         return response
     except Exception as e:
         process_time = (datetime.now() - start_time).total_seconds()
@@ -132,14 +110,11 @@ async def log_requests(request: Request, call_next):
         )
         raise e
 
-
 # Add metrics middleware
 app.add_middleware(MetricsMiddleware)
 
-
 # Add security headers middleware
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    """Middleware to add common security headers to responses."""
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
         if request.method != "OPTIONS":
@@ -152,14 +127,22 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(SecurityHeadersMiddleware)
 
-
-# Set up event handlers (e.g., for startup/shutdown)
+# Set up event handlers
 setup_event_handlers(app)
 
+# Register settings on startup
+@app.on_event("startup")
+async def register_material_settings_on_startup():
+    """Register material settings during application startup."""
+    try:
+        logger.info("Registering material settings...")
+        result = register_settings()
+        logger.info(f"Successfully registered {len(result) if result else 0} material settings")
+    except Exception as e:
+        logger.error(f"Error registering material settings: {e}")
 
 # Include the API router
 app.include_router(api_router, prefix=settings.API_V1_STR)
-
 
 # Root and Health Check Endpoints
 @app.get("/", tags=["Root"], summary="API Root Endpoint")
@@ -179,9 +162,3 @@ def read_root():
 def health_check():
     """Returns the operational status of the API."""
     return {"status": "ok", "timestamp": datetime.now().isoformat()}
-
-# Example of how to run (if this file is executed directly)
-# if __name__ == "__main__":
-#     import uvicorn
-#     # Make sure log level set here matches or is lower than basicConfig level
-#     uvicorn.run(app, host="0.0.0.0", port=8001, log_level=LOG_LEVEL_NAME.lower())
