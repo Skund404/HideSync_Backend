@@ -53,6 +53,7 @@ MODEL_MODULES = [
     "app.db.models.file_metadata",
     "app.db.models.inventory",
     "app.db.models.material",
+    "app.db.models.wood_material",
     "app.db.models.media_asset",
     "app.db.models.password_reset",
     "app.db.models.pattern",

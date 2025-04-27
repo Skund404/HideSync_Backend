@@ -1,293 +1,263 @@
 # File: app/repositories/material_repository.py
 
-from typing import List, Optional, Dict, Any
-from sqlalchemy.orm import Session
-from sqlalchemy import or_, and_
+import re # Import re for snake_case conversion
+from typing import List, Optional, Dict, Any, Union, Type
+from datetime import datetime
+from enum import Enum # Import Enum base class
 
+# Import modern SQLAlchemy components
+from sqlalchemy import select, func, or_, and_
+from sqlalchemy.orm import Session, joinedload
+
+from app.repositories.base_repository import BaseRepository
 from app.db.models.material import (
     Material,
     LeatherMaterial,
     HardwareMaterial,
     SuppliesMaterial,
+    WoodMaterial
 )
-from app.db.models.enums import MaterialType, InventoryStatus
-from app.repositories.base_repository import BaseRepository
+# Ensure InventoryStatus is imported if used for filtering
+from app.db.models.enums import InventoryStatus
+# Import Supplier if needed for relationship loading/filtering
+from app.db.models.supplier import Supplier
 
 
 class MaterialRepository(BaseRepository[Material]):
     """
-    Repository for Material entity operations.
-
-    Provides methods for accessing and manipulating material data, including
-    specialized methods for different material types (leather, hardware, supplies).
+    Repository for material-related database operations using modern select() syntax.
     """
 
     def __init__(self, session: Session, encryption_service=None):
         """
-        Initialize the MaterialRepository.
+        Initialize the repository with database session and Material model.
 
         Args:
-            session (Session): SQLAlchemy database session
-            encryption_service (Optional): Service for handling field encryption/decryption
+            session: SQLAlchemy database session
+            encryption_service: Optional service for sensitive data handling
         """
-        super().__init__(session, encryption_service)
-        self.model = Material
+        # Explicitly pass the Material model to the base constructor
+        super().__init__(session=session, model=Material, encryption_service=encryption_service)
 
-    def get_materials_by_type(
-        self, material_type: MaterialType, skip: int = 0, limit: int = 100
-    ) -> List[Material]:
+    def _prepare_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Get materials by their type.
+        Prepare data for entity creation/update.
+        Converts camelCase keys to snake_case.
 
         Args:
-            material_type (MaterialType): The type of material to retrieve
-            skip (int): Number of records to skip (for pagination)
-            limit (int): Maximum number of records to return
+            data: Input data dictionary (camelCase keys)
 
         Returns:
-            List[Material]: List of materials matching the given type
+            Prepared data dictionary (snake_case keys)
         """
-        query = self.session.query(self.model).filter(
-            self.model.materialType == material_type
-        )
+        prepared = {}
+        for key, value in data.items():
+             # Convert camelCase to snake_case
+             snake_key = re.sub(r'(?<!^)(?=[A-Z])', '_', key).lower()
+             prepared[snake_key] = value
+        return prepared
 
-        entities = query.offset(skip).limit(limit).all()
-        return [self._decrypt_sensitive_fields(entity) for entity in entities]
+    def _filter_to_model_columns(self, data: Dict[str, Any], model_cls: Type[Material]) -> Dict[str, Any]:
+        """Filters a dictionary to include only keys that are columns in the model."""
+        model_columns = {c.name for c in model_cls.__table__.columns}
+        return {k: v for k, v in data.items() if k in model_columns}
 
-    def find_materials_by_criteria(
-        self,
-        material_type: Optional[str] = None,
-        quality: Optional[str] = None,
-        in_stock: Optional[bool] = None,
-        skip: int = 0,
-        limit: int = 100,
-    ) -> List[Material]:
+    # --- Create methods ---
+    # These methods prepare data, ensure the correct type, filter keys,
+    # add to session, and flush. Commit should happen in the service layer transaction.
+
+    def create_leather(self, data: Dict[str, Any]) -> LeatherMaterial:
+        """Prepares and adds a new leather material to the session."""
+        prepared_data = self._prepare_data(data)
+        prepared_data['material_type'] = 'leather' # Ensure correct discriminator
+        filtered_data = self._filter_to_model_columns(prepared_data, LeatherMaterial)
+        leather = LeatherMaterial(**filtered_data)
+        self.session.add(leather)
+        self.session.flush() # Flush to assign ID if needed before commit
+        return leather
+
+    def create_hardware(self, data: Dict[str, Any]) -> HardwareMaterial:
+        """Prepares and adds a new hardware material to the session."""
+        prepared_data = self._prepare_data(data)
+        prepared_data['material_type'] = 'hardware'
+        filtered_data = self._filter_to_model_columns(prepared_data, HardwareMaterial)
+        hardware = HardwareMaterial(**filtered_data)
+        self.session.add(hardware)
+        self.session.flush()
+        return hardware
+
+    def create_supplies(self, data: Dict[str, Any]) -> SuppliesMaterial:
+        """Prepares and adds a new supplies material to the session."""
+        prepared_data = self._prepare_data(data)
+        prepared_data['material_type'] = 'supplies'
+        filtered_data = self._filter_to_model_columns(prepared_data, SuppliesMaterial)
+        supplies = SuppliesMaterial(**filtered_data)
+        self.session.add(supplies)
+        self.session.flush()
+        return supplies
+
+    def create_wood(self, data: Dict[str, Any]) -> WoodMaterial:
+        """Prepares and adds a new wood material to the session."""
+        prepared_data = self._prepare_data(data)
+        prepared_data['material_type'] = 'wood'
+        filtered_data = self._filter_to_model_columns(prepared_data, WoodMaterial)
+        wood = WoodMaterial(**filtered_data)
+        self.session.add(wood)
+        self.session.flush()
+        return wood
+
+    # --- Read/Query methods ---
+
+    def get_by_id_with_supplier(self, entity_id: int) -> Optional[Material]:
         """
-        Find materials by various criteria.
+        Get material by ID with supplier information eagerly loaded.
 
         Args:
-            material_type: Optional filter by material type
-            quality: Optional filter by material quality
-            in_stock: Optional filter by stock availability
-            skip: Number of records to skip (for pagination)
+            entity_id: Material ID
+
+        Returns:
+            Material model instance with supplier_rel loaded, or None.
+        """
+        stmt = (
+            select(Material)
+            .options(joinedload(Material.supplier_rel)) # Eager load supplier
+            .where(Material.id == entity_id)
+        )
+        # Use BaseRepository's _decrypt_sensitive_fields if needed, or handle in service
+        material = self.session.execute(stmt).scalar_one_or_none()
+        return self._decrypt_sensitive_fields(material) if material else None
+
+
+    def get_materials_by_status(
+        self, status: Union[InventoryStatus, List[InventoryStatus]], skip: int = 0, limit: int = 100
+    ) -> List[Material]:
+        """
+        Get materials by inventory status using modern select().
+
+        Args:
+            status: Status or list of statuses to filter by
+            skip: Number of records to skip
             limit: Maximum number of records to return
 
         Returns:
-            List[Material]: List of materials matching criteria
+            List of materials with the specified status(es)
         """
-        query = self.session.query(self.model)
+        stmt = select(Material)
 
-        # Add debugging here before filtering
-        print(f"DEBUG: Filtering materials by type: {material_type}")
+        if isinstance(status, list):
+            # Ensure comparing against enum values if necessary
+            status_values = [s for s in status] # Assume already enum objects
+            stmt = stmt.where(Material.status.in_(status_values))
+        elif isinstance(status, Enum):
+            stmt = stmt.where(Material.status == status)
+        else:
+             # Handle case where status might be passed as string - attempt conversion
+             try:
+                 status_enum = InventoryStatus(status)
+                 stmt = stmt.where(Material.status == status_enum)
+             except ValueError:
+                 # Log warning or raise error for invalid status string
+                 print(f"Warning: Invalid status string '{status}' provided.") # Replace with logger
+                 return []
 
-        # Apply filtering conditions
-        if material_type:
-            # Handle case-insensitive matching for material type
-            if material_type.upper() == "LEATHER":
-                query = query.filter(self.model.materialType == MaterialType.LEATHER)
-            elif material_type.upper() == "HARDWARE":
-                query = query.filter(self.model.materialType == MaterialType.HARDWARE)
-            elif material_type.upper() == "SUPPLIES":
-                query = query.filter(self.model.materialType == MaterialType.SUPPLIES)
-            elif material_type.upper() == "THREAD":
-                query = query.filter(self.model.materialType == MaterialType.THREAD)
-            elif material_type.upper() == "FABRIC":
-                query = query.filter(self.model.materialType == MaterialType.FABRIC)
-            else:
-                # Use direct filtering for other cases
-                query = query.filter(self.model.materialType == material_type)
-
-            # Print SQL query for debugging
-            print(f"DEBUG: SQL Query: {query}")
-
-        # Rest of the method remains the same...
-        if quality:
-            query = query.filter(self.model.quality == quality)
-
-        if in_stock is not None:
-            if in_stock:
-                query = query.filter(self.model.status == InventoryStatus.IN_STOCK)
-            else:
-                query = query.filter(
-                    self.model.status.in_(
-                        [InventoryStatus.OUT_OF_STOCK, InventoryStatus.LOW_STOCK]
-                    )
-                )
-
-        # Apply pagination
-        entities = query.order_by(self.model.name).offset(skip).limit(limit).all()
-
-        # Add debugging after fetching
-        print(
-            f"DEBUG: Found {len(entities)} materials, sample types: {[e.materialType for e in entities[:3] if hasattr(e, 'materialType')]}"
-        )
-
-        # Decrypt sensitive fields if applicable
+        stmt = stmt.offset(skip).limit(limit)
+        results = self.session.execute(stmt)
+        entities = results.scalars().all()
         return [self._decrypt_sensitive_fields(entity) for entity in entities]
 
-    def get_materials_by_status(
-        self, status: InventoryStatus, skip: int = 0, limit: int = 100
-    ) -> List[Material]:
+    def get_low_stock_materials(self) -> List[Material]:
         """
-        Get materials by their inventory status.
-
-        Args:
-            status (InventoryStatus): The inventory status to filter by
-            skip (int): Number of records to skip (for pagination)
-            limit (int): Maximum number of records to return
+        Get materials with quantity below or at reorder point using modern select().
 
         Returns:
-            List[Material]: List of materials with the specified status
+            List of materials with low stock
         """
-        query = self.session.query(self.model).filter(self.model.status == status)
-
-        entities = query.offset(skip).limit(limit).all()
-        return [self._decrypt_sensitive_fields(entity) for entity in entities]
-
-    def get_materials_by_supplier(
-        self, supplier_id: int, skip: int = 0, limit: int = 100
-    ) -> List[Material]:
-        """
-        Get materials supplied by a specific supplier.
-
-        Args:
-            supplier_id (int): ID of the supplier
-            skip (int): Number of records to skip (for pagination)
-            limit (int): Maximum number of records to return
-
-        Returns:
-            List[Material]: List of materials from the specified supplier
-        """
-        query = self.session.query(self.model).filter(
-            self.model.supplierId == supplier_id
-        )
-
-        entities = query.offset(skip).limit(limit).all()
-        return [self._decrypt_sensitive_fields(entity) for entity in entities]
-
-    def get_low_stock_materials(
-        self, skip: int = 0, limit: int = 100
-    ) -> List[Material]:
-        """
-        Get materials that are low in stock (below reorder point).
-
-        Args:
-            skip (int): Number of records to skip (for pagination)
-            limit (int): Maximum number of records to return
-
-        Returns:
-            List[Material]: List of materials that are low in stock
-        """
-        query = self.session.query(self.model).filter(
-            and_(
-                self.model.quantity <= self.model.reorderPoint,
-                self.model.status != InventoryStatus.DISCONTINUED,
+        stmt = select(Material).where(
+            or_(
+                Material.status == InventoryStatus.LOW_STOCK,
+                Material.status == InventoryStatus.OUT_OF_STOCK,
+                # Ensure reorder_point is not None before comparing
+                and_(
+                    Material.reorder_point != None,
+                    Material.reorder_point > 0,
+                    Material.quantity <= Material.reorder_point,
+                ),
             )
         )
-
-        entities = query.offset(skip).limit(limit).all()
+        results = self.session.execute(stmt)
+        entities = results.scalars().all()
         return [self._decrypt_sensitive_fields(entity) for entity in entities]
 
-    def update_inventory_quantity(
-        self, material_id: int, quantity_change: float
-    ) -> Optional[Material]:
+    def find_by_storage_location(self, location_name: str) -> List[Material]:
         """
-        Update a material's inventory quantity.
+        Find materials by storage location name (assuming string field).
 
         Args:
-            material_id (int): ID of the material
-            quantity_change (float): Amount to add (positive) or subtract (negative)
+            location_name: Storage location name string.
 
         Returns:
-            Optional[Material]: Updated material if found, None otherwise
+            List of materials at the location
         """
-        material = self.get_by_id(material_id)
-        if not material:
-            return None
+        # Filter by the string 'storage_location' field based on the model definition
+        stmt = select(Material).where(Material.storage_location == location_name)
 
-        # Update quantity
-        new_quantity = material.quantity + quantity_change
-        material.quantity = max(0, new_quantity)  # Prevent negative quantities
+        results = self.session.execute(stmt)
+        entities = results.scalars().all()
+        return [self._decrypt_sensitive_fields(entity) for entity in entities]
 
-        # Update status based on new quantity
-        if new_quantity <= 0:
-            material.status = InventoryStatus.OUT_OF_STOCK
-        elif new_quantity <= material.reorderPoint:
-            material.status = InventoryStatus.LOW_STOCK
-        else:
-            material.status = InventoryStatus.IN_STOCK
-
-        self.session.commit()
-        self.session.refresh(material)
-        return self._decrypt_sensitive_fields(material)
 
     def search_materials(
-        self, query: str, skip: int = 0, limit: int = 100
+        self, query: str, skip: int = 0, limit: int = 20
     ) -> List[Material]:
         """
-        Search for materials by name, description, or supplier.
+        Search materials by query string across multiple fields using modern select().
 
         Args:
-            query (str): The search query
-            skip (int): Number of records to skip (for pagination)
-            limit (int): Maximum number of records to return
+            query: Search query string
+            skip: Number of records to skip
+            limit: Maximum number of records to return
 
         Returns:
-            List[Material]: List of matching materials
+            List of materials matching the search
         """
-        search_query = self.session.query(self.model).filter(
-            or_(
-                self.model.name.ilike(f"%{query}%"),
-                self.model.description.ilike(f"%{query}%"),
-                self.model.supplier.ilike(f"%{query}%"),
-            )
-        )
+        search_term = f"%{query}%"
+        stmt = select(Material).where(
+             or_(
+                 Material.name.ilike(search_term),
+                 Material.description.ilike(search_term),
+                 Material.sku.ilike(search_term),
+                 # Assuming 'supplier' on Material is just a string name field
+                 # If it can be NULL, handle that if needed (e.g., filter(Material.supplier != None, ...))
+                 Material.supplier.ilike(search_term),
+                 # Add other relevant string fields here if desired
+             )
+         ).offset(skip).limit(limit)
 
-        entities = search_query.offset(skip).limit(limit).all()
+        results = self.session.execute(stmt)
+        entities = results.scalars().all()
         return [self._decrypt_sensitive_fields(entity) for entity in entities]
 
-    def get_leather_by_type(
-        self, leather_type, skip: int = 0, limit: int = 100
-    ) -> List[LeatherMaterial]:
+    # --- Other methods ---
+
+    def get_material_usages(
+        self,
+        material_id: int,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+    ) -> List[Dict[str, Any]]:
         """
-        Get leather materials by their type.
-
-        Args:
-            leather_type: The type of leather to retrieve
-            skip (int): Number of records to skip (for pagination)
-            limit (int): Maximum number of records to return
-
-        Returns:
-            List[LeatherMaterial]: List of leather materials of the specified type
+        Placeholder: Get usage records for a material.
+        Actual implementation requires querying an inventory transaction table.
         """
-        query = (
-            self.session.query(LeatherMaterial)
-            .filter(LeatherMaterial.materialType == MaterialType.LEATHER)
-            .filter(LeatherMaterial.leatherType == leather_type)
-        )
+        # This should query a related InventoryTransaction model/table
+        # Example conceptual query (replace with actual model/columns):
+        # stmt = select(InventoryTransaction).where(InventoryTransaction.material_id == material_id)
+        # if start_date: stmt = stmt.where(InventoryTransaction.transaction_date >= start_date)
+        # if end_date: stmt = stmt.where(InventoryTransaction.transaction_date <= end_date)
+        # transactions = self.session.execute(stmt).scalars().all()
+        # return [t.to_dict() for t in transactions] # Assuming a to_dict() method
+        print(f"Placeholder: Fetching usage for material {material_id}") # Replace with logger
+        return [] # Return empty list for now
 
-        entities = query.offset(skip).limit(limit).all()
-        return [self._decrypt_sensitive_fields(entity) for entity in entities]
-
-    def get_hardware_by_type(
-        self, hardware_type, skip: int = 0, limit: int = 100
-    ) -> List[HardwareMaterial]:
-        """
-        Get hardware materials by their type.
-
-        Args:
-            hardware_type: The type of hardware to retrieve
-            skip (int): Number of records to skip (for pagination)
-            limit (int): Maximum number of records to return
-
-        Returns:
-            List[HardwareMaterial]: List of hardware materials of the specified type
-        """
-        query = (
-            self.session.query(HardwareMaterial)
-            .filter(HardwareMaterial.materialType == MaterialType.HARDWARE)
-            .filter(HardwareMaterial.hardwareType == hardware_type)
-        )
-
-        entities = query.offset(skip).limit(limit).all()
-        return [self._decrypt_sensitive_fields(entity) for entity in entities]
+    # Note: Update and Delete operations are typically handled by the BaseRepository methods
+    # unless specific Material logic (like checking dependencies) is required.

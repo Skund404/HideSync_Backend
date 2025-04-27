@@ -3,7 +3,7 @@
 Material schemas for the HideSync API.
 
 This module contains Pydantic models for materials management, including the base
-Material schema and specialized schemas for leather, hardware, and supplies materials.
+Material schema and specialized schemas for leather, hardware, supplies, and wood materials.
 """
 
 from datetime import datetime
@@ -20,6 +20,9 @@ from app.db.models.enums import (
     HardwareMaterialEnum,
     HardwareFinish,
     MeasurementUnit,
+    WoodType,
+    WoodGrain,
+    WoodFinish,
 )
 
 from pydantic import root_validator
@@ -102,7 +105,7 @@ class MaterialBase(BaseModel):
     notes: Optional[str] = Field(None, description="Additional notes")
     thumbnail: Optional[str] = Field(None, description="URL or path to thumbnail image")
     material_type: MaterialType = Field(
-        ..., description="Type of material (LEATHER, HARDWARE, SUPPLIES)"
+        ..., description="Type of material (LEATHER, HARDWARE, SUPPLIES, WOOD)"
     )
 
 
@@ -177,8 +180,32 @@ class SuppliesMaterialBase(MaterialBase):
     finish: Optional[str] = Field(None, description="Finish characteristics")
 
 
+class WoodMaterialBase(MaterialBase):
+    """
+    Base schema for wood materials.
+    """
+
+    material_type: Literal[MaterialType.WOOD] = Field(
+        MaterialType.WOOD, description="Type of material"
+    )
+    wood_type: Optional[WoodType] = Field(None, description="Species/type of wood")
+    grain: Optional[WoodGrain] = Field(None, description="Grain pattern")
+    thickness: Optional[float] = Field(None, description="Thickness in mm", gt=0)
+    length: Optional[float] = Field(None, description="Length in mm", gt=0)
+    width: Optional[float] = Field(None, description="Width in mm", gt=0)
+    finish: Optional[WoodFinish] = Field(None, description="Surface finish")
+    color: Optional[str] = Field(None, description="Color or stain of the wood")
+
+
+# NOTE: WoodMaterialBase is now defined BEFORE it's referenced in MaterialCreate
+
 MaterialCreate = RootModel[
-    Union[LeatherMaterialBase, HardwareMaterialBase, SuppliesMaterialBase]
+    Union[
+        LeatherMaterialBase,
+        HardwareMaterialBase,
+        SuppliesMaterialBase,
+        WoodMaterialBase,
+    ]
 ]
 """
 Schema for creating a new material.
@@ -188,19 +215,21 @@ This is a union type that allows creating any of the specialized material types.
 
 class LeatherMaterialCreate(LeatherMaterialBase):
     """Schema for creating a new leather material."""
-
     pass
 
 
 class HardwareMaterialCreate(HardwareMaterialBase):
     """Schema for creating a new hardware material."""
-
     pass
 
 
 class SuppliesMaterialCreate(SuppliesMaterialBase):
     """Schema for creating a new supplies material."""
+    pass
 
+
+class WoodMaterialCreate(WoodMaterialBase):
+    """Schema for creating a new wood material."""
     pass
 
 
@@ -305,6 +334,19 @@ class SuppliesMaterialUpdate(MaterialUpdate):
     finish: Optional[str] = Field(None, description="Finish characteristics")
 
 
+class WoodMaterialUpdate(MaterialUpdate):
+    """
+    Schema for updating wood material information.
+    """
+    wood_type: Optional[WoodType] = Field(None, description="Species/type of wood")
+    grain: Optional[WoodGrain] = Field(None, description="Grain pattern")
+    thickness: Optional[float] = Field(None, description="Thickness in mm", gt=0)
+    length: Optional[float] = Field(None, description="Length in mm", gt=0)
+    width: Optional[float] = Field(None, description="Width in mm", gt=0)
+    finish: Optional[WoodFinish] = Field(None, description="Surface finish")
+    color: Optional[str] = Field(None, description="Color or stain of the wood")
+
+
 class MaterialInDB(MaterialBase):
     """
     Schema for material information as stored in the database.
@@ -345,6 +387,14 @@ class SuppliesMaterialInDB(SuppliesMaterialBase, MaterialInDB):
     Schema for supplies material information as stored in the database.
     """
 
+    class Config:
+        from_attributes = True
+
+
+class WoodMaterialInDB(WoodMaterialBase, MaterialInDB):
+    """
+    Schema for wood material information as stored in the database.
+    """
     class Config:
         from_attributes = True
 
@@ -402,6 +452,23 @@ class HardwareMaterialResponse(HardwareMaterialInDB, EnumCompatMixin):
 
 class SuppliesMaterialResponse(SuppliesMaterialInDB, EnumCompatMixin):
     """Schema for supplies material responses in the API."""
+
+    inventory_value: Optional[float] = Field(
+        None, description="Total value of inventory (quantity × cost)"
+    )
+    days_since_last_purchase: Optional[int] = Field(
+        None, description="Days since last purchase"
+    )
+    is_low_stock: Optional[bool] = Field(
+        None, description="Whether the material is below reorder point"
+    )
+
+    class Config:
+        from_attributes = True
+
+
+class WoodMaterialResponse(WoodMaterialInDB, EnumCompatMixin):
+    """Schema for wood material responses in the API."""
 
     inventory_value: Optional[float] = Field(
         None, description="Total value of inventory (quantity × cost)"

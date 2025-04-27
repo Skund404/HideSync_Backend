@@ -1,10 +1,9 @@
 # app/api/endpoints/materials.py
 
 from typing import Any, List, Optional, Dict
-from datetime import datetime
 from enum import Enum
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Path, status, Body
+from fastapi import APIRouter, Depends, HTTPException, Query, Path, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_active_user, get_db
@@ -13,6 +12,9 @@ from app.schemas.material import (
     MaterialCreate,
     MaterialUpdate,
     MaterialSearchParams,
+    WoodMaterialResponse,
+    WoodMaterialCreate,
+    WoodMaterialUpdate,
 )
 from app.services.material_service import MaterialService
 from app.core.exceptions import (
@@ -30,53 +32,32 @@ def serialize_for_response(data: Any) -> Any:
     """
     Convert data to be suitable for FastAPI response.
     Handles enum values, timestamps, and nested structures with proper material type handling.
-
-    Args:
-        data: The data to serialize
-
-    Returns:
-        Serialized data ready for FastAPI response
     """
-    # Handle None values
     if data is None:
         return None
 
-    # Handle lists
     if isinstance(data, list):
         return [serialize_for_response(item) for item in data]
 
-    # Handle tuples
     if isinstance(data, tuple):
         if len(data) == 1:
             return serialize_for_response(data[0])
         return [serialize_for_response(item) for item in data]
 
-    # Handle ORM models and objects with __dict__
     if hasattr(data, "__dict__"):
         result = {}
-
-        # Try different potential field names for material type
         material_type_value = None
 
-        # Check for materialType (camelCase)
         if hasattr(data, "materialType"):
             material_type_value = data.materialType
-
-        # Check for material_type (snake_case)
         elif hasattr(data, "material_type"):
             material_type_value = data.material_type
-
-        # Check for type as fallback
         elif hasattr(data, "type"):
             material_type_value = data.type
 
-        # Now serialize all fields normally
         for key, value in data.__dict__.items():
-            # Skip SQLAlchemy internal attributes
             if key.startswith("_"):
                 continue
-
-            # Handle special fields
             if key in ("status", "unit", "quality"):
                 if hasattr(value, "value"):
                     result[key] = value.value
@@ -89,7 +70,6 @@ def serialize_for_response(data: Any) -> Any:
                     else:
                         result[key] = str(inner_val)
                 elif value is None:
-                    # Default values for None
                     if key == "status":
                         result[key] = "in_stock"
                     elif key == "unit":
@@ -99,7 +79,6 @@ def serialize_for_response(data: Any) -> Any:
                 else:
                     result[key] = str(value)
             else:
-                # Handle normal fields
                 if hasattr(value, "value"):
                     result[key] = value.value
                 elif isinstance(value, tuple) and len(value) == 1:
@@ -111,10 +90,8 @@ def serialize_for_response(data: Any) -> Any:
                 else:
                     result[key] = value
 
-        # Now handle material type - this is the key part
-        # If we found a material type field in the object, use its value
+        # --- Material type mapping ---
         if material_type_value is not None:
-            # Extract the actual value
             if hasattr(material_type_value, "value"):
                 material_type_str = material_type_value.value
             elif (
@@ -127,13 +104,13 @@ def serialize_for_response(data: Any) -> Any:
             else:
                 material_type_str = str(material_type_value)
 
-            # Normalize to lowercase for frontend
             material_mapping = {
                 "LEATHER": "leather",
                 "HARDWARE": "hardware",
                 "SUPPLIES": "supplies",
                 "THREAD": "thread",
                 "FABRIC": "fabric",
+                "WOOD": "wood",  # <-- Added
                 "OTHER": "other",
             }
 
@@ -142,9 +119,6 @@ def serialize_for_response(data: Any) -> Any:
             else:
                 result["materialType"] = material_type_str.lower()
         else:
-            # If no material type found, try to infer from other fields
-
-            # Method 1: Try to infer from name
             name = result.get("name", "").lower()
             if (
                 "leather" in name
@@ -166,18 +140,15 @@ def serialize_for_response(data: Any) -> Any:
                 result["materialType"] = "thread"
             elif "fabric" in name or "canvas" in name or "cloth" in name:
                 result["materialType"] = "fabric"
+            elif "wood" in name or "oak" in name or "maple" in name or "walnut" in name:
+                result["materialType"] = "wood"
             else:
-                # Default fallback if no material type can be determined
                 result["materialType"] = "supplies"
 
-        # Check if our seeds have materialType field, it might be in a different case
         for key in list(result.keys()):
             key_lower = key.lower()
             if key_lower == "materialtype" and key != "materialType":
-                # Found materialType in different case
                 value = result.pop(key)
-
-                # Normalize the value
                 if isinstance(value, str):
                     material_mapping = {
                         "LEATHER": "leather",
@@ -185,9 +156,9 @@ def serialize_for_response(data: Any) -> Any:
                         "SUPPLIES": "supplies",
                         "THREAD": "thread",
                         "FABRIC": "fabric",
+                        "WOOD": "wood",
                         "OTHER": "other",
                     }
-
                     if value.upper() in material_mapping:
                         result["materialType"] = material_mapping[value.upper()]
                     else:
@@ -195,31 +166,26 @@ def serialize_for_response(data: Any) -> Any:
                 else:
                     result["materialType"] = str(value).lower()
 
-        # Look for seed data fields that might indicate type
         if (
             "materialType" not in result
             and "itemType" in result
             and result["itemType"] == "material"
         ):
-            # This is seed data with itemType but no materialType
-
-            # Check for notes or other fields to infer the type
             notes = result.get("notes", "").lower()
             if "thickness" in notes or "leather" in notes:
                 result["materialType"] = "leather"
             elif "center bar style" in notes or "hardware" in notes:
                 result["materialType"] = "hardware"
+            elif "wood" in notes or "oak" in notes or "maple" in notes:
+                result["materialType"] = "wood"
             else:
-                # Default fallback for seed data
                 result["materialType"] = "supplies"
 
-        # Ensure we have default values for important fields
         if "status" not in result:
             result["status"] = "in_stock"
         if "quality" not in result:
             result["quality"] = "standard"
 
-        # Default empty strings for text fields
         for field in [
             "sku",
             "supplierSku",
@@ -231,35 +197,29 @@ def serialize_for_response(data: Any) -> Any:
             if field not in result or result[field] is None:
                 result[field] = ""
 
-        # Map price to sellPrice if needed
         if "price" in result and "sellPrice" not in result:
             result["sellPrice"] = result["price"]
 
-        # Final check - ensure materialType exists
         if "materialType" not in result or result["materialType"] is None:
             result["materialType"] = "supplies"
 
         return result
 
-    # Handle dictionaries
     if isinstance(data, dict):
         result = {}
-
-        # Process all fields in the dictionary
         for k, v in data.items():
-            # Special handling for material type
             if k.lower() == "materialtype":
                 if v is None:
-                    # Try to infer from other fields in dict
                     name = data.get("name", "").lower()
                     if "leather" in name or "hide" in name or "suede" in name:
                         result["materialType"] = "leather"
                     elif "hardware" in name or "buckle" in name or "rivet" in name:
                         result["materialType"] = "hardware"
+                    elif "wood" in name or "oak" in name or "maple" in name:
+                        result["materialType"] = "wood"
                     else:
                         result["materialType"] = "supplies"
                 else:
-                    # Handle based on value type
                     if hasattr(v, "value"):
                         material_value = v.value
                     elif isinstance(v, tuple) and len(v) > 0:
@@ -269,27 +229,23 @@ def serialize_for_response(data: Any) -> Any:
                             material_value = str(v[0])
                     else:
                         material_value = str(v)
-
-                    # Normalize to lowercase for frontend
                     material_mapping = {
                         "LEATHER": "leather",
                         "HARDWARE": "hardware",
                         "SUPPLIES": "supplies",
                         "THREAD": "thread",
                         "FABRIC": "fabric",
+                        "WOOD": "wood",
                         "OTHER": "other",
                     }
-
                     if material_value.upper() in material_mapping:
                         result["materialType"] = material_mapping[
                             material_value.upper()
                         ]
                     else:
                         result["materialType"] = material_value.lower()
-            # Special handling for other enum fields
             elif k in ("status", "unit", "quality"):
                 if v is None:
-                    # Default values for None
                     if k == "status":
                         result[k] = "in_stock"
                     elif k == "unit":
@@ -305,45 +261,35 @@ def serialize_for_response(data: Any) -> Any:
                         result[k] = str(v[0])
                 else:
                     result[k] = v
-            # Handle price mapping
             elif k == "price":
                 result["sellPrice"] = v
-            # Other fields
             else:
                 result[k] = v
 
-        # Final check - ensure materialType exists
         if "materialType" not in result:
-            # Look for differently cased keys
             for k in list(result.keys()):
                 if k.lower() == "materialtype" and k != "materialType":
-                    # Found materialType with different casing
                     result["materialType"] = result.pop(k)
                     break
-
-            # Still missing, use default
             if "materialType" not in result:
-                # Handle seed data with itemType
                 if "itemType" in result and result["itemType"] == "material":
-                    # Try to infer from other fields
                     notes = result.get("notes", "").lower()
                     if "thickness" in notes or "leather" in notes:
                         result["materialType"] = "leather"
                     elif "center bar" in notes or "hardware" in notes:
                         result["materialType"] = "hardware"
+                    elif "wood" in notes or "oak" in notes or "maple" in notes:
+                        result["materialType"] = "wood"
                     else:
                         result["materialType"] = "supplies"
                 else:
-                    # Last resort fallback
                     result["materialType"] = "supplies"
 
-        # Ensure other required fields exist
         if "status" not in result:
             result["status"] = "in_stock"
         if "quality" not in result:
             result["quality"] = "standard"
 
-        # Default empty strings for text fields
         for field in [
             "sku",
             "supplierSku",
@@ -357,18 +303,13 @@ def serialize_for_response(data: Any) -> Any:
 
         return result
 
-    # Handle enum values
     if isinstance(data, Enum):
         return data.value
 
-    # Return regular values unchanged
     return data
 
 
-@router.get(
-    "/",
-    # We can safely disable response validation to avoid schema conflicts
-)
+@router.get("/")
 def list_materials(
     *,
     db: Session = Depends(get_db),
@@ -381,6 +322,7 @@ def list_materials(
     quality: Optional[str] = Query(None, description="Filter by material quality"),
     in_stock: Optional[bool] = Query(None, description="Filter by availability"),
     search: Optional[str] = Query(None, description="Search term for name"),
+    wood_type: Optional[str] = Query(None, description="Filter by wood type"),
 ):
     """Retrieve materials with optional filtering and pagination."""
     search_params = MaterialSearchParams(
@@ -391,16 +333,11 @@ def list_materials(
     materials = material_service.get_materials(
         skip=skip, limit=limit, search_params=search_params
     )
-
-    # Use our improved serialization function
-    serialized_materials = [serialize_for_response(m) for m in materials]
-
-    return serialized_materials
+    return [serialize_for_response(m) for m in materials]
 
 
 @router.post(
     "/",
-    # Disable response model validation
     status_code=status.HTTP_201_CREATED,
 )
 def create_material(
@@ -412,7 +349,32 @@ def create_material(
     """Create a new material."""
     material_service = MaterialService(db)
     try:
-        material = material_service.create_material(material_in, current_user.id)
+        material = material_service.create_material(material_in.root.dict(), current_user.id)
+        return serialize_for_response(material)
+    except BusinessRuleException as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post(
+    "/wood/",
+    status_code=status.HTTP_201_CREATED,
+    response_model=WoodMaterialResponse,
+)
+def create_wood_material(
+    *,
+    db: Session = Depends(get_db),
+    material_in: WoodMaterialCreate,
+    current_user: Any = Depends(get_current_active_user),
+):
+    """
+    Create a new wood material.
+    """
+    material_service = MaterialService(db)
+    try:
+        # Make sure material_type is set to WOOD
+        data = material_in.dict()
+        data["material_type"] = "WOOD"
+        material = material_service.create_wood_material(data, current_user.id)
         return serialize_for_response(material)
     except BusinessRuleException as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -443,6 +405,29 @@ def get_material(
         )
 
 
+@router.get("/wood/by-type/{wood_type}")
+def get_wood_by_type(
+    *,
+    db: Session = Depends(get_db),
+    wood_type: str = Path(..., description="Type of wood"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=1000),
+    current_user: Any = Depends(get_current_active_user),
+):
+    """
+    Get wood materials by their type.
+    """
+    material_service = MaterialService(db)
+    # Create a search params object to filter by wood type
+    search_params = MaterialSearchParams(material_type="WOOD")
+    materials = material_service.get_materials(
+        skip=skip, limit=limit, search_params=search_params
+    )
+    # Further filter the materials by wood_type
+    materials = [m for m in materials if getattr(m, "wood_type", None) == wood_type]
+    return [serialize_for_response(m) for m in materials]
+
+
 @router.put(
     "/{material_id}",
 )
@@ -459,7 +444,7 @@ def update_material(
     material_service = MaterialService(db)
     try:
         material = material_service.update_material(
-            material_id, material_in, current_user.id
+            material_id, material_in.dict(exclude_unset=True), current_user.id
         )
         return serialize_for_response(material)
     except EntityNotFoundException:
