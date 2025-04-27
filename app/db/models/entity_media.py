@@ -1,72 +1,49 @@
 # File: app/db/models/entity_media.py
-import uuid
-from typing import Optional
+"""
+Entity Media model for associating media assets with various entities.
 
-from sqlalchemy import Column, String, DateTime, ForeignKey, UniqueConstraint, Integer
+This module defines the EntityMedia model which creates a polymorphic
+relationship between media assets and any entity type in the system.
+"""
+
+import uuid
+from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Boolean, UniqueConstraint
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 
-from app.db.models.base import Base, AbstractBase, TimestampMixin
-from app.db.models.media_asset import MediaAsset
-
-import logging
-
-logger = logging.getLogger(__name__)
+from app.db.models.base import Base, TimestampMixin
 
 
-class EntityMedia(AbstractBase, TimestampMixin):
+class EntityMedia(Base, TimestampMixin):
     """
-    Association model that connects MediaAsset instances to various entity types.
-
-    This model uses a polymorphic pattern to allow media assets to be associated
-    with any entity type (Material, Tool, Supplier, etc.) using a discriminator.
+    Association model for connecting media assets to various entity types.
     """
-
     __tablename__ = "entity_media"
 
-    # Primary key
-    id = Column(String(36), primary_key=True)
+    # Primary key with UUID for easier external referencing
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
 
     # Media asset reference
-    media_asset_id = Column(
-        String(36), ForeignKey("media_assets.id", ondelete="CASCADE"), nullable=False
-    )
+    media_asset_id = Column(String(36), ForeignKey("media_assets.id", ondelete="CASCADE"), nullable=False)
 
     # Entity reference (polymorphic)
-    entity_type = Column(
-        String(50), nullable=False, index=True
-    )  # "material", "tool", "supplier", etc.
-    entity_id = Column(String(36), nullable=False, index=True)
+    entity_type = Column(String(50), nullable=False, index=True)  # 'material', 'product', etc.
+    entity_id = Column(String(36), nullable=False, index=True)  # ID in the entity table
 
-    # Relationship type
-    media_type = Column(
-        String(50), default="thumbnail"
-    )  # "thumbnail", "gallery", "document", etc.
-
-    # Display order (for multiple images)
-    display_order = Column(Integer, default=0)
-
-    # Caption or description
-    caption = Column(String(255))
-
-    # Timestamps
-    created_at = Column(
-        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
-    )
+    # Media type and properties
+    media_type = Column(String(50), default="image")  # 'image', 'document', 'video', etc.
+    is_primary = Column(Boolean, default=False)  # Primary media for the entity
+    display_order = Column(Integer, default=0)  # For ordering in galleries
+    caption = Column(String(255))  # Optional caption
 
     # Relationships
-    media_asset = relationship("MediaAsset", backref="entity_associations")
+    media_asset = relationship("MediaAsset")
 
-    # Ensure entity + media asset + media type combination is unique
+    # Constraints to ensure only one primary media per entity
     __table_args__ = (
-        UniqueConstraint(
-            "entity_type",
-            "entity_id",
-            "media_asset_id",
-            "media_type",
-            name="uq_entity_media_type",
-        ),
+        UniqueConstraint("entity_type", "entity_id", "is_primary",
+                         name="uq_entity_primary_media",
+                         sqlite_where=is_primary),
+        UniqueConstraint("entity_type", "entity_id", "media_asset_id",
+                         name="uq_entity_media_asset"),
     )
-
-    def __repr__(self):
-        return f"<EntityMedia(id='{self.id}', entity_type='{self.entity_type}', entity_id='{self.entity_id}', media_type='{self.media_type}')>"

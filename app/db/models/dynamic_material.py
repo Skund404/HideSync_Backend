@@ -1,38 +1,45 @@
 # app/db/models/dynamic_material.py
+"""
+Dynamic Material Management System for HideSync.
 
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Text, Float, UniqueConstraint
-from sqlalchemy.orm import relationship
+This module defines models for managing material types with dynamic properties,
+allowing users to create custom material types with custom properties.
+"""
+
+from sqlalchemy import (
+    Column, String, Integer, Float, Boolean, Text, ForeignKey, DateTime, JSON,
+    UniqueConstraint, Table
+)
+from sqlalchemy.orm import relationship, validates
+from sqlalchemy.ext.hybrid import hybrid_property
 from datetime import datetime
 import json
 
-from app.db.models.base import Base, TimestampMixin
+from app.db.models.base import Base, TimestampMixin, ValidationMixin
+from app.db.models.tag import material_tags
 
 
 class MaterialType(Base, TimestampMixin):
     """
-    Defines a type of material with its associated properties.
-
-    This model allows users to create custom material types (beyond the
-    system-provided ones like leather, hardware, supplies) with dynamic
-    properties specific to their needs.
+    Defines a type of material with customizable properties.
     """
     __tablename__ = "material_types"
 
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(100), unique=True, nullable=False, index=True)
-    icon = Column(String(255))
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(100), nullable=False, unique=True, index=True)
+    icon = Column(String(50))
     color_scheme = Column(String(50))
     _ui_config = Column("ui_config", Text)
     _storage_config = Column("storage_config", Text)
     created_by = Column(Integer, ForeignKey("users.id"))
     is_system = Column(Boolean, default=False)
-    visibility_level = Column(String(50), default="all")
+    visibility_level = Column(String(50), default="all")  # all, admin, or specific tier
 
     # Relationships
     properties = relationship(
-        "PropertyDefinition",
-        secondary="material_type_properties",
-        backref="material_types"
+        "MaterialTypeProperty",
+        back_populates="material_type",
+        cascade="all, delete-orphan"
     )
     translations = relationship(
         "MaterialTypeTranslation",
@@ -45,11 +52,14 @@ class MaterialType(Base, TimestampMixin):
         cascade="all, delete-orphan"
     )
 
-    # JSON property handling for SQLite
+    # JSON property handlers
     @property
     def ui_config(self):
         if self._ui_config:
-            return json.loads(self._ui_config)
+            try:
+                return json.loads(self._ui_config)
+            except:
+                return {}
         return {}
 
     @ui_config.setter
@@ -62,7 +72,10 @@ class MaterialType(Base, TimestampMixin):
     @property
     def storage_config(self):
         if self._storage_config:
-            return json.loads(self._storage_config)
+            try:
+                return json.loads(self._storage_config)
+            except:
+                return {}
         return {}
 
     @storage_config.setter
@@ -83,18 +96,20 @@ class MaterialType(Base, TimestampMixin):
 
 class MaterialTypeTranslation(Base):
     """
-    Localized translations for material types.
+    Translations for material types.
     """
     __tablename__ = "material_type_translations"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     material_type_id = Column(Integer, ForeignKey("material_types.id", ondelete="CASCADE"), nullable=False)
-    locale = Column(String(10), nullable=False)
-    display_name = Column(String(100), nullable=False)
+    locale = Column(String(10), nullable=False)  # e.g., 'en', 'fr', 'es'
+    display_name = Column(String(255), nullable=False)
     description = Column(Text)
 
+    # Relationships
     material_type = relationship("MaterialType", back_populates="translations")
 
+    # Constraints
     __table_args__ = (
         UniqueConstraint('material_type_id', 'locale', name='uq_material_type_translation'),
     )
@@ -102,16 +117,13 @@ class MaterialTypeTranslation(Base):
 
 class PropertyDefinition(Base, TimestampMixin):
     """
-    Defines a property that can be used across different material types.
-
-    Properties can be of different data types (string, number, boolean, enum, etc.)
-    and can be reused across multiple material types.
+    Definition of a property that can be assigned to material types.
     """
     __tablename__ = "property_definitions"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(100), unique=True, nullable=False, index=True)
-    data_type = Column(String(50), nullable=False)  # string, number, boolean, enum, date, reference, file
+    data_type = Column(String(50), nullable=False)  # string, number, boolean, enum, date, file, etc.
     group_name = Column(String(100))
     unit = Column(String(50))
     is_required = Column(Boolean, default=False)
@@ -138,12 +150,19 @@ class PropertyDefinition(Base, TimestampMixin):
         cascade="all, delete-orphan"
     )
     enum_type = relationship("EnumType")
+    material_type_properties = relationship(
+        "MaterialTypeProperty",
+        back_populates="property"
+    )
 
-    # JSON property handling for SQLite
+    # JSON property handlers
     @property
     def validation_rules(self):
         if self._validation_rules:
-            return json.loads(self._validation_rules)
+            try:
+                return json.loads(self._validation_rules)
+            except:
+                return {}
         return {}
 
     @validation_rules.setter
@@ -161,35 +180,23 @@ class PropertyDefinition(Base, TimestampMixin):
         # Fallback to first translation or name
         return self.translations[0].display_name if self.translations else self.name
 
-    def get_enum_values(self, db):
-        """Get enum values from the dynamic enum system or custom options"""
-        if self.enum_type_id:
-            # Use the dynamic enum system
-            from app.services.enum_service import EnumService
-            enum_service = EnumService(db)
-            return enum_service.get_enum_values(self.enum_type.system_name)
-        else:
-            # Use custom property enum options
-            return [
-                {"id": opt.id, "value": opt.value, "display_value": opt.display_value}
-                for opt in self.enum_options
-            ]
-
 
 class PropertyDefinitionTranslation(Base):
     """
-    Localized translations for property definitions.
+    Translations for property definitions.
     """
     __tablename__ = "property_definition_translations"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     property_id = Column(Integer, ForeignKey("property_definitions.id", ondelete="CASCADE"), nullable=False)
-    locale = Column(String(10), nullable=False)
-    display_name = Column(String(100), nullable=False)
+    locale = Column(String(10), nullable=False)  # e.g., 'en', 'fr', 'es'
+    display_name = Column(String(255), nullable=False)
     description = Column(Text)
 
+    # Relationships
     property = relationship("PropertyDefinition", back_populates="translations")
 
+    # Constraints
     __table_args__ = (
         UniqueConstraint('property_id', 'locale', name='uq_property_definition_translation'),
     )
@@ -197,19 +204,21 @@ class PropertyDefinitionTranslation(Base):
 
 class PropertyEnumOption(Base):
     """
-    Custom enum options for properties that don't use the dynamic enum system.
+    Custom enum options for property definitions with enum data type.
     """
     __tablename__ = "property_enum_options"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     property_id = Column(Integer, ForeignKey("property_definitions.id", ondelete="CASCADE"), nullable=False)
     value = Column(String(100), nullable=False)
     display_value = Column(String(255), nullable=False)
     color = Column(String(50))
     display_order = Column(Integer, default=0)
 
+    # Relationships
     property = relationship("PropertyDefinition", back_populates="enum_options")
 
+    # Constraints
     __table_args__ = (
         UniqueConstraint('property_id', 'value', name='uq_property_enum_option'),
     )
@@ -224,35 +233,39 @@ class PropertyEnumMapping(Base):
     property_id = Column(Integer, ForeignKey("property_definitions.id", ondelete="CASCADE"), primary_key=True)
     enum_type_id = Column(Integer, ForeignKey("enum_types.id", ondelete="CASCADE"), primary_key=True)
 
+    # Relationships
     property = relationship("PropertyDefinition", back_populates="enum_mappings")
     enum_type = relationship("EnumType")
 
 
 class MaterialTypeProperty(Base):
     """
-    Junction table linking material types to property definitions,
-    with additional metadata about the relationship.
+    Junction table that associates properties with material types
+    and defines their configuration within that material type.
     """
     __tablename__ = "material_type_properties"
 
     material_type_id = Column(Integer, ForeignKey("material_types.id", ondelete="CASCADE"), primary_key=True)
     property_id = Column(Integer, ForeignKey("property_definitions.id", ondelete="CASCADE"), primary_key=True)
     display_order = Column(Integer, default=0)
-    is_required = Column(Boolean)
+    is_required = Column(Boolean, default=False)
     is_filterable = Column(Boolean, default=True)
     is_displayed_in_list = Column(Boolean, default=True)
     is_displayed_in_card = Column(Boolean, default=True)
     _default_value = Column("default_value", Text)
 
     # Relationships
-    material_type = relationship("MaterialType")
-    property = relationship("PropertyDefinition")
+    material_type = relationship("MaterialType", back_populates="properties")
+    property = relationship("PropertyDefinition", back_populates="material_type_properties")
 
-    # JSON property handling for SQLite
+    # JSON property handlers
     @property
     def default_value(self):
         if self._default_value:
-            return json.loads(self._default_value)
+            try:
+                return json.loads(self._default_value)
+            except:
+                return None
         return None
 
     @default_value.setter
@@ -265,14 +278,11 @@ class MaterialTypeProperty(Base):
 
 class DynamicMaterial(Base, TimestampMixin):
     """
-    Material entity with dynamic properties.
-
-    This model represents materials with type-specific dynamic properties
-    stored in the material_property_values table.
+    Dynamic material model that can be customized based on material type.
     """
     __tablename__ = "dynamic_materials"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     material_type_id = Column(Integer, ForeignKey("material_types.id"), nullable=False)
     name = Column(String(255), nullable=False)
     status = Column(String(50), default="in_stock")
@@ -280,16 +290,17 @@ class DynamicMaterial(Base, TimestampMixin):
     unit = Column(String(50), nullable=False)
     quality = Column(String(50))
     supplier_id = Column(Integer, ForeignKey("suppliers.id"))
-    supplier = Column(String(255))
+    supplier = Column(String(255))  # Denormalized for convenience
     sku = Column(String(100))
+    supplier_sku = Column(String(100))
     description = Column(Text)
     reorder_point = Column(Float, default=0)
-    supplier_sku = Column(String(100))
     cost_price = Column(Float)
-    price = Column(Float)
+    sell_price = Column(Float)
     storage_location = Column(String(100))
     notes = Column(Text)
     thumbnail = Column(String(255))
+    created_by = Column(Integer, ForeignKey("users.id"))
 
     # Relationships
     material_type = relationship("MaterialType", back_populates="materials")
@@ -301,46 +312,48 @@ class DynamicMaterial(Base, TimestampMixin):
     media = relationship(
         "MediaAsset",
         secondary="material_media",
-        backref="dynamic_materials"
+        backref="materials"
     )
     tags = relationship(
         "Tag",
-        secondary="material_tags",
-        backref="dynamic_materials"
+        secondary=material_tags,
+        back_populates="materials"
     )
 
-    @property
+    # Calculated properties
+    @hybrid_property
     def value(self):
-        """Calculate the total cost value of this material in inventory."""
+        """Calculate the total value of inventory"""
         if self.cost_price is None:
             return None
-        return self.quantity * self.cost_price
+        quantity = self.quantity if self.quantity is not None else 0.0
+        return quantity * self.cost_price
 
-    @property
+    @hybrid_property
     def total_selling_value(self):
-        """Calculate the total selling value of this material in inventory."""
-        if self.price is None:
+        """Calculate the total selling value of inventory"""
+        if self.sell_price is None:
             return None
-        return self.quantity * self.price
+        quantity = self.quantity if self.quantity is not None else 0.0
+        return quantity * self.sell_price
 
 
 class MaterialPropertyValue(Base):
     """
-    Stores the actual values of properties for a specific material.
-    Uses polymorphic storage based on data type.
+    Stores property values for materials based on their property definitions.
+    Uses a polymorphic storage approach to store different data types.
     """
     __tablename__ = "material_property_values"
 
-    id = Column(Integer, primary_key=True, index=True)
-    material_id = Column(Integer, ForeignKey("dynamic_materials.id", ondelete="CASCADE"), nullable=False)
-    property_id = Column(Integer, ForeignKey("property_definitions.id"), nullable=False)
+    material_id = Column(Integer, ForeignKey("dynamic_materials.id", ondelete="CASCADE"), primary_key=True)
+    property_id = Column(Integer, ForeignKey("property_definitions.id"), primary_key=True)
 
-    # Polymorphic storage based on data type
+    # Polymorphic storage for different data types
     value_string = Column(Text)
     value_number = Column(Float)
     value_boolean = Column(Boolean)
-    value_date = Column(String(50))  # ISO-8601 format
-    value_enum_id = Column(Integer)  # Reference to enum value or property_enum_options
+    value_date = Column(String(50))  # Store as ISO string for SQLite compatibility
+    value_enum_id = Column(Integer)  # References an enum value in the respective enum table
     value_file_id = Column(String(100))  # Reference to file/media asset
     value_reference_id = Column(Integer)  # Reference to another entity
 
@@ -348,6 +361,22 @@ class MaterialPropertyValue(Base):
     material = relationship("DynamicMaterial", back_populates="property_values")
     property = relationship("PropertyDefinition")
 
+
+class MaterialMedia(Base):
+    """
+    Associates media assets with materials, tracking primary images and order.
+    """
+    __tablename__ = "material_media"
+
+    material_id = Column(Integer, ForeignKey("dynamic_materials.id", ondelete="CASCADE"), primary_key=True)
+    media_asset_id = Column(String(36), ForeignKey("media_assets.id", ondelete="CASCADE"), primary_key=True)
+    is_primary = Column(Boolean, default=False)
+    display_order = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Create a unique constraint to ensure only one primary image per material
     __table_args__ = (
-        UniqueConstraint('material_id', 'property_id', name='uq_material_property'),
+        UniqueConstraint('material_id', 'is_primary',
+                         name='uq_material_primary_media',
+                         sqlite_where=is_primary),
     )

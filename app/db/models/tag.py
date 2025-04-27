@@ -1,72 +1,96 @@
-# File: app/db/models/tag.py
+# app/db/models/tag.py
 """
-Tag database model for HideSync.
+Tag model for the HideSync system.
 
-This module defines the Tag model which represents categorization labels that can
-be applied to various entities in the system, particularly media assets.
+This module defines the Tag model for categorizing objects in the system,
+along with translations to support multiple languages.
 """
 
-import uuid  # <-- Import uuid
-from sqlalchemy import Column, String, DateTime
+import uuid
+from sqlalchemy import Column, String, ForeignKey, Table, DateTime, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 
-# Assuming AbstractBase and TimestampMixin are correctly defined in base.py
-from app.db.models.base import AbstractBase, TimestampMixin
+from app.db.models.base import Base, TimestampMixin
+
+# Association table for materials and tags
+material_tags = Table(
+    "material_tags",
+    Base.metadata,
+    Column("material_id", Integer, ForeignKey("materials.id", ondelete="CASCADE"), primary_key=True),
+    Column("tag_id", String(36), ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True),
+)
+
+# Association table for media assets and tags
+media_asset_tags = Table(
+    "media_asset_tags",
+    Base.metadata,
+    Column("media_asset_id", String(36), ForeignKey("media_assets.id", ondelete="CASCADE"), primary_key=True),
+    Column("tag_id", String(36), ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True),
+)
 
 
-class Tag(AbstractBase, TimestampMixin):
+class Tag(Base, TimestampMixin):
     """
-    Tag model for categorizing and labeling system entities.
-
-    Tags can be applied to various entities in the system to enable
-    filtering, organization, and improved searchability.
+    Tag model for categorizing and organizing entities within the system.
     """
-
     __tablename__ = "tags"
 
-    # Use UUID string as primary key instead of integer
-    # *** FIXED: Added default UUID generator ***
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-
-    # Tag properties
     name = Column(String(100), nullable=False, unique=True, index=True)
     description = Column(String(500), nullable=True)
-    color = Column(String(7), nullable=True)  # Hex color code (e.g., #FF5733)
-
-    # created_at and updated_at are handled by TimestampMixin
+    color = Column(String(7), nullable=True)  # Hex color code
+    created_by = Column(String(36), ForeignKey("users.id"), nullable=True)
 
     # Relationships
-    # Assumes 'media_asset_tags' table and MediaAsset model are defined elsewhere
-    # and use String(36) for their keys.
-    media_assets = relationship(
-        "MediaAsset", secondary="media_asset_tags", back_populates="tags"
+    translations = relationship(
+        "TagTranslation",
+        back_populates="tag",
+        cascade="all, delete-orphan"
     )
 
+    # Media assets tagged with this tag
+    media_assets = relationship(
+        "MediaAsset",
+        secondary=media_asset_tags,
+        back_populates="tags"
+    )
+
+    # Materials tagged with this tag
+    materials = relationship(
+        "Material",
+        secondary=material_tags,
+        back_populates="tags"
+    )
+
+    def get_display_name(self, locale="en"):
+        """Get the localized tag name."""
+        for translation in self.translations:
+            if translation.locale == locale:
+                return translation.display_name
+        # Fallback to first translation or original name
+        return self.translations[0].name if self.translations else self.name
+
     def __repr__(self):
-        # Use getattr for safety before ID is assigned during object creation
-        return f"<Tag(id='{getattr(self, 'id', None)}', name='{self.name}')>"
+        return f"<Tag(id='{self.id}', name='{self.name}')>"
 
-    def to_dict(self):
-        """Convert Tag instance to a dictionary."""
-        # Assuming AbstractBase or TimestampMixin provides a base to_dict()
-        result = super().to_dict() if hasattr(super(), "to_dict") else {}
 
-        # Ensure essential fields are present if base to_dict is missing/incomplete
-        # (id might be handled by AbstractBase.to_dict if it includes PK)
-        if "id" not in result:
-            result["id"] = self.id
-        if "name" not in result:
-            result["name"] = self.name
-        if "description" not in result:
-            result["description"] = self.description
-        if "color" not in result:
-            result["color"] = self.color
+class TagTranslation(Base):
+    """
+    Translations for tags to support multiple languages.
+    """
+    __tablename__ = "tag_translations"
 
-        # Ensure timestamps are ISO format strings if handled manually
-        if "created_at" in result and isinstance(result["created_at"], datetime):
-            result["created_at"] = result["created_at"].isoformat()
-        if "updated_at" in result and isinstance(result["updated_at"], datetime):
-            result["updated_at"] = result["updated_at"].isoformat()
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    tag_id = Column(String(36), ForeignKey("tags.id", ondelete="CASCADE"), nullable=False)
+    locale = Column(String(10), nullable=False)  # e.g., 'en', 'fr', 'es'
+    name = Column(String(100), nullable=False)
+    description = Column(Text)
 
-        return result
+    # Relationships
+    tag = relationship("Tag", back_populates="translations")
+
+    # Constraints
+    __table_args__ = (
+        UniqueConstraint('tag_id', 'locale', name='uq_tag_translation'),
+    )

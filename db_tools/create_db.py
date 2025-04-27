@@ -47,13 +47,13 @@ MODEL_MODULES = [
     "app.db.models.component",
     "app.db.models.customer",
     "app.db.models.documentation",
-    "app.db.models.dynamic_enum",
+    "app.db.models.dynamic_enum",  # Add this
+    "app.db.models.dynamic_material",  # Add this
     "app.db.models.entity_media",
     "app.db.models.enums",
     "app.db.models.file_metadata",
     "app.db.models.inventory",
     "app.db.models.material",
-    "app.db.models.wood_material",
     "app.db.models.media_asset",
     "app.db.models.password_reset",
     "app.db.models.pattern",
@@ -66,6 +66,7 @@ MODEL_MODULES = [
     "app.db.models.refund",
     "app.db.models.role",
     "app.db.models.sales",
+    "app.db.models.settings",  # Add this
     "app.db.models.shipment",
     "app.db.models.storage",
     "app.db.models.supplier",
