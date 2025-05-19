@@ -18,6 +18,7 @@ from app.api.endpoints import (
     patterns,
     picking_list,
     platform_integrations,
+    presets,
     products,
     project_templates,
     projects,
@@ -82,3 +83,4 @@ api_router.include_router(settings.router, prefix="/settings", tags=["Settings"]
 api_router.include_router(material_types.router, prefix="/material-types", tags=["Material Types"])
 api_router.include_router(property_definitions.router, prefix="/property-definitions", tags=["Property Definitions"])
 api_router.include_router(dynamic_materials.router, prefix="/dynamic-materials", tags=["Dynamic Materials"])
+api_router.include_router(presets.router, prefix="/presets", tags=["presets"])

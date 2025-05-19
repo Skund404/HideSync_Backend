@@ -51,6 +51,7 @@ from app.repositories.recurring_project_repository import (
     RecurrencePatternRepository,
     GeneratedProjectRepository,
 )
+from app.repositories.preset_repository import PresetRepository
 from app.repositories.shipment_repository import ShipmentRepository
 from app.repositories.timeline_task_repository import TimelineTaskRepository
 from app.repositories.refund_repository import RefundRepository
@@ -322,3 +323,7 @@ class RepositoryFactory:
     def create_media_asset_tag_repository(self) -> MediaAssetTagRepository:
         """Create a MediaAssetTagRepository instance."""
         return MediaAssetTagRepository(self.session, self.encryption_service)
+
+    def create_preset_repository(self) -> PresetRepository:
+        """Create a PresetRepository instance."""
+        return PresetRepository(self.session, self.encryption_service)

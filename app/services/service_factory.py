@@ -13,10 +13,11 @@ from sqlalchemy.orm import Session
 # from app.repositories import communication_repository
 from app.services.base_service import BaseService
 from app.core.events import EventBus
-from app.core.key_manager import KeyManager as KeyService # Assuming KeyManager is the correct name
+from app.core.key_manager import KeyManager as KeyService  # Assuming KeyManager is the correct name
 
 # Import EnumService
 from app.services.enum_service import EnumService
+
 
 class ServiceFactory:
     """
@@ -27,13 +28,13 @@ class ServiceFactory:
     """
 
     def __init__(
-        self,
-        session: Session,
-        security_context=None,
-        event_bus=None,
-        cache_service=None,
-        key_service=None,
-        file_storage_service=None,
+            self,
+            session: Session,
+            security_context=None,
+            event_bus=None,
+            cache_service=None,
+            key_service=None,
+            file_storage_service=None,
     ):
         """
         Initialize the service factory with dependencies.
@@ -75,7 +76,137 @@ class ServiceFactory:
 
         self._service_instances["enum_service"] = service
         return service
+
     # --- End EnumService getter ---
+
+    def get_property_definition_service(self) -> "PropertyDefinitionService":
+        """Get a PropertyDefinitionService instance."""
+        from app.services.property_definition_service import PropertyDefinitionService
+        from app.repositories.property_definition_repository import PropertyDefinitionRepository
+
+        if "property_definition_service" in self._service_instances:
+            return self._service_instances["property_definition_service"]
+
+        enum_service = self.get_enum_service()
+        property_repository = PropertyDefinitionRepository(self.session)
+
+        service = PropertyDefinitionService(
+            db=self.session,
+            repository=property_repository,
+            enum_service=enum_service,
+            security_context=self.security_context,
+            event_bus=self.event_bus,
+            cache_service=self.cache_service
+        )
+
+        self._service_instances["property_definition_service"] = service
+        return service
+
+    def get_material_type_service(self) -> "MaterialTypeService":
+        """Get a MaterialTypeService instance."""
+        from app.services.material_type_service import MaterialTypeService
+        from app.repositories.material_type_repository import MaterialTypeRepository
+
+        if "material_type_service" in self._service_instances:
+            return self._service_instances["material_type_service"]
+
+        property_service = self.get_property_definition_service()
+        material_type_repository = MaterialTypeRepository(self.session, property_repository=property_service.repository)
+
+        service = MaterialTypeService(
+            db=self.session,
+            repository=material_type_repository,
+            property_service=property_service,
+            security_context=self.security_context,
+            event_bus=self.event_bus,
+            cache_service=self.cache_service
+        )
+
+        self._service_instances["material_type_service"] = service
+        return service
+
+    def get_dynamic_material_service(self) -> "DynamicMaterialService":
+        """Get a DynamicMaterialService instance."""
+        from app.services.dynamic_material_service import DynamicMaterialService
+        from app.repositories.dynamic_material_repository import DynamicMaterialRepository
+        from app.services.settings_service import SettingsService
+
+        if "dynamic_material_service" in self._service_instances:
+            return self._service_instances["dynamic_material_service"]
+
+        property_service = self.get_property_definition_service()
+        material_type_service = self.get_material_type_service()
+        settings_service = self.get_settings_service()
+
+        material_repository = DynamicMaterialRepository(self.session)
+
+        service = DynamicMaterialService(
+            session=self.session,
+            repository=material_repository,
+            property_service=property_service,
+            material_type_service=material_type_service,
+            security_context=self.security_context,
+            event_bus=self.event_bus,
+            cache_service=self.cache_service,
+            settings_service=settings_service
+        )
+
+        self._service_instances["dynamic_material_service"] = service
+        return service
+
+    def get_settings_service(self) -> "SettingsService":
+        """Get a SettingsService instance."""
+        from app.services.settings_service import SettingsService
+        from app.repositories.settings_repository import SettingsRepository
+
+        if "settings_service" in self._service_instances:
+            return self._service_instances["settings_service"]
+
+        settings_repository = SettingsRepository(self.session)
+
+        service = SettingsService(
+            session=self.session,
+            repository=settings_repository,
+            security_context=self.security_context,
+            event_bus=self.event_bus,
+            cache_service=self.cache_service
+        )
+
+        self._service_instances["settings_service"] = service
+        return service
+
+    def get_preset_service(self) -> "PresetService":
+        """Get a PresetService instance."""
+        from app.services.preset_service import PresetService
+        from app.repositories.preset_repository import PresetRepository
+
+        if "preset_service" in self._service_instances:
+            return self._service_instances["preset_service"]
+
+        # Get required dependencies
+        property_service = self.get_property_definition_service()
+        material_type_service = self.get_material_type_service()
+        material_service = self.get_dynamic_material_service()
+        settings_service = self.get_settings_service()
+
+        # Create repository
+        preset_repository = PresetRepository(self.session)
+
+        # Create service with all dependencies
+        service = PresetService(
+            session=self.session,
+            repository=preset_repository,
+            property_service=property_service,
+            material_type_service=material_type_service,
+            material_service=material_service,
+            settings_service=settings_service,
+            security_context=self.security_context,
+            event_bus=self.event_bus,
+            cache_service=self.cache_service
+        )
+
+        self._service_instances["preset_service"] = service
+        return service
 
     def get_material_service(self) -> "MaterialService":
         """Get a MaterialService instance."""
@@ -107,7 +238,7 @@ class ServiceFactory:
             security_context=self.security_context, event_bus=self.event_bus,
             cache_service=self.cache_service, material_service=self.get_material_service(),
             timeline_task_repository=timeline_task_repository,
-            customer_repository=None # Assuming lazy init or specific dependency injection elsewhere
+            customer_repository=None  # Assuming lazy init or specific dependency injection elsewhere
         )
         self._service_instances["project_service"] = service
         return service
@@ -116,16 +247,16 @@ class ServiceFactory:
         """Get a CustomerService instance."""
         from app.services.customer_service import CustomerService
         from app.repositories.customer_repository import CustomerRepository
-        from app.repositories.communication_repository import CommunicationRepository # Import correct repo
+        from app.repositories.communication_repository import CommunicationRepository  # Import correct repo
         if "customer_service" in self._service_instances:
             return self._service_instances["customer_service"]
         customer_repository = CustomerRepository(self.session, self.key_service)
-        communication_repository = CommunicationRepository(self.session, self.key_service) # Instantiate repo
+        communication_repository = CommunicationRepository(self.session, self.key_service)  # Instantiate repo
         service = CustomerService(
             session=self.session, repository=customer_repository,
             security_context=self.security_context, event_bus=self.event_bus,
             cache_service=self.cache_service, key_service=self.key_service,
-            communication_repository=communication_repository # Pass instantiated repo
+            communication_repository=communication_repository  # Pass instantiated repo
         )
         self._service_instances["customer_service"] = service
         return service
@@ -142,7 +273,7 @@ class ServiceFactory:
             session=self.session, repository=sale_repository,
             security_context=self.security_context, event_bus=self.event_bus,
             cache_service=self.cache_service, customer_service=self.get_customer_service(),
-            product_service=None # Assuming lazy init
+            product_service=None  # Assuming lazy init
         )
         self._service_instances["sale_service"] = service
         return service
@@ -158,7 +289,7 @@ class ServiceFactory:
         service = PurchaseService(
             session=self.session, repository=purchase_repository,
             security_context=self.security_context, event_bus=self.event_bus,
-            cache_service=self.cache_service, supplier_service=None, # Assuming lazy init
+            cache_service=self.cache_service, supplier_service=None,  # Assuming lazy init
             material_service=self.get_material_service()
         )
         self._service_instances["purchase_service"] = service
@@ -196,7 +327,7 @@ class ServiceFactory:
         storage_assignment_repository = StorageAssignmentRepository(self.session)
         storage_move_repository = StorageMoveRepository(self.session)
         service = StorageLocationService(
-            session=self.session, # Use the factory's session
+            session=self.session,  # Use the factory's session
             location_repository=storage_location_repository,
             security_context=self.security_context, event_bus=self.event_bus,
             cache_service=self.cache_service, cell_repository=storage_cell_repository,
@@ -205,9 +336,8 @@ class ServiceFactory:
         )
         # Typically cache this service unless there's a strong reason not to
         if "storage_location_service" not in self._service_instances:
-             self._service_instances["storage_location_service"] = service
+            self._service_instances["storage_location_service"] = service
         return self._service_instances["storage_location_service"]
-
 
     def get_entity_media_service(self) -> "EntityMediaService":
         """Get an EntityMediaService instance."""
@@ -227,11 +357,11 @@ class ServiceFactory:
     # File storage service is often configured differently, not cached is fine
     def get_file_storage_service(self, base_path: Optional[str] = None) -> "FileStorageService":
         """Get a FileStorageService instance."""
-        from app.services.storage_service import FileStorageService # Renamed from original? Check path/name
+        from app.services.storage_service import FileStorageService  # Renamed from original? Check path/name
         from app.repositories.file_metadata_repository import FileMetadataRepository
-        from app.core.config import settings # Get default path from settings if needed
+        from app.core.config import settings  # Get default path from settings if needed
 
-        effective_base_path = base_path or settings.MEDIA_ASSETS_BASE_PATH # Example: Use settings
+        effective_base_path = base_path or settings.MEDIA_ASSETS_BASE_PATH  # Example: Use settings
         metadata_repository = FileMetadataRepository(self.session)
         return FileStorageService(
             base_path=effective_base_path,
@@ -247,7 +377,7 @@ class ServiceFactory:
         service = DashboardService(
             session=self.session, service_factory=self,
             cache_service=self.cache_service,
-            metrics_service=None # Assuming lazy init
+            metrics_service=None  # Assuming lazy init
         )
         self._service_instances["dashboard_service"] = service
         return service
@@ -281,7 +411,7 @@ class ServiceFactory:
         # Assuming it needs the file storage service now
         effective_file_storage = self.file_storage_service or self.get_file_storage_service()
         service = MediaAssetService(
-             session=self.session, file_storage_service=effective_file_storage
+            session=self.session, file_storage_service=effective_file_storage
         )
         self._service_instances["media_asset_service"] = service
         return service
@@ -292,7 +422,7 @@ class ServiceFactory:
         # from app.repositories.tag_repository import TagRepository # Repo not used?
         if "tag_service" in self._service_instances:
             return self._service_instances["tag_service"]
-        service = TagService(session=self.session) # Assuming simple init
+        service = TagService(session=self.session)  # Assuming simple init
         self._service_instances["tag_service"] = service
         return service
 
@@ -314,7 +444,7 @@ class ServiceFactory:
             cache_service=self.cache_service,
             key_service=self.key_service,
             file_storage_service=self.file_storage_service,
-            **kwargs # Pass any extra args needed
+            **kwargs  # Pass any extra args needed
         )
         self._service_instances[service_name] = service
         return service

@@ -1,2 +1,4 @@
 /app/sample.env
+.idea/*
+.idea
 /.idea/
