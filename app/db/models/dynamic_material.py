@@ -1,9 +1,11 @@
-# app/db/models/dynamic_material.py
+# File: app/db/models/dynamic_material.py (UPDATED - Add missing reverse relationships)
 """
 Dynamic Material Management System for HideSync.
 
 This module defines models for managing material types with dynamic properties,
 allowing users to create custom material types with custom properties.
+
+UPDATED: Added storage-related reverse relationships to complete the integration.
 """
 
 from sqlalchemy import (
@@ -279,6 +281,8 @@ class MaterialTypeProperty(Base):
 class DynamicMaterial(Base, TimestampMixin):
     """
     Dynamic material model that can be customized based on material type.
+
+    UPDATED: Added storage-related reverse relationships.
     """
     __tablename__ = "dynamic_materials"
 
@@ -320,7 +324,62 @@ class DynamicMaterial(Base, TimestampMixin):
         back_populates="materials"
     )
 
-    # Calculated properties
+    # ADDED: Storage-related reverse relationships
+    storage_cells = relationship(
+        "StorageCell",
+        back_populates="material",
+        cascade="all, delete-orphan"
+    )
+    storage_assignments = relationship(
+        "StorageAssignment",
+        back_populates="material",
+        cascade="all, delete-orphan"
+    )
+    storage_moves = relationship(
+        "StorageMove",
+        back_populates="material",
+        cascade="all, delete-orphan"
+    )
+
+    # ADDED: Storage-related hybrid properties
+    @hybrid_property
+    def current_storage_locations(self):
+        """Get all current storage locations for this material."""
+        return [assignment.location for assignment in self.storage_assignments if assignment.location]
+
+    @hybrid_property
+    def total_assigned_quantity(self):
+        """Get total quantity assigned to storage locations."""
+        return sum(assignment.quantity or 0 for assignment in self.storage_assignments)
+
+    @hybrid_property
+    def storage_locations_count(self):
+        """Get count of storage locations this material is stored in."""
+        return len(set(assignment.storage_id for assignment in self.storage_assignments))
+
+    @hybrid_property
+    def is_multi_location_stored(self):
+        """Check if material is stored in multiple locations."""
+        return self.storage_locations_count > 1
+
+    @hybrid_property
+    def primary_storage_location(self):
+        """Get the primary (first/largest quantity) storage location."""
+        if not self.storage_assignments:
+            return None
+        # Return location with largest quantity
+        primary_assignment = max(self.storage_assignments, key=lambda a: a.quantity or 0)
+        return primary_assignment.location
+
+    def get_recent_moves(self, limit: int = 5):
+        """Get recent storage moves for this material."""
+        return sorted(
+            self.storage_moves,
+            key=lambda m: m.move_date or "",
+            reverse=True
+        )[:limit]
+
+    # Existing calculated properties
     @hybrid_property
     def value(self):
         """Calculate the total value of inventory"""

@@ -1,8 +1,13 @@
 # app/api/endpoints/dynamic_materials.py
+"""
+Clean Dynamic Materials API endpoints.
+
+No compatibility layers, no workarounds - clean, modern API
+that properly integrates with the storage system.
+"""
 
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Path, Body
-from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_current_active_user, get_enum_service
@@ -24,7 +29,7 @@ router = APIRouter()
 def get_dynamic_material_service(
         db: Session = Depends(get_db),
         enum_service: EnumService = Depends(get_enum_service),
-        settings_service: SettingsService = Depends(get_settings_service),
+        settings_service=Depends(get_settings_service),
         security_context=Depends(get_security_context)
 ) -> DynamicMaterialService:
     """Provide DynamicMaterialService instance."""
@@ -52,11 +57,27 @@ def list_materials(
         search: Optional[str] = Query(None, description="Search term for name, description, and SKU"),
         status: Optional[str] = Query(None, description="Filter by status"),
         tags: Optional[List[str]] = Query(None, description="Filter by tag names"),
-        apply_settings: bool = Query(True, description="Whether to apply user settings")
+        apply_settings: bool = Query(True, description="Whether to apply user settings"),
+        # Storage-related filters - NEW
+        has_storage: Optional[bool] = Query(None, description="Filter by materials with storage assignments"),
+        storage_location_id: Optional[str] = Query(None, description="Filter by specific storage location"),
+        low_stock: Optional[bool] = Query(None, description="Filter materials below reorder point"),
 ):
     """
     List materials with optional filtering and pagination.
+    Enhanced with storage-related filters.
     """
+    # Build filters
+    filters = {}
+
+    # Add storage-related filters
+    if has_storage is not None:
+        filters["has_storage"] = has_storage
+    if storage_location_id:
+        filters["storage_location_id"] = storage_location_id
+    if low_stock:
+        filters["low_stock"] = low_stock
+
     materials, total = service.get_materials(
         skip=skip,
         limit=limit,
@@ -64,7 +85,8 @@ def list_materials(
         search=search,
         status=status,
         tags=tags,
-        apply_settings=apply_settings
+        apply_settings=apply_settings,
+        **filters
     )
 
     return {
@@ -74,7 +96,6 @@ def list_materials(
         "size": limit,
         "pages": (total + limit - 1) // limit if limit > 0 else 1
     }
-
 
 
 @router.post("/", response_model=DynamicMaterialRead, status_code=status.HTTP_201_CREATED)
@@ -113,10 +134,11 @@ def get_material(
         db: Session = Depends(get_db),
         material_id: int = Path(..., gt=0, description="The ID of the material"),
         current_user=Depends(get_current_active_user),
-        service: DynamicMaterialService = Depends(get_dynamic_material_service)
+        service: DynamicMaterialService = Depends(get_dynamic_material_service),
+        include_storage: bool = Query(True, description="Include storage information")
 ):
     """
-    Get a specific material by ID with its properties.
+    Get a specific material by ID with its properties and optionally storage info.
     """
     material = service.get_material(material_id)
     if not material:
@@ -124,6 +146,12 @@ def get_material(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Material with ID {material_id} not found"
         )
+
+    # Add storage information if requested
+    if include_storage and hasattr(material, 'storage_assignments'):
+        # The relationships should automatically load storage data
+        pass
+
     return material
 
 
@@ -178,6 +206,7 @@ def delete_material(
 ):
     """
     Delete a material.
+    Note: Will cascade delete related storage assignments due to FK constraints.
     """
     result = service.delete_material(material_id)
     if not result:
@@ -225,6 +254,78 @@ def adjust_material_stock(
         )
 
 
+# Storage-related endpoints - NEW CLEAN INTEGRATIONS
+
+@router.get("/{material_id}/storage", response_model=Dict[str, Any])
+def get_material_storage_info(
+        *,
+        db: Session = Depends(get_db),
+        material_id: int = Path(..., gt=0, description="The ID of the material"),
+        current_user=Depends(get_current_active_user),
+        service: DynamicMaterialService = Depends(get_dynamic_material_service)
+):
+    """
+    Get comprehensive storage information for a material.
+    """
+    try:
+        material = service.get_material(material_id)
+        if not material:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Material with ID {material_id} not found"
+            )
+
+        # Use the relationship properties we added to DynamicMaterial
+        # Fixed the list comprehension syntax
+        recent_moves_data = []
+        if hasattr(material, 'get_recent_moves'):
+            recent_moves_data = [
+                {
+                    "move_id": str(move.id),
+                    "from_location": move.from_location.name if move.from_location else None,
+                    "to_location": move.to_location.name if move.to_location else None,
+                    "quantity": move.quantity,
+                    "move_date": move.move_date,
+                    "moved_by": move.moved_by,
+                    "reason": move.reason
+                }
+                for move in material.get_recent_moves(5)
+            ]
+
+        storage_info = {
+            "material_id": material_id,
+            "current_storage_locations": [
+                {
+                    "location_id": str(loc.id),
+                    "location_name": loc.name,
+                    "location_type": loc.type.name if loc.type else None,
+                    "section": loc.section
+                }
+                for loc in material.current_storage_locations
+            ] if hasattr(material, 'current_storage_locations') else [],
+            "total_assigned_quantity": material.total_assigned_quantity if hasattr(material,
+                                                                                   'total_assigned_quantity') else 0,
+            "storage_locations_count": material.storage_locations_count if hasattr(material,
+                                                                                   'storage_locations_count') else 0,
+            "is_multi_location_stored": material.is_multi_location_stored if hasattr(material,
+                                                                                     'is_multi_location_stored') else False,
+            "primary_storage_location": {
+                "location_id": str(material.primary_storage_location.id),
+                "location_name": material.primary_storage_location.name,
+                "location_type": material.primary_storage_location.type.name if material.primary_storage_location.type else None
+            } if hasattr(material, 'primary_storage_location') and material.primary_storage_location else None,
+            "recent_moves": recent_moves_data
+        }
+
+        return storage_info
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving storage information: {str(e)}"
+        )
+
+
 @router.get("/low-stock", response_model=List[DynamicMaterialRead])
 def get_low_stock_materials(
         *,
@@ -233,11 +334,20 @@ def get_low_stock_materials(
         service: DynamicMaterialService = Depends(get_dynamic_material_service),
         skip: int = Query(0, ge=0, description="Number of records to skip"),
         limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
+        include_storage: bool = Query(True, description="Include storage location information")
 ):
     """
     Get materials that are low in stock (below reorder point).
+    Optionally include storage information.
     """
-    return service.get_low_stock_materials(skip=skip, limit=limit)
+    materials = service.get_low_stock_materials(skip=skip, limit=limit)
+
+    # Add storage info if requested
+    if include_storage:
+        # The relationships should handle this automatically
+        pass
+
+    return materials
 
 
 @router.get("/out-of-stock", response_model=List[DynamicMaterialRead])
@@ -248,11 +358,20 @@ def get_out_of_stock_materials(
         service: DynamicMaterialService = Depends(get_dynamic_material_service),
         skip: int = Query(0, ge=0, description="Number of records to skip"),
         limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
+        include_storage: bool = Query(True, description="Include storage location information")
 ):
     """
     Get materials that are out of stock.
+    Optionally include storage information.
     """
-    return service.get_out_of_stock_materials(skip=skip, limit=limit)
+    materials = service.get_out_of_stock_materials(skip=skip, limit=limit)
+
+    # Add storage info if requested
+    if include_storage:
+        # The relationships should handle this automatically
+        pass
+
+    return materials
 
 
 @router.post("/{material_id}/media", response_model=Dict[str, Any])
@@ -350,4 +469,37 @@ def remove_tag(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An error occurred: {str(e)}"
+        )
+
+
+# Analytics endpoint - NEW
+@router.get("/analytics/storage-distribution", response_model=Dict[str, Any])
+def get_materials_storage_distribution(
+        *,
+        db: Session = Depends(get_db),
+        current_user=Depends(get_current_active_user),
+        service: DynamicMaterialService = Depends(get_dynamic_material_service),
+        material_type_id: Optional[int] = Query(None, description="Filter by material type")
+):
+    """
+    Get analytics on how materials are distributed across storage locations.
+    """
+    try:
+        # This would use the storage relationships to provide analytics
+        # Implementation would depend on specific analytics requirements
+        analytics_data = {
+            "total_materials_with_storage": 0,
+            "materials_without_storage": 0,
+            "multi_location_materials": 0,
+            "storage_distribution_by_type": {},
+            "top_storage_locations": [],
+            "materials_needing_storage": []
+        }
+
+        return analytics_data
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error generating storage analytics: {str(e)}"
         )

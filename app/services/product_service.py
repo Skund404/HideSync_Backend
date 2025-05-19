@@ -829,7 +829,7 @@ class ProductService(BaseService[Product]):
                     # --- Use injected services ---
                     # Assume pattern service returns dict like: { "material_id": {"quantity_required": X, "unit": "Y", ...} }
                     if not hasattr(
-                        self.pattern_service, "get_material_requirements_for_pattern"
+                            self.pattern_service, "get_material_requirements_for_pattern"
                     ):
                         # This check might be overly defensive if types are hinted correctly
                         raise NotImplementedError(
@@ -899,24 +899,67 @@ class ProductService(BaseService[Product]):
                                     else str(mat_unit_obj)
                                 )
 
-                                # --- Unit Conversion Logic Placeholder ---
-                                # TODO: Implement robust unit conversion if needed
+                                # --- Unit Conversion Logic ---
                                 cost_multiplier = 1.0
+                                conversion_error = None
+
                                 if unit_needed.lower() != mat_unit.lower():
-                                    logger.warning(
-                                        f"Unit mismatch for material {mat_id} ('{mat_name}'): Pattern requires '{unit_needed}', Material cost is per '{mat_unit}'. Cost calculation might be inaccurate without conversion logic."
-                                    )
-                                    breakdown["errors"].append(
-                                        f"Unit mismatch for material {mat_id} ('{mat_name}'). Check pattern requirements vs material definition."
-                                    )
-                                    # Example: If conversion is impossible, maybe skip or use multiplier 1?
-                                    # cost_multiplier = get_conversion_factor(mat_unit, unit_needed) # Hypothetical function
+                                    # Attempt unit conversion using the UnitConverter
+                                    try:
+                                        from app.utils.unit_converter import unit_converter
+
+                                        conversion_factor, conversion_success, conversion_error_msg = unit_converter.get_conversion_factor(
+                                            from_unit=mat_unit,
+                                            to_unit=unit_needed
+                                        )
+
+                                        if conversion_success:
+                                            cost_multiplier = conversion_factor
+                                            logger.info(
+                                                f"Unit conversion successful for material {mat_id} ('{mat_name}'): "
+                                                f"{mat_unit} -> {unit_needed}, factor: {cost_multiplier:.6f}"
+                                            )
+                                        else:
+                                            # Conversion failed - log detailed error and add to breakdown errors
+                                            conversion_error = conversion_error_msg
+                                            logger.warning(
+                                                f"Unit conversion failed for material {mat_id} ('{mat_name}'): "
+                                                f"Pattern requires '{unit_needed}', Material cost is per '{mat_unit}'. "
+                                                f"Error: {conversion_error_msg}. Using multiplier 1.0 (cost may be inaccurate)."
+                                            )
+
+                                            # Try to suggest compatible units
+                                            suggestions = unit_converter.suggest_units(unit_needed)
+                                            suggestion_text = f" Suggested units: {', '.join(suggestions)}" if suggestions else ""
+
+                                            breakdown["errors"].append(
+                                                f"Unit conversion failed for material {mat_id} ('{mat_name}'): "
+                                                f"{conversion_error_msg}.{suggestion_text} Cost calculation may be inaccurate."
+                                            )
+
+                                            # Keep cost_multiplier as 1.0 for fallback
+
+                                    except ImportError as import_err:
+                                        logger.error(f"Failed to import unit_converter: {import_err}")
+                                        breakdown["errors"].append(
+                                            f"Unit conversion system unavailable for material {mat_id} ('{mat_name}'). "
+                                            f"Pattern requires '{unit_needed}', Material cost is per '{mat_unit}'. "
+                                            f"Cost calculation may be inaccurate."
+                                        )
+                                    except Exception as conv_err:
+                                        logger.error(f"Unexpected error during unit conversion: {conv_err}",
+                                                     exc_info=True)
+                                        breakdown["errors"].append(
+                                            f"Unit conversion error for material {mat_id} ('{mat_name}'): {str(conv_err)}. "
+                                            f"Cost calculation may be inaccurate."
+                                        )
+                                # --- End Unit Conversion Logic ---
 
                                 # Calculate total cost for this material
                                 material_total_cost = (
-                                    quantity_needed
-                                    * mat_cost_per_unit
-                                    * cost_multiplier
+                                        quantity_needed
+                                        * mat_cost_per_unit
+                                        * cost_multiplier
                                 )
                                 breakdown["material_costs"] += material_total_cost
 
@@ -933,6 +976,9 @@ class ProductService(BaseService[Product]):
                                         ),  # Cost per material's base unit
                                         "material_base_unit": mat_unit,
                                         "total_cost": round(material_total_cost, 2),
+                                        "conversion_factor": round(cost_multiplier,
+                                                                   6) if cost_multiplier != 1.0 else None,
+                                        "conversion_applied": cost_multiplier != 1.0,
                                     }
                                 )
 

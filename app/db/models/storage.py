@@ -1,12 +1,13 @@
 # File: app/db/models/storage.py
 """
-Storage management models for the Leathercraft ERP system.
+Storage management models for the Dynamic Material Management System.
 
-This module defines models for managing physical storage locations,
-cells, and inventory assignments. It includes StorageLocation for
-defining storage units, StorageCell for individual storage spaces,
-StorageAssignment for item placements, and StorageMove for tracking
-movement of items between locations.
+This module defines models for managing physical storage locations with dynamic properties,
+following the same patterns as the dynamic material system. Updated to support:
+- Dynamic storage location types via enum system
+- Custom properties for storage locations
+- Internationalization support
+- Theme and UI configuration
 """
 
 from typing import List, Optional, Dict, Any, ClassVar, Set
@@ -17,68 +18,347 @@ from sqlalchemy import (
     String,
     Text,
     Float,
-    Enum,
     Integer,
     ForeignKey,
     JSON,
     Boolean,
+    UniqueConstraint,
+    DateTime,
 )
 from sqlalchemy.orm import relationship, validates
 from sqlalchemy.ext.hybrid import hybrid_property
+import json
 
 from app.db.models.base import AbstractBase, ValidationMixin, TimestampMixin
-from app.db.models.enums import StorageLocationType
+
+
+class StorageLocationType(AbstractBase, TimestampMixin):
+    """
+    Defines a type of storage location with customizable properties.
+    Follows the same pattern as MaterialType in the dynamic material system.
+    """
+    __tablename__ = "storage_location_types"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(100), nullable=False, unique=True, index=True)
+    icon = Column(String(50))
+    color_scheme = Column(String(50))
+    _ui_config = Column("ui_config", Text)
+    _storage_config = Column("storage_config", Text)
+    created_by = Column(Integer, ForeignKey("users.id"))
+    is_system = Column(Boolean, default=False)
+    visibility_level = Column(String(50), default="all")  # all, admin, or specific tier
+
+    # Relationships
+    properties = relationship(
+        "StorageLocationTypeProperty",
+        back_populates="storage_location_type",
+        cascade="all, delete-orphan"
+    )
+    translations = relationship(
+        "StorageLocationTypeTranslation",
+        back_populates="storage_location_type",
+        cascade="all, delete-orphan"
+    )
+    storage_locations = relationship(
+        "StorageLocation",
+        back_populates="storage_location_type",
+        cascade="all, delete-orphan"
+    )
+
+    # JSON property handlers
+    @property
+    def ui_config(self):
+        if self._ui_config:
+            try:
+                return json.loads(self._ui_config)
+            except:
+                return {}
+        return {}
+
+    @ui_config.setter
+    def ui_config(self, value):
+        if value is not None:
+            self._ui_config = json.dumps(value)
+        else:
+            self._ui_config = None
+
+    @property
+    def storage_config(self):
+        if self._storage_config:
+            try:
+                return json.loads(self._storage_config)
+            except:
+                return {}
+        return {}
+
+    @storage_config.setter
+    def storage_config(self, value):
+        if value is not None:
+            self._storage_config = json.dumps(value)
+        else:
+            self._storage_config = None
+
+    def get_display_name(self, locale="en"):
+        """Get the localized display name"""
+        for translation in self.translations:
+            if translation.locale == locale:
+                return translation.display_name
+        # Fallback to first translation or name
+        return self.translations[0].display_name if self.translations else self.name
+
+
+class StorageLocationTypeTranslation(AbstractBase):
+    """
+    Translations for storage location types.
+    """
+    __tablename__ = "storage_location_type_translations"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    storage_location_type_id = Column(Integer, ForeignKey("storage_location_types.id", ondelete="CASCADE"), nullable=False)
+    locale = Column(String(10), nullable=False)  # e.g., 'en', 'fr', 'es'
+    display_name = Column(String(255), nullable=False)
+    description = Column(Text)
+
+    # Relationships
+    storage_location_type = relationship("StorageLocationType", back_populates="translations")
+
+    # Constraints
+    __table_args__ = (
+        UniqueConstraint('storage_location_type_id', 'locale', name='uq_storage_location_type_translation'),
+    )
+
+
+class StoragePropertyDefinition(AbstractBase, TimestampMixin):
+    """
+    Definition of a property that can be assigned to storage location types.
+    Follows the same pattern as PropertyDefinition in the dynamic material system.
+    """
+    __tablename__ = "storage_property_definitions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(100), unique=True, nullable=False, index=True)
+    data_type = Column(String(50), nullable=False)  # string, number, boolean, enum, date, file, etc.
+    group_name = Column(String(100))
+    unit = Column(String(50))
+    is_required = Column(Boolean, default=False)
+    has_multiple_values = Column(Boolean, default=False)
+    _validation_rules = Column("validation_rules", Text)
+    created_by = Column(Integer, ForeignKey("users.id"))
+    is_system = Column(Boolean, default=False)
+    enum_type_id = Column(Integer, ForeignKey("enum_types.id"))
+
+    # Relationships
+    translations = relationship(
+        "StoragePropertyDefinitionTranslation",
+        back_populates="property",
+        cascade="all, delete-orphan"
+    )
+    enum_options = relationship(
+        "StoragePropertyEnumOption",
+        back_populates="property",
+        cascade="all, delete-orphan"
+    )
+    enum_mappings = relationship(
+        "StoragePropertyEnumMapping",
+        back_populates="property",
+        cascade="all, delete-orphan"
+    )
+    enum_type = relationship("EnumType")
+    storage_location_type_properties = relationship(
+        "StorageLocationTypeProperty",
+        back_populates="property"
+    )
+
+    # JSON property handlers
+    @property
+    def validation_rules(self):
+        if self._validation_rules:
+            try:
+                return json.loads(self._validation_rules)
+            except:
+                return {}
+        return {}
+
+    @validation_rules.setter
+    def validation_rules(self, value):
+        if value is not None:
+            self._validation_rules = json.dumps(value)
+        else:
+            self._validation_rules = None
+
+    def get_display_name(self, locale="en"):
+        """Get the localized display name"""
+        for translation in self.translations:
+            if translation.locale == locale:
+                return translation.display_name
+        # Fallback to first translation or name
+        return self.translations[0].display_name if self.translations else self.name
+
+
+class StoragePropertyDefinitionTranslation(AbstractBase):
+    """
+    Translations for storage property definitions.
+    """
+    __tablename__ = "storage_property_definition_translations"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    property_id = Column(Integer, ForeignKey("storage_property_definitions.id", ondelete="CASCADE"), nullable=False)
+    locale = Column(String(10), nullable=False)  # e.g., 'en', 'fr', 'es'
+    display_name = Column(String(255), nullable=False)
+    description = Column(Text)
+
+    # Relationships
+    property = relationship("StoragePropertyDefinition", back_populates="translations")
+
+    # Constraints
+    __table_args__ = (
+        UniqueConstraint('property_id', 'locale', name='uq_storage_property_definition_translation'),
+    )
+
+
+class StoragePropertyEnumOption(AbstractBase):
+    """
+    Custom enum options for storage property definitions with enum data type.
+    """
+    __tablename__ = "storage_property_enum_options"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    property_id = Column(Integer, ForeignKey("storage_property_definitions.id", ondelete="CASCADE"), nullable=False)
+    value = Column(String(100), nullable=False)
+    display_value = Column(String(255), nullable=False)
+    color = Column(String(50))
+    display_order = Column(Integer, default=0)
+
+    # Relationships
+    property = relationship("StoragePropertyDefinition", back_populates="enum_options")
+
+    # Constraints
+    __table_args__ = (
+        UniqueConstraint('property_id', 'value', name='uq_storage_property_enum_option'),
+    )
+
+
+class StoragePropertyEnumMapping(AbstractBase):
+    """
+    Maps a storage property to an enum type from the dynamic enum system.
+    """
+    __tablename__ = "storage_property_enum_mappings"
+
+    property_id = Column(Integer, ForeignKey("storage_property_definitions.id", ondelete="CASCADE"), primary_key=True)
+    enum_type_id = Column(Integer, ForeignKey("enum_types.id", ondelete="CASCADE"), primary_key=True)
+
+    # Relationships
+    property = relationship("StoragePropertyDefinition", back_populates="enum_mappings")
+    enum_type = relationship("EnumType")
+
+
+class StorageLocationTypeProperty(AbstractBase):
+    """
+    Junction table that associates properties with storage location types
+    and defines their configuration within that storage location type.
+    """
+    __tablename__ = "storage_location_type_properties"
+
+    storage_location_type_id = Column(Integer, ForeignKey("storage_location_types.id", ondelete="CASCADE"), primary_key=True)
+    property_id = Column(Integer, ForeignKey("storage_property_definitions.id", ondelete="CASCADE"), primary_key=True)
+    display_order = Column(Integer, default=0)
+    is_required = Column(Boolean, default=False)
+    is_filterable = Column(Boolean, default=True)
+    is_displayed_in_list = Column(Boolean, default=True)
+    is_displayed_in_card = Column(Boolean, default=True)
+    _default_value = Column("default_value", Text)
+
+    # Relationships
+    storage_location_type = relationship("StorageLocationType", back_populates="properties")
+    property = relationship("StoragePropertyDefinition", back_populates="storage_location_type_properties")
+
+    # JSON property handlers
+    @property
+    def default_value(self):
+        if self._default_value:
+            try:
+                return json.loads(self._default_value)
+            except:
+                return None
+        return None
+
+    @default_value.setter
+    def default_value(self, value):
+        if value is not None:
+            self._default_value = json.dumps(value)
+        else:
+            self._default_value = None
 
 
 class StorageLocation(AbstractBase, ValidationMixin, TimestampMixin):
     """
-    StorageLocation model representing physical storage units.
+    StorageLocation model representing physical storage units with dynamic properties.
+    Updated to follow the dynamic material system patterns.
 
     This model defines physical storage locations such as cabinets,
     shelves, drawers, etc., including their capacity and organization.
 
     Attributes:
         name: Location name/description
-        type: Type of storage location
+        storage_location_type_id: ID of the storage location type (dynamic)
         section: Organizational section
         description: Detailed description
-        dimensions: Physical dimensions
+        dimensions: Physical dimensions (JSON)
         capacity: Storage capacity
         utilized: Amount of capacity currently used
         status: Current status
         last_modified: Last modification date
         notes: Additional notes
-        parent_storage: Parent storage location
+        parent_storage_id: Parent storage location ID
     """
 
     __tablename__ = "storage_locations"
-    __validated_fields__: ClassVar[Set[str]] = {"name", "type"}
+    __validated_fields__: ClassVar[Set[str]] = {"name", "storage_location_type_id"}
 
     # Basic information
     name = Column(String(100), nullable=False)
-    type = Column(Enum(StorageLocationType), nullable=False)
+    storage_location_type_id = Column(Integer, ForeignKey("storage_location_types.id"), nullable=False)
     section = Column(String(100))  # MAIN_WORKSHOP, TOOL_ROOM, STORAGE_ROOM, etc.
     description = Column(Text)
 
-    # Physical properties
-    dimensions = Column(
-        JSON, nullable=True
-    )  # {"width": 100, "height": 200, "depth": 50}
+    # Physical properties (JSON stored as TEXT for SQLite compatibility)
+    _dimensions = Column("dimensions", Text)
     capacity = Column(Integer)
     utilized = Column(Integer, default=0)
 
-    # Status
+    # Status and metadata
     status = Column(String(50), default="ACTIVE")  # ACTIVE, FULL, MAINTENANCE
     last_modified = Column(String(50))  # ISO date string
     notes = Column(Text)
-    parent_storage = Column(String(100))
+    parent_storage_id = Column(String(100), ForeignKey("storage_locations.id"))
+    created_by = Column(Integer, ForeignKey("users.id"))
+
+    # Configuration (JSON stored as TEXT)
+    _ui_config = Column("ui_config", Text)
+    _storage_config = Column("storage_config", Text)
 
     # Relationships
+    storage_location_type = relationship("StorageLocationType", back_populates="storage_locations")
+    property_values = relationship(
+        "StorageLocationPropertyValue",
+        back_populates="storage_location",
+        cascade="all, delete-orphan"
+    )
+    translations = relationship(
+        "StorageLocationTranslation",
+        back_populates="storage_location",
+        cascade="all, delete-orphan"
+    )
     cells = relationship(
-        "StorageCell", back_populates="location", cascade="all, delete-orphan"
+        "StorageCell",
+        back_populates="location",
+        cascade="all, delete-orphan"
     )
     assignments = relationship(
-        "StorageAssignment", back_populates="location", cascade="all, delete-orphan"
+        "StorageAssignment",
+        back_populates="location",
+        cascade="all, delete-orphan"
     )
     moves_from = relationship(
         "StorageMove",
@@ -90,6 +370,57 @@ class StorageLocation(AbstractBase, ValidationMixin, TimestampMixin):
         foreign_keys="StorageMove.to_storage_id",
         back_populates="to_location",
     )
+    parent_storage = relationship("StorageLocation", remote_side=[id])
+    child_storages = relationship("StorageLocation", back_populates="parent_storage")
+
+    # JSON property handlers (following dynamic material pattern)
+    @property
+    def dimensions(self):
+        if self._dimensions:
+            try:
+                return json.loads(self._dimensions)
+            except:
+                return {}
+        return {}
+
+    @dimensions.setter
+    def dimensions(self, value):
+        if value is not None:
+            self._dimensions = json.dumps(value)
+        else:
+            self._dimensions = None
+
+    @property
+    def ui_config(self):
+        if self._ui_config:
+            try:
+                return json.loads(self._ui_config)
+            except:
+                return {}
+        return {}
+
+    @ui_config.setter
+    def ui_config(self, value):
+        if value is not None:
+            self._ui_config = json.dumps(value)
+        else:
+            self._ui_config = None
+
+    @property
+    def storage_config(self):
+        if self._storage_config:
+            try:
+                return json.loads(self._storage_config)
+            except:
+                return {}
+        return {}
+
+    @storage_config.setter
+    def storage_config(self, value):
+        if value is not None:
+            self._storage_config = json.dumps(value)
+        else:
+            self._storage_config = None
 
     @validates("name")
     def validate_name(self, key: str, name: str) -> str:
@@ -169,6 +500,28 @@ class StorageLocation(AbstractBase, ValidationMixin, TimestampMixin):
             return None
         return (self.utilized / self.capacity) * 100
 
+    @hybrid_property
+    def assigned_materials(self):
+        """Get all materials assigned to this location."""
+        return [assignment.material for assignment in self.assignments if assignment.material]
+
+    @hybrid_property
+    def material_types_stored(self):
+        """Get distinct material types stored in this location."""
+        material_types = set()
+        for assignment in self.assignments:
+            if assignment.material and assignment.material.material_type:
+                material_types.add(assignment.material.material_type)
+        return list(material_types)
+
+    def get_display_name(self, locale="en"):
+        """Get the localized display name"""
+        for translation in self.translations:
+            if translation.locale == locale:
+                return translation.display_name
+        # Fallback to first translation or name
+        return self.translations[0].display_name if self.translations else self.name
+
     def add_item(self, quantity: int = 1) -> bool:
         """
         Add an item to this location.
@@ -212,42 +565,85 @@ class StorageLocation(AbstractBase, ValidationMixin, TimestampMixin):
         """
         result = super().to_dict()
 
-        # Convert enum values to strings
-        if self.type:
-            result["type"] = self.type.name
-
-        # Handle JSON fields
-        if isinstance(result.get("dimensions"), str):
-            import json
-
-            try:
-                result["dimensions"] = json.loads(result["dimensions"])
-            except:
-                result["dimensions"] = {}
+        # Include type information via relationship
+        if self.storage_location_type:
+            result["storage_location_type"] = {
+                "id": self.storage_location_type.id,
+                "name": self.storage_location_type.name,
+                "icon": self.storage_location_type.icon,
+                "color_scheme": self.storage_location_type.color_scheme
+            }
 
         # Add calculated properties
         result["available_capacity"] = self.available_capacity
         result["utilization_percentage"] = self.utilization_percentage
+        result["dimensions"] = self.dimensions
+        result["ui_config"] = self.ui_config
+        result["storage_config"] = self.storage_config
 
         return result
 
     def __repr__(self) -> str:
         """Return string representation of the StorageLocation."""
-        return f"<StorageLocation(id={self.id}, name='{self.name}', type={self.type}, utilized={self.utilized}/{self.capacity})>"
+        type_name = self.storage_location_type.name if self.storage_location_type else "Unknown"
+        return f"<StorageLocation(id={self.id}, name='{self.name}', type={type_name}, utilized={self.utilized}/{self.capacity})>"
+
+
+class StorageLocationTranslation(AbstractBase):
+    """
+    Translations for storage locations.
+    """
+    __tablename__ = "storage_location_translations"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    storage_location_id = Column(String(36), ForeignKey("storage_locations.id", ondelete="CASCADE"), nullable=False)
+    locale = Column(String(10), nullable=False)  # e.g., 'en', 'fr', 'es'
+    display_name = Column(String(255), nullable=False)
+    description = Column(Text)
+
+    # Relationships
+    storage_location = relationship("StorageLocation", back_populates="translations")
+
+    # Constraints
+    __table_args__ = (
+        UniqueConstraint('storage_location_id', 'locale', name='uq_storage_location_translation'),
+    )
+
+
+class StorageLocationPropertyValue(AbstractBase):
+    """
+    Stores property values for storage locations based on their property definitions.
+    Uses a polymorphic storage approach to store different data types.
+    Follows the same pattern as MaterialPropertyValue.
+    """
+    __tablename__ = "storage_location_property_values"
+
+    storage_location_id = Column(String(36), ForeignKey("storage_locations.id", ondelete="CASCADE"), primary_key=True)
+    property_id = Column(Integer, ForeignKey("storage_property_definitions.id"), primary_key=True)
+
+    # Polymorphic storage for different data types
+    value_string = Column(Text)
+    value_number = Column(Float)
+    value_boolean = Column(Boolean)
+    value_date = Column(String(50))  # Store as ISO string for SQLite compatibility
+    value_enum_id = Column(Integer)  # References an enum value in the respective enum table
+    value_file_id = Column(String(100))  # Reference to file/media asset
+    value_reference_id = Column(Integer)  # Reference to another entity
+
+    # Relationships
+    storage_location = relationship("StorageLocation", back_populates="property_values")
+    property = relationship("StoragePropertyDefinition")
 
 
 class StorageCell(AbstractBase, ValidationMixin):
     """
     StorageCell model representing individual cells within a storage location.
-
-    This model defines individual storage spaces within a larger storage
-    location, allowing for precise item placement and tracking.
+    Updated to be material-specific instead of generic item storage.
 
     Attributes:
         storage_id: ID of the parent storage location
         position: Position information
-        item_id: ID of the stored item
-        item_type: Type of stored item
+        material_id: ID of the stored material (FK to DynamicMaterial)
         occupied: Whether the cell is occupied
         notes: Additional notes
     """
@@ -258,17 +654,34 @@ class StorageCell(AbstractBase, ValidationMixin):
     # Relationships
     storage_id = Column(String(36), ForeignKey("storage_locations.id"), nullable=False)
 
-    # Cell information
-    position = Column(
-        JSON, nullable=True
-    )  # {"row": 1, "column": 2, "level": 3} or {"x": 10, "y": 20, "z": 30}
-    item_id = Column(Integer)
-    item_type = Column(String(50))
+    # Cell information (JSON stored as TEXT)
+    _position = Column("position", Text)  # {"row": 1, "column": 2, "level": 3}
+
+    # Updated: Proper foreign key to DynamicMaterial instead of generic item
+    material_id = Column(Integer, ForeignKey("dynamic_materials.id", ondelete="SET NULL"))
     occupied = Column(Boolean, default=False)
     notes = Column(String(255))
 
     # Relationships
     location = relationship("StorageLocation", back_populates="cells")
+    material = relationship("DynamicMaterial", back_populates="storage_cells")
+
+    # JSON property handler
+    @property
+    def position(self):
+        if self._position:
+            try:
+                return json.loads(self._position)
+            except:
+                return {}
+        return {}
+
+    @position.setter
+    def position(self, value):
+        if value is not None:
+            self._position = json.dumps(value)
+        else:
+            self._position = None
 
     @hybrid_property
     def label(self) -> str:
@@ -281,50 +694,38 @@ class StorageCell(AbstractBase, ValidationMixin):
         if not self.position:
             return f"Cell {self.id}"
 
-        # Convert position to label
-        try:
-            import json
+        pos = self.position
 
-            pos = (
-                self.position
-                if isinstance(self.position, dict)
-                else json.loads(self.position)
-            )
+        if "row" in pos and "column" in pos:
+            row = pos.get("row")
+            col = pos.get("column")
+            level = pos.get("level", "")
 
-            if "row" in pos and "column" in pos:
-                row = pos.get("row")
-                col = pos.get("column")
-                level = pos.get("level", "")
+            # Convert column number to letter (1=A, 2=B, etc.)
+            if isinstance(col, int) and col > 0:
+                col_letter = chr(64 + min(col, 26))  # Limit to A-Z
+            else:
+                col_letter = str(col)
 
-                # Convert column number to letter (1=A, 2=B, etc.)
-                if isinstance(col, int) and col > 0:
-                    col_letter = chr(64 + min(col, 26))  # Limit to A-Z
-                else:
-                    col_letter = str(col)
+            level_str = f"-{level}" if level else ""
+            return f"{row}{col_letter}{level_str}"
 
-                level_str = f"-{level}" if level else ""
-                return f"{row}{col_letter}{level_str}"
+        elif "x" in pos and "y" in pos:
+            x = pos.get("x")
+            y = pos.get("y")
+            z = pos.get("z", "")
 
-            elif "x" in pos and "y" in pos:
-                x = pos.get("x")
-                y = pos.get("y")
-                z = pos.get("z", "")
-
-                z_str = f"-{z}" if z else ""
-                return f"{x}-{y}{z_str}"
-
-        except (TypeError, ValueError, json.JSONDecodeError):
-            pass
+            z_str = f"-{z}" if z else ""
+            return f"{x}-{y}{z_str}"
 
         return f"Cell {self.id}"
 
-    def assign_item(self, item_id: int, item_type: str) -> None:
+    def assign_material(self, material_id: int) -> None:
         """
-        Assign an item to this cell.
+        Assign a material to this cell.
 
         Args:
-            item_id: ID of the item
-            item_type: Type of the item
+            material_id: ID of the material
 
         Raises:
             ValueError: If cell is already occupied
@@ -332,8 +733,7 @@ class StorageCell(AbstractBase, ValidationMixin):
         if self.occupied:
             raise ValueError(f"Cell {self.label} is already occupied")
 
-        self.item_id = item_id
-        self.item_type = item_type
+        self.material_id = material_id
         self.occupied = True
 
         # Update parent storage location
@@ -346,8 +746,7 @@ class StorageCell(AbstractBase, ValidationMixin):
         """
         was_occupied = self.occupied
 
-        self.item_id = None
-        self.item_type = None
+        self.material_id = None
         self.occupied = False
 
         # Update parent storage location
@@ -363,17 +762,9 @@ class StorageCell(AbstractBase, ValidationMixin):
         """
         result = super().to_dict()
 
-        # Handle JSON fields
-        if isinstance(result.get("position"), str):
-            import json
-
-            try:
-                result["position"] = json.loads(result["position"])
-            except:
-                result["position"] = {}
-
         # Add calculated properties
         result["label"] = self.label
+        result["position"] = self.position
 
         return result
 
@@ -384,14 +775,11 @@ class StorageCell(AbstractBase, ValidationMixin):
 
 class StorageAssignment(AbstractBase, ValidationMixin, TimestampMixin):
     """
-    StorageAssignment model for tracking item placements.
-
-    This model tracks assignments of materials and other items to
-    storage locations, including quantities and placement details.
+    StorageAssignment model for tracking material placements.
+    Updated to use proper foreign key relationships with DynamicMaterial.
 
     Attributes:
-        material_id: ID of the assigned material
-        material_type: Type of material
+        material_id: ID of the assigned material (FK to DynamicMaterial)
         storage_id: ID of the storage location
         position: Position information
         quantity: Assigned quantity
@@ -403,15 +791,12 @@ class StorageAssignment(AbstractBase, ValidationMixin, TimestampMixin):
     __tablename__ = "storage_assignments"
     __validated_fields__: ClassVar[Set[str]] = {"material_id", "storage_id", "quantity"}
 
-    # Material information
-    material_id = Column(Integer, nullable=False)
-    material_type = Column(String(50), nullable=False)
+    # Material information - Updated with proper foreign key
+    material_id = Column(Integer, ForeignKey("dynamic_materials.id", ondelete="CASCADE"), nullable=False)
 
     # Storage information
     storage_id = Column(String(36), ForeignKey("storage_locations.id"), nullable=False)
-    position = Column(
-        JSON, nullable=True
-    )  # {"row": 1, "column": 2, "level": 3} or {"x": 10, "y": 20}
+    _position = Column("position", Text)  # JSON stored as TEXT
 
     # Assignment details
     quantity = Column(Float, nullable=False)
@@ -420,7 +805,25 @@ class StorageAssignment(AbstractBase, ValidationMixin, TimestampMixin):
     notes = Column(String(255))
 
     # Relationships
+    material = relationship("DynamicMaterial", back_populates="storage_assignments")
     location = relationship("StorageLocation", back_populates="assignments")
+
+    # JSON property handler
+    @property
+    def position(self):
+        if self._position:
+            try:
+                return json.loads(self._position)
+            except:
+                return {}
+        return {}
+
+    @position.setter
+    def position(self, value):
+        if value is not None:
+            self._position = json.dumps(value)
+        else:
+            self._position = None
 
     @validates("quantity")
     def validate_quantity(self, key: str, quantity: float) -> float:
@@ -440,6 +843,18 @@ class StorageAssignment(AbstractBase, ValidationMixin, TimestampMixin):
         if quantity < 0:
             raise ValueError("Assignment quantity cannot be negative")
         return quantity
+
+    @hybrid_property
+    def material_type_name(self) -> Optional[str]:
+        """Get the material type name through the relationship."""
+        if self.material and self.material.material_type:
+            return self.material.material_type.name
+        return None
+
+    @hybrid_property
+    def material_name(self) -> Optional[str]:
+        """Get the material name through the relationship."""
+        return self.material.name if self.material else None
 
     def update_quantity(self, new_quantity: float, updated_by: str) -> float:
         """
@@ -482,16 +897,7 @@ class StorageAssignment(AbstractBase, ValidationMixin, TimestampMixin):
             Dictionary representation of the storage assignment
         """
         result = super().to_dict()
-
-        # Handle JSON fields
-        if isinstance(result.get("position"), str):
-            import json
-
-            try:
-                result["position"] = json.loads(result["position"])
-            except:
-                result["position"] = {}
-
+        result["position"] = self.position
         return result
 
     def __repr__(self) -> str:
@@ -501,14 +907,11 @@ class StorageAssignment(AbstractBase, ValidationMixin, TimestampMixin):
 
 class StorageMove(AbstractBase, ValidationMixin, TimestampMixin):
     """
-    StorageMove model for tracking item movements.
-
-    This model records movements of materials between storage locations,
-    providing an audit trail of inventory movements.
+    StorageMove model for tracking material movements.
+    Updated to use proper foreign key relationships with DynamicMaterial.
 
     Attributes:
-        material_id: ID of the moved material
-        material_type: Type of material
+        material_id: ID of the moved material (FK to DynamicMaterial)
         from_storage_id: Source storage location ID
         to_storage_id: Destination storage location ID
         quantity: Moved quantity
@@ -526,9 +929,8 @@ class StorageMove(AbstractBase, ValidationMixin, TimestampMixin):
         "quantity",
     }
 
-    # Material information
-    material_id = Column(Integer, nullable=False)
-    material_type = Column(String(50), nullable=False)
+    # Material information - Updated with proper foreign key
+    material_id = Column(Integer, ForeignKey("dynamic_materials.id", ondelete="CASCADE"), nullable=False)
 
     # Storage information
     from_storage_id = Column(
@@ -546,6 +948,7 @@ class StorageMove(AbstractBase, ValidationMixin, TimestampMixin):
     notes = Column(String(255))
 
     # Relationships
+    material = relationship("DynamicMaterial", back_populates="storage_moves")
     from_location = relationship(
         "StorageLocation", foreign_keys=[from_storage_id], back_populates="moves_from"
     )
@@ -588,14 +991,26 @@ class StorageMove(AbstractBase, ValidationMixin, TimestampMixin):
             ValueError: If from_storage_id equals to_storage_id
         """
         if (
-            key == "to_storage_id"
-            and hasattr(self, "from_storage_id")
-            and self.from_storage_id == storage_id
+                key == "to_storage_id"
+                and hasattr(self, "from_storage_id")
+                and self.from_storage_id == storage_id
         ):
             raise ValueError(
                 "Source and destination storage locations must be different"
             )
         return storage_id
+
+    @hybrid_property
+    def material_type_name(self) -> Optional[str]:
+        """Get the material type name through the relationship."""
+        if self.material and self.material.material_type:
+            return self.material.material_type.name
+        return None
+
+    @hybrid_property
+    def material_name(self) -> Optional[str]:
+        """Get the material name through the relationship."""
+        return self.material.name if self.material else None
 
     def execute_move(self, session) -> None:
         """
@@ -615,7 +1030,6 @@ class StorageMove(AbstractBase, ValidationMixin, TimestampMixin):
             .filter(
                 and_(
                     StorageAssignment.material_id == self.material_id,
-                    StorageAssignment.material_type == self.material_type,
                     StorageAssignment.storage_id == self.from_storage_id,
                 )
             )
@@ -632,7 +1046,6 @@ class StorageMove(AbstractBase, ValidationMixin, TimestampMixin):
             .filter(
                 and_(
                     StorageAssignment.material_id == self.material_id,
-                    StorageAssignment.material_type == self.material_type,
                     StorageAssignment.storage_id == self.to_storage_id,
                 )
             )
@@ -642,7 +1055,6 @@ class StorageMove(AbstractBase, ValidationMixin, TimestampMixin):
         if not dest_assignment:
             dest_assignment = StorageAssignment(
                 material_id=self.material_id,
-                material_type=self.material_type,
                 storage_id=self.to_storage_id,
                 quantity=0,
                 assigned_date=datetime.now().isoformat(),

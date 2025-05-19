@@ -236,51 +236,117 @@ class ToolService(BaseService[Tool]):
             # Also invalidate tool cache if this affects its maintenance status
             self._invalidate_tool_caches(tool_id=maintenance.tool_id, list_too=False, detail_too=True)
 
-    def get_tools(self, skip: int = 0, limit: int = 100, search_params: Optional[ToolSearchParams] = None) -> List[Tool]:
+    def _tool_matches_filters(self, tool: Tool, filters: Dict[str, Any]) -> bool:
+        """ Helper method to check if a tool matches the given filters. """
+        for key, value in filters.items():
+            if not hasattr(tool, key):
+                continue
+            tool_value = getattr(tool, key)
+            if tool_value != value:
+                return False
+        return True
+
+    def get_tools(self, skip: int = 0, limit: int = 100, search_params: Optional[ToolSearchParams] = None) -> List[
+        Tool]:
         """ Get tools with filtering and pagination. """
         logger.debug(f"Fetching tools: skip={skip}, limit={limit}, params={search_params}")
         filters = {}
         search_term = None
+        maintenance_due = None
+        checked_out = None
+
         if search_params:
             search_term = search_params.search
             # Use model_dump() for Pydantic v2+ to get dict, exclude None
             filters = search_params.model_dump(exclude_unset=True, exclude_none=True, exclude={'search'})
+
             if "category" in filters:
                 try:
                     # Ensure category value from enum is used if an enum object was passed,
                     # or convert string if string was passed.
                     cat_value = filters["category"]
                     if isinstance(cat_value, ToolCategory):
-                        filters["category"] = cat_value # Pass enum directly to repo if it handles it
+                        filters["category"] = cat_value  # Pass enum directly to repo if it handles it
                     elif isinstance(cat_value, str):
                         filters["category"] = ToolCategory(cat_value.upper())
                     else:
                         raise ValidationException(f"Invalid category type: {type(cat_value)}")
                 except ValueError:
                     raise ValidationException(f"Invalid category value: {filters['category']}")
-            # TODO: Handle search_params.maintenance_due / checked_out filtering logic if needed
-            if filters.pop('maintenance_due', None):
-                # Example: add specific filter logic if repo supports it
-                # filters['is_maintenance_due'] = True
-                logger.warning("Filtering by maintenance_due not fully implemented in service yet.")
-                pass
-            if filters.pop('checked_out', None):
-                 filters['status'] = 'CHECKED_OUT' # Simple status filter
 
-        logger.debug(f"Repository filters: {filters}, Search term: {search_term}")
+            # Extract special filters that need repository-specific handling
+            maintenance_due = filters.pop('maintenance_due', None)
+            checked_out = filters.pop('checked_out', None)
+
+        logger.debug(
+            f"Repository filters: {filters}, Search term: {search_term}, maintenance_due: {maintenance_due}, checked_out: {checked_out}")
+
         try:
-             if search_term:
-                 tools = self.repository.search_tools(search_term, skip=skip, limit=limit, **filters)
-             else:
-                 tools = self.repository.list(skip=skip, limit=limit, **filters)
-             logger.debug(f"Retrieved {len(tools)} tools.")
-             return tools
+            # Handle special cases that require specific repository methods
+            if maintenance_due is True and checked_out is None:
+                # Only maintenance due tools
+                logger.debug("Using get_tools_due_for_maintenance")
+                tools = self.repository.get_tools_due_for_maintenance(skip=skip, limit=limit)
+                # Apply additional filters if needed
+                if filters:
+                    tools = [tool for tool in tools if self._tool_matches_filters(tool, filters)]
+            elif checked_out is True and maintenance_due is None:
+                # Only checked out tools
+                logger.debug("Using get_checked_out_tools")
+                tools = self.repository.get_checked_out_tools(skip=skip, limit=limit)
+                # Apply additional filters if needed
+                if filters:
+                    tools = [tool for tool in tools if self._tool_matches_filters(tool, filters)]
+            elif maintenance_due is True and checked_out is True:
+                # Tools that are both maintenance due AND checked out
+                logger.debug("Filtering for tools that are both maintenance due and checked out")
+                maintenance_due_tools = self.repository.get_tools_due_for_maintenance(skip=0,
+                                                                                      limit=1000)  # Get more to filter
+                checked_out_tools = self.repository.get_checked_out_tools(skip=0, limit=1000)
+                # Find intersection
+                maintenance_due_ids = {tool.id for tool in maintenance_due_tools}
+                tools = [tool for tool in checked_out_tools if tool.id in maintenance_due_ids]
+                # Apply pagination manually
+                tools = tools[skip:skip + limit]
+                # Apply additional filters if needed
+                if filters:
+                    tools = [tool for tool in tools if self._tool_matches_filters(tool, filters)]
+            elif maintenance_due is False or checked_out is False:
+                # Need to filter out certain tools - use standard filtering with post-processing
+                logger.debug("Using standard filtering with maintenance/checkout post-processing")
+                if search_term:
+                    tools = self.repository.search_tools(search_term, skip=0, limit=skip + limit + 100, **filters)
+                else:
+                    tools = self.repository.list(skip=0, limit=skip + limit + 100, **filters)
+
+                # Apply maintenance_due filtering
+                if maintenance_due is False:
+                    today = date.today()
+                    tools = [tool for tool in tools if tool.next_maintenance is None or tool.next_maintenance > today]
+                    logger.debug(f"Filtered out tools with maintenance due, {len(tools)} remaining")
+
+                # Apply checked_out filtering
+                if checked_out is False:
+                    tools = [tool for tool in tools if tool.status != 'CHECKED_OUT']
+                    logger.debug(f"Filtered out checked out tools, {len(tools)} remaining")
+
+                # Apply manual pagination after filtering
+                tools = tools[skip:skip + limit] if len(tools) > skip else []
+            else:
+                # Standard filtering without special cases
+                if search_term:
+                    tools = self.repository.search_tools(search_term, skip=skip, limit=limit, **filters)
+                else:
+                    tools = self.repository.list(skip=skip, limit=limit, **filters)
+
+            logger.debug(f"Retrieved {len(tools)} tools.")
+            return tools
         except Exception as e:
-             # Catching specific errors can be helpful
-             logger.error(f"Error retrieving tools from repository: {e}", exc_info=True)
-             # Avoid raising HideSyncException for ValidationException
-             if isinstance(e, ValidationException): raise e
-             raise HideSyncException("Failed to retrieve tools.") from e
+            # Catching specific errors can be helpful
+            logger.error(f"Error retrieving tools from repository: {e}", exc_info=True)
+            # Avoid raising HideSyncException for ValidationException
+            if isinstance(e, ValidationException): raise e
+            raise HideSyncException("Failed to retrieve tools.") from e
 
     def get_tool(self, tool_id: int) -> Tool:
         """ Get a tool by ID using base service method (handles cache). """

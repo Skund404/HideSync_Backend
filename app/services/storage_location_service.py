@@ -1,9 +1,23 @@
+# File: app/services/storage_location_service.py
+"""
+Storage Location Service for the Dynamic Material Management System.
+
+This service manages storage locations with dynamic properties, following
+the same patterns as the dynamic material system. Provides functionality for:
+- Creating and updating storage locations with dynamic properties
+- Storage utilization management  
+- Searching and filtering storage locations
+- Settings-aware response formatting
+- Theme integration
+"""
+
 from typing import List, Optional, Dict, Any, Tuple, Union
 from datetime import datetime, timedelta
 import logging
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_
 import json
+import uuid
 
 from app.core.events import DomainEvent
 from app.core.exceptions import (
@@ -13,15 +27,20 @@ from app.core.exceptions import (
     BusinessRuleException,
     DuplicateEntityException,
     StorageLocationNotFoundException,
+    InsufficientInventoryException,
 )
 from app.core.validation import validate_input, validate_entity
-from app.db.models.enums import StorageLocationType
 from app.db.models.storage import (
     StorageLocation,
+    StorageLocationType,
+    StorageLocationTypeProperty,
+    StoragePropertyDefinition,
+    StorageLocationPropertyValue,
     StorageCell,
     StorageAssignment,
     StorageMove,
 )
+from app.db.models.dynamic_material import DynamicMaterial, MaterialType
 from app.repositories.storage_repository import (
     StorageLocationRepository,
     StorageCellRepository,
@@ -29,21 +48,21 @@ from app.repositories.storage_repository import (
     StorageMoveRepository,
 )
 from app.services.base_service import BaseService
+from app.services.settings_service import SettingsService
 
 logger = logging.getLogger(__name__)
 
 
+# Domain Events
 class StorageLocationDeleted(DomainEvent):
     """Event emitted when a storage location is deleted."""
 
     def __init__(
-        self,
-        location_id: str,
-        user_id: Optional[int] = None,
+            self,
+            location_id: str,
+            user_id: Optional[int] = None,
     ):
-        """
-        Initialize storage location deleted event.
-        """
+        """Initialize storage location deleted event."""
         super().__init__()
         self.location_id = location_id
         self.user_id = user_id
@@ -53,25 +72,17 @@ class StorageLocationCreated(DomainEvent):
     """Event emitted when a storage location is created."""
 
     def __init__(
-        self,
-        location_id: str,
-        location_name: str,
-        location_type: str,
-        user_id: Optional[int] = None,
+            self,
+            location_id: str,
+            location_name: str,
+            location_type_id: int,
+            user_id: Optional[int] = None,
     ):
-        """
-        Initialize storage location created event.
-
-        Args:
-            location_id: ID of the created storage location
-            location_name: Name of the storage location
-            location_type: Type of the storage location
-            user_id: Optional ID of the user who created the storage location
-        """
+        """Initialize storage location created event."""
         super().__init__()
         self.location_id = location_id
         self.location_name = location_name
-        self.location_type = location_type
+        self.location_type_id = location_type_id
         self.user_id = user_id
 
 
@@ -79,23 +90,14 @@ class StorageAssignmentCreated(DomainEvent):
     """Event emitted when materials are assigned to a storage location."""
 
     def __init__(
-        self,
-        assignment_id: str,
-        material_id: int,
-        location_id: str,
-        quantity: float,
-        user_id: Optional[int] = None,
+            self,
+            assignment_id: str,
+            material_id: int,
+            location_id: str,
+            quantity: float,
+            user_id: Optional[int] = None,
     ):
-        """
-        Initialize storage assignment created event.
-
-        Args:
-            assignment_id: ID of the created assignment
-            material_id: ID of the assigned material
-            location_id: ID of the storage location
-            quantity: Quantity assigned
-            user_id: Optional ID of the user who made the assignment
-        """
+        """Initialize storage assignment created event."""
         super().__init__()
         self.assignment_id = assignment_id
         self.material_id = material_id
@@ -108,25 +110,15 @@ class StorageMoveCreated(DomainEvent):
     """Event emitted when material is moved between storage locations."""
 
     def __init__(
-        self,
-        move_id: str,
-        material_id: int,
-        from_location_id: str,
-        to_location_id: str,
-        quantity: float,
-        user_id: Optional[int] = None,
+            self,
+            move_id: str,
+            material_id: int,
+            from_location_id: str,
+            to_location_id: str,
+            quantity: float,
+            user_id: Optional[int] = None,
     ):
-        """
-        Initialize storage move created event.
-
-        Args:
-            move_id: ID of the created move record
-            material_id: ID of the moved material
-            from_location_id: Source location ID
-            to_location_id: Destination location ID
-            quantity: Quantity moved
-            user_id: Optional ID of the user who initiated the move
-        """
+        """Initialize storage move created event."""
         super().__init__()
         self.move_id = move_id
         self.material_id = material_id
@@ -140,25 +132,15 @@ class StorageSpaceUpdated(DomainEvent):
     """Event emitted when storage capacity or utilization is updated."""
 
     def __init__(
-        self,
-        location_id: str,
-        previous_capacity: int,
-        new_capacity: int,
-        previous_utilized: int,
-        new_utilized: int,
-        user_id: Optional[int] = None,
+            self,
+            location_id: str,
+            previous_capacity: int,
+            new_capacity: int,
+            previous_utilized: int,
+            new_utilized: int,
+            user_id: Optional[int] = None,
     ):
-        """
-        Initialize storage space updated event.
-
-        Args:
-            location_id: ID of the storage location
-            previous_capacity: Previous capacity value
-            new_capacity: New capacity value
-            previous_utilized: Previous utilization value
-            new_utilized: New utilization value
-            user_id: Optional ID of the user who made the update
-        """
+        """Initialize storage space updated event."""
         super().__init__()
         self.location_id = location_id
         self.previous_capacity = previous_capacity
@@ -177,28 +159,29 @@ validate_storage_move = validate_entity(StorageMove)
 
 class StorageLocationService(BaseService[StorageLocation]):
     """
-    Service for managing storage locations in the HideSync system.
+    Service for managing storage locations in the Dynamic Material Management System.
 
-    Provides functionality for:
-    - Storage location creation and management
-    - Cell management within locations
-    - Material assignments to storage locations
-    - Inventory movement tracking
-    - Space utilization and optimization
+    Updated to follow the same patterns as DynamicMaterialService with:
+    - Settings Framework integration
+    - Theme System support
+    - Dynamic storage location types
+    - Event-driven architecture
+    - Cache management
     """
 
     def __init__(
-        self,
-        session: Session,
-        location_repository=None,
-        cell_repository=None,
-        assignment_repository=None,
-        move_repository=None,
-        security_context=None,
-        event_bus=None,
-        cache_service=None,
-        material_service=None,
-        inventory_service=None,
+            self,
+            session: Session,
+            location_repository=None,
+            cell_repository=None,
+            assignment_repository=None,
+            move_repository=None,
+            security_context=None,
+            event_bus=None,
+            cache_service=None,
+            settings_service=None,
+            property_service=None,
+            storage_location_type_service=None,
     ):
         """
         Initialize StorageLocationService with dependencies.
@@ -212,8 +195,9 @@ class StorageLocationService(BaseService[StorageLocation]):
             security_context: Optional security context for authorization
             event_bus: Optional event bus for publishing domain events
             cache_service: Optional cache service for data caching
-            material_service: Optional material service for material operations
-            inventory_service: Optional inventory service for inventory operations
+            settings_service: Optional settings service for user preferences
+            property_service: Optional property service for property validation
+            storage_location_type_service: Optional storage location type service
         """
         # Initialize the base service first
         super().__init__(
@@ -228,1178 +212,558 @@ class StorageLocationService(BaseService[StorageLocation]):
         self.repository = location_repository or StorageLocationRepository(session)
         self.cell_repository = cell_repository or StorageCellRepository(session)
         self.assignment_repository = (
-            assignment_repository or StorageAssignmentRepository(session)
+                assignment_repository or StorageAssignmentRepository(session)
         )
         self.move_repository = move_repository or StorageMoveRepository(session)
 
         # Set additional service-specific dependencies
-        self.material_service = material_service
-        self.inventory_service = inventory_service
-
-    # Improve get_storage_location in app/services/storage_location_service.py
-
-    # File: app/services/storage_location_service.py
-
-    # Make sure these imports are present at the top of the file
-    from typing import Dict, Any, List, Optional
-    from sqlalchemy.orm import Session
-    from sqlalchemy import func
-    import logging
-    from app.db.models.enums import StorageLocationType
-    from app.db.models.storage import (
-        StorageLocation,
-        StorageAssignment,
-    )  # Import StorageAssignment
-
-    logger = logging.getLogger(__name__)
-
-    class StorageLocationService:  # Assuming this class structure exists
-        # ... potentially other methods like __init__, _format_location_for_api etc. ...
-
-        # Ensure self.repository (StorageLocationRepository) and
-        # self.assignment_repository (StorageAssignmentRepository) are initialized
-        # in the __init__ method of StorageLocationService.
-
-        def get_storage_occupancy_report(
-            self, section: Optional[str] = None, location_type: Optional[str] = None
-        ) -> Dict[str, Any]:
-            """
-            Generate a storage occupancy report with accurate utilization calculations
-            and item counts by type.
-
-            Args:
-                section: Optional filter by section
-                location_type: Optional filter by location type
-
-            Returns:
-                Storage occupancy report dictionary matching the StorageOccupancyReport schema.
-            """
-            logger.info(
-                f"Generating storage occupancy report. Filters: section={section}, type={location_type}"
-            )
-
-            # Initialize results dictionary matching the StorageOccupancyReport Pydantic schema
-            result = {
-                "total_locations": 0,
-                "total_capacity": 0.0,
-                "total_utilized": 0.0,  # This will be based on location.utilized field initially
-                "total_items": 0,  # Will be calculated from assignments
-                "utilization_percentage": 0.0,
-                "overall_usage_percentage": 0.0,  # Often same as utilization_percentage
-                "items_by_type": {},  # Calculated from assignments
-                "by_type": {},
-                "by_section": {},
-                "locations_by_type": {},
-                "locations_by_section": {},
-                "locations_at_capacity": 0,  # e.g., >= 95% utilized
-                "locations_nearly_empty": 0,  # e.g., <= 10% utilized
-                "most_utilized_locations": [],
-                "least_utilized_locations": [],
-                "recommendations": [],
-            }
-
-            try:
-                # --- 1. Get Locations and Calculate Location-Based Stats ---
-                logger.debug("Fetching storage locations...")
-                filters = {}
-                if section:
-                    filters["section"] = section
-                if location_type:
-                    try:
-                        # Convert string type to enum if repository expects it
-                        filters["type"] = StorageLocationType[location_type.upper()]
-                    except KeyError:
-                        logger.warning(
-                            f"Invalid location type filter provided: {location_type}. Ignoring filter."
-                        )
-                        # Optionally raise an error or just ignore the filter
-
-                locations = self.repository.list(
-                    **filters
-                )  # Assuming repository handles filtering
-                result["total_locations"] = len(locations)
-                logger.debug(
-                    f"Found {result['total_locations']} locations matching filters."
-                )
-
-                if not locations:
-                    logger.warning(
-                        "No storage locations found matching criteria. Returning empty report."
-                    )
-                    return result  # Return default empty report if no locations found
-
-                total_capacity = 0.0
-                total_utilized_loc_field = 0.0
-                by_type = {}
-                by_section = {}
-                locations_by_type = {}
-                locations_by_section = {}
-                location_utilization_details = {}  # Stores details for most/least lists
-                locations_at_capacity = 0
-                locations_nearly_empty = 0
-
-                # Process each location
-                for loc in locations:
-                    loc_id = str(getattr(loc, "id", "unknown"))
-                    capacity = float(getattr(loc, "capacity", 0) or 0)
-                    utilized = float(
-                        getattr(loc, "utilized", 0) or 0
-                    )  # Utilized from the location record
-
-                    total_capacity += capacity
-                    total_utilized_loc_field += utilized
-
-                    utilization_pct = (
-                        (utilized / capacity * 100) if capacity > 0 else 0.0
-                    )
-
-                    # Store details for sorting later
-                    location_utilization_details[loc_id] = {
-                        "id": loc_id,
-                        "name": getattr(loc, "name", "Unknown"),
-                        "capacity": int(capacity),
-                        "utilized": int(utilized),
-                        "utilization_percentage": round(utilization_pct, 1),
-                    }
-
-                    # Group counts/stats by Type
-                    loc_type_enum = getattr(loc, "type", None)
-                    loc_type_str = (
-                        str(loc_type_enum.name) if loc_type_enum else "OTHER"
-                    )  # Default to OTHER
-                    locations_by_type[loc_type_str] = (
-                        locations_by_type.get(loc_type_str, 0) + 1
-                    )
-                    type_stats = by_type.setdefault(
-                        loc_type_str,
-                        {
-                            "capacity": 0.0,
-                            "utilized": 0.0,
-                            "locations": 0,
-                            "utilization_percentage": 0.0,
-                        },
-                    )
-                    type_stats["capacity"] += capacity
-                    type_stats["utilized"] += utilized  # Aggregate location.utilized
-                    type_stats["locations"] += 1
-
-                    # Group counts/stats by Section
-                    loc_section_str = getattr(loc, "section", "Unknown") or "Unknown"
-                    locations_by_section[loc_section_str] = (
-                        locations_by_section.get(loc_section_str, 0) + 1
-                    )
-                    section_stats = by_section.setdefault(
-                        loc_section_str,
-                        {
-                            "capacity": 0.0,
-                            "utilized": 0.0,
-                            "locations": 0,
-                            "utilization_percentage": 0.0,
-                        },
-                    )
-                    section_stats["capacity"] += capacity
-                    section_stats["utilized"] += utilized  # Aggregate location.utilized
-                    section_stats["locations"] += 1
-
-                    # Check capacity thresholds (using location.utilized based percentage)
-                    if capacity > 0:
-                        if utilization_pct >= 95:
-                            locations_at_capacity += 1
-                        elif utilization_pct <= 10:
-                            locations_nearly_empty += 1
-
-                result["total_capacity"] = total_capacity
-                result["total_utilized"] = (
-                    total_utilized_loc_field  # Start with location field value
-                )
-                result["locations_at_capacity"] = locations_at_capacity
-                result["locations_nearly_empty"] = locations_nearly_empty
-
-                # --- 2. Calculate Item Counts by Type from Assignments ---
-                logger.debug("Calculating item counts by type from assignments...")
-                try:
-                    # Query assignments: group by material_type and count distinct material_id
-                    # This assumes 'material_type' on StorageAssignment is a string like 'leather', 'hardware'
-                    item_counts_query = (
-                        self.session.query(
-                            StorageAssignment.material_type,
-                            func.count(
-                                StorageAssignment.material_id.distinct()
-                            ),  # Counts unique items per type
-                            # OR: func.sum(StorageAssignment.quantity) # If you need sum of quantities
-                        )
-                        .group_by(StorageAssignment.material_type)
-                        .all()
-                    )
-
-                    # Process the query results into a dictionary, lowercasing the type
-                    items_by_type_calc = {
-                        str(item_type).lower(): count
-                        for item_type, count in item_counts_query
-                        if item_type  # Ensure item_type is not None
-                    }
-
-                    # Ensure common types exist in the dictionary, even if count is 0
-                    for common_type in [
-                        "leather",
-                        "hardware",
-                        "supplies",
-                        "other",
-                        "unknown",
-                    ]:
-                        items_by_type_calc.setdefault(common_type, 0)
-
-                    result["items_by_type"] = items_by_type_calc
-                    result["total_items"] = sum(items_by_type_calc.values())
-                    logger.info(
-                        f"Successfully calculated item counts by type: {result['items_by_type']}"
-                    )
-
-                    # --- Optional Override Decision ---
-                    # Decide if the sum of distinct items should override the 'total_utilized'
-                    # This depends on whether 'location.utilized' is meant to track items or space.
-                    # If 'utilized' tracks distinct items, you might want to update it here:
-                    # if result["total_items"] != total_utilized_loc_field:
-                    #    logger.warning(f"Total utilized from locations ({total_utilized_loc_field}) differs from distinct item count ({result['total_items']}). Using item count.")
-                    #    result["total_utilized"] = float(result["total_items"])
-                    # else:
-                    #    result["total_utilized"] = total_utilized_loc_field # Keep location field value
-
-                    # For now, we'll keep result["total_utilized"] based on the location field sum
-                    # as it's more likely meant to track used slots/space rather than distinct items.
-                    result["total_utilized"] = total_utilized_loc_field
-
-                except Exception as e:
-                    logger.error(
-                        f"Error calculating items_by_type from assignments: {e}",
-                        exc_info=True,
-                    )
-                    result["items_by_type"] = {
-                        "error": "Calculation failed"
-                    }  # Indicate error in result
-                    result["total_items"] = None  # Indicate calculation failed
-                    # Keep total_utilized based on location field as fallback
-
-                # --- 3. Final Calculations & Formatting ---
-                logger.debug("Performing final calculations for report...")
-                final_total_utilized = result[
-                    "total_utilized"
-                ]  # Use the determined total utilized
-
-                if total_capacity > 0:
-                    usage_pct = (final_total_utilized / total_capacity) * 100
-                    result["utilization_percentage"] = round(usage_pct, 1)
-                    result["overall_usage_percentage"] = round(
-                        usage_pct, 1
-                    )  # Assign same value
-
-                # Calculate final percentages for by_type and by_section breakdowns
-                # These percentages are based on the summed location.utilized values per group
-                for stats in by_type.values():
-                    cap = stats.get("capacity", 0.0)
-                    ut = stats.get(
-                        "utilized", 0.0
-                    )  # Utilized from location field sum for this group
-                    stats["utilization_percentage"] = (
-                        round((ut / cap) * 100, 1) if cap > 0 else 0.0
-                    )
-
-                for stats in by_section.values():
-                    cap = stats.get("capacity", 0.0)
-                    ut = stats.get(
-                        "utilized", 0.0
-                    )  # Utilized from location field sum for this group
-                    stats["utilization_percentage"] = (
-                        round((ut / cap) * 100, 1) if cap > 0 else 0.0
-                    )
-
-                result["by_type"] = by_type
-                result["by_section"] = by_section
-                result["locations_by_type"] = locations_by_type  # Just the counts
-                result["locations_by_section"] = locations_by_section  # Just the counts
-
-                # Sort locations by utilization percentage for most/least utilized lists
-                sorted_locations = sorted(
-                    location_utilization_details.values(),
-                    key=lambda x: x["utilization_percentage"],
-                    reverse=True,
-                )
-
-                # Populate most/least utilized lists (ensure structure matches Pydantic schema)
-                result["most_utilized_locations"] = sorted_locations[:5]
-                result["least_utilized_locations"] = [
-                    loc
-                    for loc in reversed(sorted_locations)
-                    if loc["capacity"] > 0 and loc["utilization_percentage"] > 0
-                ][:5]
-
-                # --- 4. Generate Recommendations ---
-                logger.debug("Generating recommendations...")
-                recommendations = []
-                usage_pct_final = result["utilization_percentage"]
-                if usage_pct_final > 85:
-                    recommendations.append(
-                        "Overall utilization is high. Consider expanding storage or optimizing existing space."
-                    )
-                elif usage_pct_final < 25:
-                    recommendations.append(
-                        "Overall utilization is low. Consider consolidating storage."
-                    )
-                if result["locations_at_capacity"] > 0:
-                    recommendations.append(
-                        f"Address {result['locations_at_capacity']} locations at or near capacity (>=95%)."
-                    )
-                if result["locations_nearly_empty"] > 0:
-                    recommendations.append(
-                        f"Review {result['locations_nearly_empty']} nearly empty locations (<=10%) for potential consolidation."
-                    )
-                # Add more recommendations based on by_type, by_section, etc. if needed
-                result["recommendations"] = recommendations
-
-                logger.info(f"Generated storage occupancy report successfully.")
-                return result
-
-            except Exception as e:
-                logger.error(
-                    f"Major error generating storage occupancy report: {e}",
-                    exc_info=True,
-                )
-                # Return the initialized result dictionary with defaults on major error
-                result["recommendations"] = [
-                    "Error generating report."
-                ]  # Add error message
-                return result
-
-    # Just add this method to app/services/storage_location_service.py
-    # Don't change any existing code - just add this new method
-
-    def get_storage_cells(self, location_id, occupied=None):
-        """
-        Get cells for a storage location with optional filter.
-
-        Args:
-            location_id: ID of the storage location
-            occupied: Optional filter for occupied status
-
-        Returns:
-            List of formatted storage cells
-        """
-        logger.info(f"Getting cells for storage location ID: {location_id}")
-
-        try:
-            # Query cells directly from repository
-            cells = self.cell_repository.list(storage_id=location_id)
-
-            # Format cells for API
-            formatted_cells = []
-            for cell in cells:
-                # Basic cell info
-                cell_data = {
-                    "id": str(getattr(cell, "id", "")),
-                    "storage_id": str(getattr(cell, "storage_id", location_id)),
-                    "occupied": bool(getattr(cell, "occupied", False)),
-                    "material_id": getattr(cell, "material_id", None),
-                    "position": {"row": 1, "column": 1},  # Default position
-                }
-
-                # Parse position data if available
-                position = getattr(cell, "position", None)
-                if position:
-                    if isinstance(position, str):
-                        try:
-                            import json
-
-                            pos_data = json.loads(position)
-                            if isinstance(pos_data, dict):
-                                cell_data["position"] = pos_data
-                        except:
-                            pass
-                    elif isinstance(position, dict):
-                        cell_data["position"] = position
-
-                # Apply filter if specified
-                if occupied is None or cell_data["occupied"] == occupied:
-                    formatted_cells.append(cell_data)
-
-            logger.info(
-                f"Retrieved {len(formatted_cells)} cells for location {location_id}"
-            )
-            return formatted_cells
-
-        except Exception as e:
-            logger.error(f"Error getting cells for location {location_id}: {e}")
-
-            # Generate a default grid as fallback
-            default_cells = []
-            for row in range(1, 5):
-                for col in range(1, 5):
-                    default_cells.append(
-                        {
-                            "id": f"default_{location_id}_{row}_{col}",
-                            "storage_id": str(location_id),
-                            "position": {"row": row, "column": col},
-                            "occupied": False,
-                            "material_id": None,
-                        }
-                    )
-
-            logger.warning(f"Returning default grid with {len(default_cells)} cells")
-            return default_cells
+        self.settings_service = settings_service
+        self.property_service = property_service
+        self.storage_location_type_service = storage_location_type_service
 
     def get_storage_locations(
-        self,
-        skip: int = 0,
-        limit: int = 100,
-        search_params: Optional[Dict[str, Any]] = None,
-    ) -> List[Dict[str, Any]]:
+            self,
+            skip: int = 0,
+            limit: int = 100,
+            storage_location_type_id: Optional[int] = None,
+            search: Optional[str] = None,
+            status: Optional[str] = None,
+            section: Optional[str] = None,
+            apply_settings: bool = True,
+            search_params: Optional[Dict[str, Any]] = None,
+            **filters
+    ) -> Tuple[List[StorageLocation], int]:
         """
-        Get a list of storage locations with optional filtering and pagination.
+        Get storage locations with filtering and pagination.
+        Follows the same pattern as DynamicMaterialService.get_materials().
 
         Args:
             skip: Number of records to skip for pagination
             limit: Maximum number of records to return
-            search_params: Optional search parameters for filtering (type, section, status, search)
+            storage_location_type_id: Optional filter by storage location type
+            search: Optional search string for names and descriptions
+            status: Optional filter by status
+            section: Optional filter by section
+            apply_settings: Whether to apply user settings
+            search_params: Optional search parameters dict
+            **filters: Additional filters
 
         Returns:
-            List of storage locations with properly formatted fields
+            Tuple of (list of storage locations, total count)
         """
         logger.info(
-            f"Getting storage locations with params: {search_params}, skip={skip}, limit={limit}"
+            f"Getting storage locations with params: type_id={storage_location_type_id}, "
+            f"search='{search}', status='{status}', section='{section}'"
         )
 
         try:
             # Check cache first if available
             cache_key = None
             if self.cache_service:
-                # Create a cache key based on parameters
-                params_str = json.dumps(search_params or {})
-                cache_key = f"StorageLocations:{params_str}:{skip}:{limit}"
+                params_str = json.dumps({
+                    "skip": skip,
+                    "limit": limit,
+                    "storage_location_type_id": storage_location_type_id,
+                    "search": search,
+                    "status": status,
+                    "section": section,
+                    **filters
+                }, sort_keys=True)
+                cache_key = f"storage_locations:{hash(params_str)}"
                 cached = self.cache_service.get(cache_key)
                 if cached:
-                    logger.info(f"Retrieved {len(cached)} storage locations from cache")
-                    return cached
+                    logger.info(f"Retrieved {len(cached[0])} storage locations from cache")
+                    locations, total = cached
+                    if apply_settings and self.security_context and self.settings_service:
+                        user_id = getattr(getattr(self.security_context, 'current_user', None), 'id', None)
+                        if user_id:
+                            locations = self.apply_settings_to_locations(locations, user_id)
+                    return locations, total
 
-            # Build filters dictionary from search_params
-            filters = {}
-            if search_params:
-                if search_params.get("type"):
-                    filters["type"] = search_params["type"]
-                if search_params.get("section"):
-                    filters["section"] = search_params["section"]
-                if search_params.get("status"):
-                    filters["status"] = search_params["status"]
-                if search_params.get("search"):
-                    filters["name"] = search_params[
-                        "search"
-                    ]  # Use name field for search
+            # Get locations with properties and relationships
+            locations, total = self.repository.list_with_properties(
+                skip=skip,
+                limit=limit,
+                storage_location_type_id=storage_location_type_id,
+                search=search,
+                status=status,
+                section=section,
+                **filters
+            )
 
-            # Get locations from repository with pagination
-            locations = self.repository.list(skip=skip, limit=limit, **filters)
-
-            # Format locations for API
-            formatted_locations = [
-                self._format_location_for_api(loc) for loc in locations
-            ]
+            # Apply settings if requested and security context is available
+            if apply_settings and self.security_context and self.settings_service:
+                user_id = getattr(getattr(self.security_context, 'current_user', None), 'id', None)
+                if user_id:
+                    locations = self.apply_settings_to_locations(locations, user_id)
 
             # Add to cache if available
             if self.cache_service and cache_key:
                 self.cache_service.set(
-                    cache_key, formatted_locations, ttl=300
-                )  # 5 min TTL
+                    cache_key, (locations, total), ttl=300
+                )
 
-            logger.info(f"Retrieved {len(formatted_locations)} storage locations")
-            return formatted_locations
+            logger.info(f"Retrieved {len(locations)} storage locations")
+            return locations, total
 
         except Exception as e:
             logger.error(f"Error fetching storage locations: {e}")
-            import traceback
+            return [], 0
 
-            logger.error(traceback.format_exc())
-            return []  # Return empty list on error
-
-    def _format_location_for_api(self, location) -> Dict[str, Any]:
+    def get_storage_location(self, location_id: str) -> Optional[StorageLocation]:
         """
-        Format a storage location object for API response with robust error handling.
-
-        Args:
-            location: Storage location object from database
-
-        Returns:
-            Dictionary with formatted storage location data
-        """
-        try:
-            # Handle empty location
-            if not location:
-                logger.warning("Attempting to format None location object")
-                return {
-                    "id": "unknown",
-                    "name": "Unknown Location",
-                    "type": "unknown",
-                    "status": "UNKNOWN",
-                }
-
-            # Create a base dictionary
-            result = {}
-
-            # Get ID with type handling
-            try:
-                location_id = getattr(location, "id", None)
-                if location_id is None:
-                    location_id = getattr(location, "uuid", "unknown")
-                result["id"] = str(location_id)
-            except Exception:
-                result["id"] = "unknown"
-
-            # Safely get attributes with defaults
-            attributes = {
-                "name": ("name", "Unknown Location", str),
-                "type": ("type", "other", str),
-                "section": ("section", "", str),
-                "description": ("description", "", str),
-                "capacity": ("capacity", 0, int),
-                "utilized": ("utilized", 0, int),
-                "status": ("status", "ACTIVE", str),
-                "parent_id": ("parent_id", None, lambda x: str(x) if x else None),
-            }
-
-            for key, (attr_name, default, converter) in attributes.items():
-                try:
-                    value = getattr(location, attr_name, default)
-                    if value is not None:
-                        result[key] = converter(value)
-                    else:
-                        result[key] = default
-                except Exception:
-                    result[key] = default
-
-            # Handle dimensions with special care
-            try:
-                dimensions = getattr(location, "dimensions", None)
-                if dimensions:
-                    # Handle string format (JSON)
-                    if isinstance(dimensions, str):
-                        try:
-                            import json
-
-                            dimensions = json.loads(dimensions)
-                        except:
-                            dimensions = {"width": 4, "height": 4}
-                    # Handle dict format
-                    elif isinstance(dimensions, dict):
-                        pass
-                    # Handle other formats
-                    else:
-                        dimensions = {"width": 4, "height": 4}
-                else:
-                    dimensions = {"width": 4, "height": 4}
-
-                result["dimensions"] = dimensions
-            except Exception:
-                result["dimensions"] = {"width": 4, "height": 4}
-
-            # Add timestamps if available
-            for timestamp in ["created_at", "updated_at", "last_modified"]:
-                try:
-                    value = getattr(location, timestamp, None)
-                    if value:
-                        if hasattr(value, "isoformat"):
-                            result[timestamp] = value.isoformat()
-                        else:
-                            result[timestamp] = str(value)
-                except Exception:
-                    pass
-
-            return result
-
-        except Exception as e:
-            logger.error(f"Error formatting location for API: {e}")
-            # Return minimal safe dictionary
-            return {
-                "id": str(getattr(location, "id", "unknown")),
-                "name": "Error Formatting Location",
-                "type": "unknown",
-                "status": "UNKNOWN",
-                "capacity": 0,
-                "utilized": 0,
-                "dimensions": {"width": 4, "height": 4},
-                "_error": str(e),
-            }
-
-    def _calculate_utilization_statistics(self, location_id):
-        """
-        Calculate storage utilization statistics.
+        Get a storage location by ID with its properties.
 
         Args:
             location_id: ID of the storage location
 
         Returns:
-            Dictionary of utilization statistics
+            Storage location if found, None otherwise
         """
-        logger.info(f"Calculating utilization statistics for location {location_id}")
+        return self.repository.get_by_id_with_properties(location_id)
 
-        # Default statistics
-        stats = {
-            "capacity": 0,
-            "utilized": 0,
-            "utilization_percentage": 0,
-            "item_count": 0,
-            "material_types": {},
-            "by_status": {"active": 0, "reserved": 0, "in_use": 0},
-        }
-
-        try:
-            # Get location to determine capacity
-            try:
-                location = self.repository.get_by_id(location_id)
-                if location:
-                    stats["capacity"] = getattr(location, "capacity", 0) or 0
-                    stats["utilized"] = getattr(location, "utilized", 0) or 0
-
-                    # Calculate percentage if capacity is not zero
-                    if stats["capacity"] > 0:
-                        stats["utilization_percentage"] = round(
-                            (stats["utilized"] / stats["capacity"]) * 100, 1
-                        )
-            except Exception as e:
-                logger.error(f"Error getting location for stats calculation: {e}")
-
-        except Exception as e:
-            logger.error(f"Error calculating utilization statistics: {e}")
-
-        logger.info(f"Calculated utilization statistics for location {location_id}")
-        return stats
-
-    def _format_assignment_for_api(self, assignment):
+    def apply_settings_to_locations(
+            self,
+            locations: List[StorageLocation],
+            user_id: int
+    ) -> List[StorageLocation]:
         """
-        Format a storage assignment for API response.
+        Apply user settings to storage locations.
+        Follows the same pattern as DynamicMaterialService.apply_settings_to_materials().
 
         Args:
-            assignment: StorageAssignment model instance
+            locations: List of storage locations to apply settings to
+            user_id: ID of the user whose settings to apply
 
         Returns:
-            Dictionary of formatted assignment data
+            List of storage locations with settings applied
         """
-        if not assignment:
-            return None
-
-        # Create base result with safe defaults
-        result = {
-            "id": str(getattr(assignment, "id", "")),
-            "storage_id": str(getattr(assignment, "storage_id", "")),
-            "material_id": getattr(assignment, "material_id", None),
-            "material_type": getattr(assignment, "material_type", "material"),
-            "quantity": float(getattr(assignment, "quantity", 0)),
-            "position": None,
-            "assigned_date": None,
-            "assigned_by": getattr(assignment, "assigned_by", None),
-            "notes": getattr(assignment, "notes", ""),
-        }
-
-        # Handle position data
-        position = getattr(assignment, "position", None)
-        if position:
-            # Parse JSON string
-            if isinstance(position, str):
-                try:
-                    import json
-
-                    parsed_position = json.loads(position)
-                    if isinstance(parsed_position, dict):
-                        result["position"] = parsed_position
-                except:
-                    pass
-            # Use dict directly
-            elif isinstance(position, dict):
-                result["position"] = position
-
-        # Handle assigned date
-        assigned_date = getattr(assignment, "assigned_date", None)
-        if assigned_date:
-            if hasattr(assigned_date, "isoformat"):
-                result["assigned_date"] = assigned_date.isoformat()
-            else:
-                result["assigned_date"] = str(assigned_date)
-
-        return result
-
-    def update_storage_utilization_from_assignments(self):
-        """
-        Synchronize storage utilization counts based on material assignments.
-
-        This method scans all storage assignments and updates the 'utilized' count
-        for each storage location accordingly.
-
-        Returns:
-            dict: Summary of synchronization results
-        """
-        logger.info("Synchronizing storage utilization from assignments")
+        if not self.settings_service or not locations:
+            return locations
 
         try:
-            # Get all storage assignments
-            all_assignments = self.assignment_repository.list()
-
-            logger.info(f"Found {len(all_assignments)} storage assignments")
-
-            # Count assignments per location
-            location_counts = {}
-            for assignment in all_assignments:
-                loc_id = getattr(assignment, "storage_id", None)
-                if loc_id:
-                    location_counts[loc_id] = location_counts.get(loc_id, 0) + 1
-
-            # Update each storage location's utilized count
-            updated_count = 0
-            updated_locations = []
-
-            for loc_id, count in location_counts.items():
-                try:
-                    loc = self.repository.get_by_id(loc_id)
-                    if loc:
-                        # Remember previous value for logging
-                        previous_count = loc.utilized or 0
-
-                        # Update the count
-                        self.repository.update(loc_id, {"utilized": count})
-
-                        updated_count += 1
-                        updated_locations.append(
-                            {
-                                "id": loc_id,
-                                "name": getattr(loc, "name", "Unknown"),
-                                "previous_count": previous_count,
-                                "new_count": count,
-                            }
-                        )
-
-                        logger.debug(
-                            f"Updated location {getattr(loc, 'name', 'Unknown')} (ID: {loc_id}): "
-                            f"utilized from {previous_count} to {count}"
-                        )
-                except Exception as loc_error:
-                    logger.error(f"Error updating location {loc_id}: {loc_error}")
-
-            logger.info(
-                f"Successfully updated utilization for {updated_count} storage locations"
+            # Get UI settings for storage
+            storage_ui = self.settings_service.get_setting(
+                key="storage_ui",
+                scope_type="user",
+                scope_id=str(user_id)
             )
 
-            return {
-                "updated_count": updated_count,
-                "updated_locations": updated_locations,
-            }
+            # If no settings found, return locations as is
+            if not storage_ui:
+                return locations
 
-        except Exception as e:
-            logger.error(f"Error synchronizing storage utilization: {e}")
-            import traceback
+            # Card view settings
+            card_view = storage_ui.get("card_view", {})
+            show_card_thumbnail = card_view.get("display_thumbnail", True)
+            max_card_properties = card_view.get("max_properties", 4)
 
-            logger.error(traceback.format_exc())
-            raise
+            # List view settings
+            list_view = storage_ui.get("list_view", {})
+            list_columns = list_view.get("default_columns", [
+                "name", "type", "capacity", "utilized", "section", "status"
+            ])
+            show_list_thumbnail = list_view.get("show_thumbnail", True)
 
-    def get_storage_location(self, location_id: str):
-        """
-        Get a single storage location by ID with enhanced error handling and ID format flexibility.
+            # Grid view settings
+            grid_view = storage_ui.get("grid_view", {})
+            show_utilization_bars = grid_view.get("show_utilization", True)
+            show_capacity_indicators = grid_view.get("show_capacity", True)
 
-        Args:
-            location_id: ID of the storage location to retrieve (string, int, or UUID format)
+            # Apply settings to each location
+            for location in locations:
+                # Create UI settings object if not exists
+                if not hasattr(location, "ui_settings"):
+                    location.ui_settings = {}
 
-        Returns:
-            Storage location with properly formatted fields
-
-        Raises:
-            StorageLocationNotFoundException: If the location doesn't exist
-        """
-        logger.info(f"Getting storage location with ID: {location_id}")
-
-        try:
-            # Check cache first
-            if self.cache_service:
-                cache_key = f"StorageLocation:{location_id}"
-                cached = self.cache_service.get(cache_key)
-                if cached:
-                    logger.info(f"Retrieved location from cache: {location_id}")
-                    return cached
-
-            # Get location from repository - try different formats
-            location = None
-
-            # Try the ID as provided
-            try:
-                location = self.repository.get_by_id(location_id)
-                if location:
-                    logger.debug(f"Found location with ID as provided: {location_id}")
-            except Exception as e:
-                logger.debug(f"Error getting location with ID as provided: {e}")
-
-            # If not found and it's a numeric string, try as integer
-            if not location and str(location_id).isdigit():
-                try:
-                    numeric_id = int(location_id)
-                    location = self.repository.get_by_id(numeric_id)
-                    if location:
-                        logger.info(f"Found location using numeric ID: {numeric_id}")
-                except Exception as e:
-                    logger.debug(
-                        f"Error getting location with numeric ID {location_id}: {e}"
-                    )
-
-            # If still not found, try direct database query
-            if not location:
-                try:
-                    from sqlalchemy import or_
-                    from app.db.models.storage import StorageLocation
-
-                    # Try multiple ID formats
-                    location = (
-                        self.session.query(StorageLocation)
-                        .filter(
-                            or_(
-                                StorageLocation.id == location_id,
-                                StorageLocation.id == str(location_id),
-                                StorageLocation.uuid == location_id,
-                                StorageLocation.name == location_id,
-                            )
-                        )
-                        .first()
-                    )
-
-                    if location:
-                        logger.info(f"Found location using direct query: {location.id}")
-                except Exception as e:
-                    logger.debug(f"Error with direct query: {e}")
-
-            # If still not found, try listing all locations
-            if not location:
-                try:
-                    logger.debug("Attempting to find location in full list...")
-                    all_locations = self.repository.list(limit=100)
-
-                    for loc in all_locations:
-                        # Compare as strings to handle type mismatches
-                        if str(loc.id) == str(location_id):
-                            location = loc
-                            logger.info(f"Found location in full list by ID: {loc.id}")
-                            break
-                except Exception as e:
-                    logger.debug(f"Error listing all locations: {e}")
-
-            # If we still don't have a location, check if we have mock data for testing
-            if not location:
-                try:
-                    # This is for development/testing only
-                    mock_locations = [
-                        {
-                            "id": "1",
-                            "name": "Main Workshop Cabinet",
-                            "type": "cabinet",
-                            "section": "main_workshop",
-                            "capacity": 100,
-                            "utilized": 30,
-                            "status": "ACTIVE",
-                            "dimensions": {"width": 4, "height": 4},
-                        },
-                        {
-                            "id": "2",
-                            "name": "Tool Storage",
-                            "type": "shelf",
-                            "section": "tool_room",
-                            "capacity": 50,
-                            "utilized": 25,
-                            "status": "ACTIVE",
-                            "dimensions": {"width": 3, "height": 6},
-                        },
-                    ]
-
-                    for mock_loc in mock_locations:
-                        if str(mock_loc["id"]) == str(location_id):
-                            logger.warning(
-                                f"Using mock data for location {location_id}"
-                            )
-                            return mock_loc
-                except Exception:
-                    pass
-
-            # If we still don't have a location, raise the exception
-            if not location:
-                logger.error(f"Storage location not found: {location_id}")
-                raise StorageLocationNotFoundException(location_id)
-
-            # Format location for API
-            formatted_location = self._format_location_for_api(location)
-
-            # Add to cache
-            if self.cache_service:
-                self.cache_service.set(cache_key, formatted_location, ttl=3600)
-
-            logger.info(
-                f"Retrieved storage location: {formatted_location.get('name', 'Unknown')}"
-            )
-            return formatted_location
-
-        except StorageLocationNotFoundException:
-            # Re-raise the same exception
-            raise
-        except Exception as e:
-            logger.error(f"Error fetching storage location: {e}")
-            import traceback
-
-            logger.error(traceback.format_exc())
-            raise StorageLocationNotFoundException(location_id)
-
-    def get_storage_occupancy_report(self, section=None, location_type=None):
-        """
-        Generate a storage occupancy report with accurate utilization calculations.
-
-        Args:
-            section: Optional filter by section
-            location_type: Optional filter by location type
-
-        Returns:
-            Storage occupancy report with metrics
-        """
-        logger.info("Generating storage occupancy report")
-
-        # Initialize empty results with safe defaults
-        result = {
-            "total_locations": 0,
-            "total_capacity": 0,
-            "total_utilized": 0,
-            "total_items": 0,
-            "utilization_percentage": 0,
-            "overall_usage_percentage": 0,
-            "by_type": {},
-            "by_section": {},
-            "locations_by_type": {},
-            "locations_by_section": {},
-            "locations_at_capacity": 0,
-            "locations_nearly_empty": 0,
-            "most_utilized_locations": [],
-            "least_utilized_locations": [],
-            "recommendations": [],
-        }
-
-        try:
-            # Get all locations with repository method
-            filters = {}
-            if section:
-                filters["section"] = section
-            if location_type:
-                filters["type"] = location_type
-
-            locations = self.repository.list(**filters)
-
-            # Calculate totals
-            result["total_locations"] = len(locations)
-
-            total_capacity = 0
-            total_utilized = 0
-            by_type = {}
-            by_section = {}
-            locations_by_type = {}
-            locations_by_section = {}
-            location_utilization = {}
-
-            # Process each location
-            for loc in locations:
-                location_id = str(loc.id)
-                capacity = loc.capacity or 0
-                utilized = loc.utilized or 0
-
-                # Add to totals
-                total_capacity += capacity
-                total_utilized += utilized
-
-                # Store for later utilization calculation
-                location_utilization[location_id] = {
-                    "id": location_id,
-                    "name": loc.name or "",
-                    "capacity": capacity,
-                    "utilized": utilized,
-                    "utilization_percentage": (
-                        round((utilized / capacity) * 100, 1) if capacity > 0 else 0
-                    ),
+                # Set card view settings
+                location.ui_settings["card_view"] = {
+                    "max_properties": max_card_properties,
+                    "show_thumbnail": show_card_thumbnail,
+                    "properties": self._get_card_properties(location, max_card_properties)
                 }
 
-                # Process location types
-                loc_type = loc.type or "Unknown"
-                if hasattr(loc_type, "value"):
-                    loc_type = loc_type.value
-                locations_by_type[loc_type] = locations_by_type.get(loc_type, 0) + 1
+                # Set list view settings
+                location.ui_settings["list_view"] = {
+                    "columns": list_columns,
+                    "show_thumbnail": show_list_thumbnail
+                }
 
-                if loc_type not in by_type:
-                    by_type[loc_type] = {
-                        "capacity": 0,
-                        "utilized": 0,
-                        "locations": 0,
-                        "utilization_percentage": 0,
+                # Set grid view settings
+                location.ui_settings["grid_view"] = {
+                    "show_utilization": show_utilization_bars,
+                    "show_capacity": show_capacity_indicators
+                }
+
+                # Add theme information
+                if location.storage_location_type:
+                    location.ui_settings["theme"] = {
+                        "color_scheme": location.storage_location_type.color_scheme or "default",
+                        "icon": location.storage_location_type.icon or "storage"
                     }
-                by_type[loc_type]["capacity"] += capacity
-                by_type[loc_type]["utilized"] += utilized
-                by_type[loc_type]["locations"] += 1
-
-                # Process sections
-                loc_section = loc.section or "Unknown"
-                locations_by_section[loc_section] = (
-                    locations_by_section.get(loc_section, 0) + 1
-                )
-
-                if loc_section not in by_section:
-                    by_section[loc_section] = {
-                        "capacity": 0,
-                        "utilized": 0,
-                        "locations": 0,
-                        "utilization_percentage": 0,
-                    }
-                by_section[loc_section]["capacity"] += capacity
-                by_section[loc_section]["utilized"] += utilized
-                by_section[loc_section]["locations"] += 1
-
-                # Check for locations at capacity/empty
-                if capacity > 0:
-                    utilization_pct = (utilized / capacity) * 100
-                    if utilization_pct >= 90:
-                        result["locations_at_capacity"] += 1
-                    elif utilization_pct <= 10:
-                        result["locations_nearly_empty"] += 1
-
-            # Get storage assignments to calculate actual item count
-            try:
-                # Get all storage assignments
-                all_assignments = self.assignment_repository.list()
-
-                # Count total items
-                total_items = len(all_assignments)
-                result["total_items"] = total_items
-
-                # If stored assignments exist but utilized counts are zero,
-                # recalculate utilization based on assignments
-                if total_items > 0 and total_utilized == 0:
-                    # Group assignments by location
-                    location_items = {}
-                    for assignment in all_assignments:
-                        loc_id = str(getattr(assignment, "storage_id", ""))
-                        if loc_id not in location_items:
-                            location_items[loc_id] = 0
-                        location_items[loc_id] += 1
-
-                    # Update location utilization
-                    for loc_id, count in location_items.items():
-                        if loc_id in location_utilization:
-                            location_utilization[loc_id]["utilized"] = count
-                            if location_utilization[loc_id]["capacity"] > 0:
-                                location_utilization[loc_id][
-                                    "utilization_percentage"
-                                ] = round(
-                                    (count / location_utilization[loc_id]["capacity"])
-                                    * 100,
-                                    1,
-                                )
-
-                    # Recalculate total utilized
-                    total_utilized = sum(location_items.values())
-                    result["total_utilized"] = total_utilized
-
-                    # Update type and section utilization
-                    for loc in locations:
-                        loc_id = str(loc.id)
-                        if loc_id in location_items:
-                            loc_type = loc.type
-                            if hasattr(loc_type, "value"):
-                                loc_type = loc_type.value
-
-                            if loc_type in by_type:
-                                by_type[loc_type]["utilized"] += location_items[loc_id]
-
-                            loc_section = loc.section or "Unknown"
-                            if loc_section in by_section:
-                                by_section[loc_section]["utilized"] += location_items[
-                                    loc_id
-                                ]
-                else:
-                    # Use the original total_utilized
-                    result["total_utilized"] = total_utilized
-
-            except Exception as e:
-                logger.error(f"Error calculating items from assignments: {e}")
-                # If there was an error, still try to use the original utilized value
-                result["total_items"] = total_utilized
-                result["total_utilized"] = total_utilized
-
-            # Update results
-            result["total_capacity"] = total_capacity
-            result["total_utilized"] = total_utilized
-
-            if total_capacity > 0:
-                usage_pct = (total_utilized / total_capacity) * 100
-                result["utilization_percentage"] = round(usage_pct, 1)
-                result["overall_usage_percentage"] = round(usage_pct, 1)
-
-            # Calculate type utilization percentages
-            for type_name, data in by_type.items():
-                if data["capacity"] > 0:
-                    data["utilization_percentage"] = round(
-                        (data["utilized"] / data["capacity"]) * 100, 1
-                    )
-
-            # Calculate section utilization percentages
-            for section_name, data in by_section.items():
-                if data["capacity"] > 0:
-                    data["utilization_percentage"] = round(
-                        (data["utilized"] / data["capacity"]) * 100, 1
-                    )
-
-            result["by_type"] = by_type
-            result["by_section"] = by_section
-            result["locations_by_type"] = locations_by_type
-            result["locations_by_section"] = locations_by_section
-
-            # Sort locations by utilization for most/least utilized reports
-            sorted_locations = sorted(
-                location_utilization.values(),
-                key=lambda x: x["utilization_percentage"],
-                reverse=True,
-            )
-
-            # Most utilized locations (top 5)
-            result["most_utilized_locations"] = sorted_locations[:5]
-
-            # Least utilized locations (bottom 5, excluding empty ones)
-            result["least_utilized_locations"] = [
-                loc
-                for loc in reversed(sorted_locations)
-                if loc["capacity"] > 0 and loc["utilization_percentage"] > 0
-            ][:5]
-
-            # Add recommendations
-            usage_pct = result["utilization_percentage"]
-            if usage_pct > 80:
-                result["recommendations"].append("Consider expanding storage capacity")
-            elif usage_pct < 30:
-                result["recommendations"].append("Consider consolidating storage")
-
-            if result["locations_at_capacity"] > 0:
-                result["recommendations"].append(
-                    f"Address {result['locations_at_capacity']} locations at or near capacity"
-                )
-
-            if result["locations_nearly_empty"] > 0:
-                result["recommendations"].append(
-                    f"Review {result['locations_nearly_empty']} nearly empty locations"
-                )
-
-            logger.info(
-                f"Generated storage occupancy report: {result['total_locations']} locations, "
-                f"{result['utilization_percentage']}% utilized, {result['total_items']} items stored"
-            )
-            return result
 
         except Exception as e:
-            logger.error(f"Error in storage occupancy report: {e}")
-            import traceback
+            logger.error(f"Error applying settings to storage locations: {str(e)}")
 
-            logger.error(traceback.format_exc())
+        return locations
+
+    def _get_card_properties(self, location: StorageLocation, max_props: int) -> List[Dict]:
+        """
+        Get properties for card view based on settings.
+        Similar to DynamicMaterialService._get_card_properties().
+        """
+        card_props = []
+
+        # Add basic location properties first
+        if location.capacity is not None:
+            card_props.append({
+                "name": "Capacity",
+                "value": f"{location.utilized or 0}/{location.capacity}",
+                "type": "capacity"
+            })
+
+        if location.section:
+            card_props.append({
+                "name": "Section",
+                "value": location.section,
+                "type": "section"
+            })
+
+        # Add custom properties if available
+        if hasattr(location, 'property_values') and location.property_values:
+            for prop_value in location.property_values:
+                # Check if should be displayed in card view
+                show_in_card = True
+
+                # Check if storage location type defines display rules for this property
+                if (hasattr(location, 'storage_location_type') and
+                        location.storage_location_type and
+                        hasattr(location.storage_location_type, 'properties')):
+                    for type_prop in location.storage_location_type.properties:
+                        if hasattr(type_prop, 'property_id') and type_prop.property_id == prop_value.property_id:
+                            if hasattr(type_prop, 'is_displayed_in_card'):
+                                show_in_card = type_prop.is_displayed_in_card
+
+                if show_in_card:
+                    # Get property definition if available
+                    prop_def = getattr(prop_value, 'property', None)
+
+                    card_props.append({
+                        "id": getattr(prop_value, 'id', None),
+                        "property_id": prop_value.property_id,
+                        "name": getattr(prop_def, 'name', f"Property {prop_value.property_id}"),
+                        "value": self._get_property_value(prop_value),
+                        "type": "custom"
+                    })
+
+                    if len(card_props) >= max_props:
+                        break
+
+        return card_props[:max_props]
+
+    def _get_property_value(self, prop_value):
+        """
+        Extract property value from a StorageLocationPropertyValue object.
+        Same pattern as DynamicMaterialService._get_property_value().
+        """
+        # Try to get the value based on data type
+        if hasattr(prop_value, 'value_string') and prop_value.value_string is not None:
+            return prop_value.value_string
+        elif hasattr(prop_value, 'value_number') and prop_value.value_number is not None:
+            return prop_value.value_number
+        elif hasattr(prop_value, 'value_boolean') and prop_value.value_boolean is not None:
+            return "Yes" if prop_value.value_boolean else "No"
+        elif hasattr(prop_value, 'value_date') and prop_value.value_date is not None:
+            return prop_value.value_date
+        elif hasattr(prop_value, 'value_enum_id') and prop_value.value_enum_id is not None:
+            return prop_value.value_enum_id
+        elif hasattr(prop_value, 'value') and prop_value.value is not None:
+            return prop_value.value
+        else:
+            return None
+
+    @validate_input(validate_storage_location)
+    def create_storage_location(
+            self,
+            data: Dict[str, Any],
+            user_id: Optional[int] = None
+    ) -> StorageLocation:
+        """
+        Create a new storage location with dynamic properties.
+        Follows the same pattern as DynamicMaterialService.create_material().
+
+        Args:
+            data: Storage location data including property values
+            user_id: Optional ID of user creating the storage location
+
+        Returns:
+            Created storage location
+
+        Raises:
+            ValidationException: If storage location data is invalid
+            EntityNotFoundException: If storage location type not found
+        """
+        # Add created_by if provided
+        if user_id:
+            data["created_by"] = user_id
+
+        # Validate required fields
+        required_fields = ["storage_location_type_id", "name"]
+        for field in required_fields:
+            if not data.get(field):
+                raise ValidationException(f"Field '{field}' is required")
+
+        # Get storage location type to validate property values
+        storage_location_type_id = data.get("storage_location_type_id")
+        storage_location_type = None
+        if self.storage_location_type_service:
+            storage_location_type = self.storage_location_type_service.get_storage_location_type(
+                storage_location_type_id)
+        else:
+            # Fallback to direct query
+            storage_location_type = self.session.query(StorageLocationType).get(storage_location_type_id)
+
+        if not storage_location_type:
+            raise EntityNotFoundException(f"Storage location type with ID {storage_location_type_id} not found")
+
+        # Check for duplicate name in the same section
+        section = data.get("section")
+        name = data.get("name", "")
+
+        if self._location_exists_by_name_and_section(name, section):
+            raise DuplicateEntityException(
+                f"Storage location with name '{name}' already exists in section '{section}'"
+            )
+
+        # Set default values if not provided
+        if "status" not in data:
+            data["status"] = "ACTIVE"
+
+        if "utilized" not in data:
+            data["utilized"] = 0
+
+        # Validate and format property values
+        property_values = data.get("property_values", [])
+        if self.property_service:
+            # Get type properties
+            type_properties = []
+            for loc_type_prop in storage_location_type.properties:
+                prop_def = self.property_service.get_property_definition(loc_type_prop.property_id)
+                if prop_def:
+                    type_properties.append((loc_type_prop, prop_def))
+
+            # Check required properties
+            for type_prop, prop_def in type_properties:
+                if type_prop.is_required and not any(pv.get("property_id") == prop_def.id for pv in property_values):
+                    raise ValidationException(f"Required property '{prop_def.name}' missing")
+
+            # Validate property values
+            validated_properties = []
+            for property_value in property_values:
+                property_id = property_value.get("property_id")
+
+                # Skip if property is not part of this storage location type
+                if not any(tp.property_id == property_id for tp, _ in type_properties):
+                    continue
+
+                value = property_value.get("value")
+
+                # Find property definition
+                prop_def = next((pd for _, pd in type_properties if pd.id == property_id), None)
+                if not prop_def:
+                    continue
+
+                # Validate value
+                if not self.property_service.validate_property_value(property_id, value):
+                    raise ValidationException(f"Invalid value for property '{prop_def.name}'")
+
+                validated_properties.append({
+                    "property_id": property_id,
+                    "value": value
+                })
+
+            # Update property values with validated ones
+            data["property_values"] = validated_properties
+
+        with self.transaction():
+            # Create storage location with property values
+            location = self.repository.create_with_properties(data)
+
+            # Create cells if dimensions are provided
+            dimensions = data.get("dimensions")
+            if dimensions and isinstance(dimensions, dict):
+                self._create_cells_for_location(location.id, dimensions)
+
+            # Publish event if event bus exists
+            if self.event_bus:
+                user_id_for_event = user_id or (
+                    self.security_context.current_user.id
+                    if self.security_context and hasattr(self.security_context, 'current_user')
+                    else None
+                )
+                self.event_bus.publish(
+                    StorageLocationCreated(
+                        location_id=str(location.id),
+                        location_name=location.name,
+                        location_type_id=storage_location_type_id,
+                        user_id=user_id_for_event,
+                    )
+                )
+
+            # Invalidate cache if needed
+            if self.cache_service:
+                self.cache_service.invalidate_pattern("storage_locations:*")
+                if storage_location_type_id:
+                    self.cache_service.invalidate_pattern(f"storage_locations:type:{storage_location_type_id}:*")
+
+            return location
+
+    def update_storage_location(
+            self,
+            id: str,
+            data: Dict[str, Any],
+            user_id: Optional[int] = None
+    ) -> Optional[StorageLocation]:
+        """
+        Update an existing storage location.
+
+        Args:
+            id: ID of the storage location to update
+            data: Updated storage location data
+            user_id: Optional ID of the user performing the update
+
+        Returns:
+            Updated storage location if found, None otherwise
+
+        Raises:
+            ValidationException: If storage location data is invalid
+        """
+        with self.transaction():
+            # Get existing location
+            location = self.repository.get_by_id_with_properties(id)
+            if not location:
+                return None
+
+            # Cannot change storage location type
+            if "storage_location_type_id" in data and data[
+                "storage_location_type_id"] != location.storage_location_type_id:
+                raise ValidationException("Cannot change storage location type")
+
+            # Validate property values if provided
+            if "property_values" in data and self.property_service:
+                property_values = data["property_values"]
+
+                # Get storage location type properties
+                storage_location_type = location.storage_location_type
+                type_properties = []
+                for loc_type_prop in storage_location_type.properties:
+                    prop_def = self.property_service.get_property_definition(loc_type_prop.property_id)
+                    if prop_def:
+                        type_properties.append((loc_type_prop, prop_def))
+
+                # Check required properties
+                for type_prop, prop_def in type_properties:
+                    if type_prop.is_required and not any(
+                            pv.get("property_id") == prop_def.id for pv in property_values):
+                        # Check if there's an existing value
+                        existing_value = next((pv for pv in location.property_values if pv.property_id == prop_def.id),
+                                              None)
+                        if not existing_value:
+                            raise ValidationException(f"Required property '{prop_def.name}' missing")
+
+                # Validate property values
+                validated_properties = []
+                for property_value in property_values:
+                    property_id = property_value.get("property_id")
+
+                    # Skip if property is not part of this storage location type
+                    if not any(tp.property_id == property_id for tp, _ in type_properties):
+                        continue
+
+                    value = property_value.get("value")
+
+                    # Find property definition
+                    prop_def = next((pd for _, pd in type_properties if pd.id == property_id), None)
+                    if not prop_def:
+                        continue
+
+                    # Validate value
+                    if not self.property_service.validate_property_value(property_id, value):
+                        raise ValidationException(f"Invalid value for property '{prop_def.name}'")
+
+                    validated_properties.append({
+                        "property_id": property_id,
+                        "value": value
+                    })
+
+                # Update property values with validated ones
+                data["property_values"] = validated_properties
+
+            # Update storage location
+            updated_location = self.repository.update_with_properties(id, data)
+
+            # Invalidate cache if needed
+            if self.cache_service:
+                self.cache_service.invalidate(f"storage_locations:{id}")
+                self.cache_service.invalidate_pattern("storage_locations:*")
+                self.cache_service.invalidate_pattern(f"storage_locations:type:{location.storage_location_type_id}:*")
+
+            return updated_location
+
+    def delete_storage_location(self, id: str, user_id: Optional[int] = None) -> bool:
+        """
+        Delete a storage location.
+
+        Args:
+            id: ID of the storage location to delete
+            user_id: Optional ID of the user performing the deletion
+
+        Returns:
+            True if deleted, False otherwise
+        """
+        with self.transaction():
+            # Get location
+            location = self.repository.get_by_id(id)
+            if not location:
+                return False
+
+            # Check if location has any assignments
+            assignments = self.assignment_repository.get_assignments_by_storage(id)
+            if assignments:
+                raise BusinessRuleException(
+                    f"Cannot delete storage location '{location.name}' as it has {len(assignments)} active assignments"
+                )
+
+            # Get storage location type ID for cache invalidation
+            storage_location_type_id = location.storage_location_type_id
+
+            # Delete location
+            result = self.repository.delete(id)
+
+            # Publish event if successful
+            if result and self.event_bus:
+                user_id_for_event = user_id or (
+                    self.security_context.current_user.id
+                    if self.security_context and hasattr(self.security_context, 'current_user')
+                    else None
+                )
+                self.event_bus.publish(
+                    StorageLocationDeleted(
+                        location_id=id,
+                        user_id=user_id_for_event,
+                    )
+                )
+
+            # Invalidate cache if needed
+            if self.cache_service and result:
+                self.cache_service.invalidate(f"storage_locations:{id}")
+                self.cache_service.invalidate_pattern("storage_locations:*")
+                self.cache_service.invalidate_pattern(f"storage_locations:type:{storage_location_type_id}:*")
+
             return result
 
     def _location_exists_by_name_and_section(
-        self, name: str, section: Optional[str]
+            self, name: str, section: Optional[str]
     ) -> bool:
         """
         Check if a storage location exists with the given name and section.
@@ -1416,310 +780,8 @@ class StorageLocationService(BaseService[StorageLocation]):
         existing_locations = self.repository.list(**filters)
         return len(existing_locations) > 0
 
-    def get_storage_assignments(
-        self, item_id=None, item_type=None, location_id=None, skip=0, limit=100
-    ):
-        """
-        Get storage assignments with pagination.
-
-        Args:
-            item_id: Optional filter by item ID
-            item_type: Optional filter by item type
-            location_id: Optional filter by storage location ID
-            skip: Number of records to skip
-            limit: Maximum number of records to return
-
-        Returns:
-            List of storage assignments with properly formatted fields
-        """
-        logger.info(
-            f"Getting storage assignments with filters: item_id={item_id}, item_type={item_type}, location_id={location_id}"
-        )
-
-        try:
-            # Set a safe limit to prevent memory errors
-            MAX_RESULTS = 500
-            actual_limit = min(limit, MAX_RESULTS)
-
-            # Build filters dictionary
-            filters = {}
-            if item_id is not None:
-                filters["material_id"] = item_id
-            if item_type is not None:
-                filters["material_type"] = item_type
-            if location_id is not None:
-                filters["storage_id"] = location_id
-
-            # Use repository method with pagination
-            assignments_db = self.assignment_repository.list(
-                skip=skip, limit=actual_limit, **filters
-            )
-
-            # Process assignments for API
-            assignments = []
-            for assignment in assignments_db:
-                formatted = self._format_assignment_for_api(assignment)
-
-                # Add material details if available
-                if self.material_service and formatted["material_id"]:
-                    try:
-                        material = self.material_service.get_by_id(
-                            formatted["material_id"]
-                        )
-                        if material:
-                            formatted["material_name"] = material.name
-                            formatted["material_unit"] = material.unit
-                    except Exception as material_err:
-                        logger.error(f"Error getting material info: {material_err}")
-
-                assignments.append(formatted)
-
-            logger.info(f"Retrieved {len(assignments)} storage assignments")
-            return assignments
-
-        except Exception as e:
-            logger.error(f"Error fetching storage assignments: {e}")
-            import traceback
-
-            logger.error(traceback.format_exc())
-            return []  # Return empty list on error
-
-    def get_storage_location_with_details(self, location_id: str) -> Dict[str, Any]:
-        """
-        Get a storage location with comprehensive details.
-
-        Args:
-            location_id: ID of the storage location
-
-        Returns:
-            Storage location with cells, assignments, and space utilization
-
-        Raises:
-            StorageLocationNotFoundException: If location not found
-        """
-        # Check cache first
-        if self.cache_service:
-            cache_key = f"StorageLocation:detail:{location_id}"
-            cached = self.cache_service.get(cache_key)
-            if cached:
-                return cached
-
-        # Get location
-        location = self.get_storage_location(location_id)
-        if not location:
-            raise StorageLocationNotFoundException(location_id)
-
-        # Get cells from repository
-        try:
-            cells = self.cell_repository.list(storage_id=location_id)
-            location["cells"] = [self._format_cell_for_api(cell) for cell in cells]
-        except Exception as e:
-            logger.error(f"Error getting cells for location {location_id}: {e}")
-            location["cells"] = []
-
-        # Get assignments from repository
-        try:
-            assignments = self.assignment_repository.list(storage_id=location_id)
-
-            processed_assignments = []
-            for assignment in assignments:
-                formatted = self._format_assignment_for_api(assignment)
-
-                # Add material details if available
-                if self.material_service and formatted["material_id"]:
-                    try:
-                        material = self.material_service.get_by_id(
-                            formatted["material_id"]
-                        )
-                        if material:
-                            formatted["material_name"] = material.name
-                            formatted["material_unit"] = material.unit
-                    except Exception as material_err:
-                        logger.error(f"Error getting material info: {material_err}")
-
-                processed_assignments.append(formatted)
-
-            location["assignments"] = processed_assignments
-        except Exception as e:
-            logger.error(f"Error getting assignments for location {location_id}: {e}")
-            location["assignments"] = []
-
-        # Calculate utilization statistics
-        location["utilization_stats"] = self._calculate_utilization_statistics(
-            location_id
-        )
-
-        # Get recent moves
-        try:
-            # Get moves involving this location using repository
-            source_moves = self.move_repository.list(
-                from_storage_id=location_id,
-                limit=10,
-                order_by="move_date",
-                order_dir="desc",
-            )
-
-            dest_moves = self.move_repository.list(
-                to_storage_id=location_id,
-                limit=10,
-                order_by="move_date",
-                order_dir="desc",
-            )
-
-            # Combine and sort
-            all_moves = sorted(
-                list(source_moves) + list(dest_moves),
-                key=lambda x: x.move_date if x.move_date else datetime.min,
-                reverse=True,
-            )[:10]
-
-            # Format moves for API
-            moves = []
-            for move in all_moves:
-                formatted = self._format_move_for_api(move)
-
-                # Add direction indicator
-                formatted["direction"] = (
-                    "outgoing"
-                    if formatted["from_location_id"] == location_id
-                    else "incoming"
-                )
-
-                # Add material details if available
-                if self.material_service and formatted["material_id"]:
-                    try:
-                        material = self.material_service.get_by_id(
-                            formatted["material_id"]
-                        )
-                        if material:
-                            formatted["material_name"] = material.name
-                    except Exception as material_err:
-                        logger.error(
-                            f"Error getting material info for move: {material_err}"
-                        )
-
-                # Add location names
-                try:
-                    from_loc = self.get_storage_location(formatted["from_location_id"])
-                    if from_loc:
-                        formatted["from_location_name"] = from_loc["name"]
-                except:
-                    formatted["from_location_name"] = "Unknown"
-
-                try:
-                    to_loc = self.get_storage_location(formatted["to_location_id"])
-                    if to_loc:
-                        formatted["to_location_name"] = to_loc["name"]
-                except:
-                    formatted["to_location_name"] = "Unknown"
-
-                moves.append(formatted)
-
-            location["recent_moves"] = moves
-        except Exception as e:
-            logger.error(f"Error getting moves for location {location_id}: {e}")
-            location["recent_moves"] = []
-
-        # Store in cache if cache service exists
-        if self.cache_service:
-            self.cache_service.set(cache_key, location, ttl=3600)  # 1 hour TTL
-
-        return location
-
-    def delete_storage_location(
-        self, location_id: str, user_id: Optional[int] = None
-    ) -> None:
-        """
-        Delete a storage location.
-
-        Args:
-            location_id: ID of the storage location to delete
-            user_id: Optional ID of the user deleting the location
-
-        Raises:
-            StorageLocationNotFoundException: If location not found
-            BusinessRuleException: If deletion violates business rules
-        """
-        with self.transaction():
-            # Check if location exists
-            location = self.repository.get_by_id(location_id)
-            if not location:
-                raise StorageLocationNotFoundException(location_id)
-
-            # Check for existing assignments that would prevent deletion
-            assignments = self.assignment_repository.list(storage_id=location_id)
-            if assignments:
-                raise BusinessRuleException(
-                    f"Cannot delete storage location {location_id} because it has {len(assignments)} assignments",
-                    "STORAGE_DELETE_HAS_ASSIGNMENTS",
-                )
-
-            # Delete the location
-            self.repository.delete(location_id)
-
-            # Invalidate cache if cache service exists
-            if self.cache_service:
-                self.cache_service.invalidate(f"StorageLocation:{location_id}")
-                self.cache_service.invalidate(f"StorageLocation:detail:{location_id}")
-
-            # Publish event if event bus exists
-            if self.event_bus:
-                user_id_for_event = user_id or (
-                    self.security_context.current_user.id
-                    if self.security_context
-                    else None
-                )
-                # You'll need to add this event class at the top with other events
-                self.event_bus.publish(
-                    StorageLocationDeleted(
-                        location_id=location_id,
-                        user_id=user_id_for_event,
-                    )
-                )
-
-    def _format_cell_for_api(self, cell):
-        """
-        Format a storage cell for API response.
-
-        Args:
-            cell: StorageCell model instance
-
-        Returns:
-            Dictionary of formatted cell data
-        """
-        if not cell:
-            return None
-
-        # Create base result with safe defaults
-        result = {
-            "id": str(getattr(cell, "id", "")),
-            "storage_id": str(getattr(cell, "storage_id", "")),
-            "position": {"row": 1, "column": 1},
-            "occupied": bool(getattr(cell, "occupied", False)),
-            "material_id": getattr(cell, "material_id", None),
-        }
-
-        # Handle position data
-        position = getattr(cell, "position", None)
-        if position:
-            # Parse JSON string
-            if isinstance(position, str):
-                try:
-                    import json
-
-                    parsed_position = json.loads(position)
-                    if isinstance(parsed_position, dict):
-                        result["position"] = parsed_position
-                except:
-                    pass
-            # Use dict directly
-            elif isinstance(position, dict):
-                result["position"] = position
-
-        return result
-
     def _create_cells_for_location(
-        self, location_id: str, dimensions: Dict[str, Any]
+            self, location_id: str, dimensions: Dict[str, Any]
     ) -> None:
         """
         Create storage cells for a location based on dimensions.
@@ -1750,107 +812,703 @@ class StorageLocationService(BaseService[StorageLocation]):
 
                 self.cell_repository.create(cell_data)
 
-    @validate_input(validate_storage_location)
-    def create_storage_location(
-        self, data: Dict[str, Any], user_id: Optional[int] = None
-    ) -> StorageLocation:
+    # Additional methods following the original service patterns but updated for dynamic system
+    def get_storage_cells(self, location_id: str, occupied: Optional[bool] = None) -> List[Dict[str, Any]]:
         """
-        Create a new storage location.
+        Get cells for a storage location with optional filter and material information.
         """
-        with self.transaction():
-            # Check for duplicate name in the same section
-            section = data.get("section")
-            name = data.get("name", "")
+        logger.info(f"Getting cells for storage location ID: {location_id}")
 
-            if self._location_exists_by_name_and_section(name, section):
-                raise DuplicateEntityException(
-                    f"Storage location with name '{name}' already exists in section '{section}'",
-                    "STORAGE_001",
-                    {"field": "name", "value": name, "section": section},
+        try:
+            # Query cells directly from repository with material relationships
+            cells = self.cell_repository.get_cells_by_storage(location_id)
+
+            # Format cells for API
+            formatted_cells = []
+            for cell in cells:
+                # Basic cell info
+                cell_data = {
+                    "id": str(getattr(cell, "id", "")),
+                    "storage_id": str(getattr(cell, "storage_id", location_id)),
+                    "occupied": bool(getattr(cell, "occupied", False)),
+                    "material_id": getattr(cell, "material_id", None),
+                    "position": cell.position or {"row": 1, "column": 1},
+                }
+
+                # Add material information if available via relationship
+                if cell.material:
+                    cell_data["material"] = {
+                        "id": cell.material.id,
+                        "name": cell.material.name,
+                        "sku": cell.material.sku,
+                        "unit": cell.material.unit,
+                        "material_type": {
+                            "id": cell.material.material_type.id,
+                            "name": cell.material.material_type.name
+                        } if cell.material.material_type else None
+                    }
+
+                # Apply filter if specified
+                if occupied is None or cell_data["occupied"] == occupied:
+                    formatted_cells.append(cell_data)
+
+            logger.info(f"Retrieved {len(formatted_cells)} cells for location {location_id}")
+            return formatted_cells
+
+        except Exception as e:
+            logger.error(f"Error getting cells for location {location_id}: {e}")
+
+            # Generate a default grid as fallback
+            default_cells = []
+            for row in range(1, 5):
+                for col in range(1, 5):
+                    default_cells.append({
+                        "id": f"default_{location_id}_{row}_{col}",
+                        "storage_id": str(location_id),
+                        "position": {"row": row, "column": col},
+                        "occupied": False,
+                        "material_id": None,
+                    })
+
+            logger.warning(f"Returning default grid with {len(default_cells)} cells")
+            return default_cells
+
+    def get_storage_assignments(
+            self,
+            material_id: Optional[int] = None,
+            material_type_id: Optional[int] = None,
+            location_id: Optional[str] = None,
+            skip: int = 0,
+            limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        """
+        Get storage assignments with pagination using proper material relationships.
+        """
+        logger.info(
+            f"Getting storage assignments with filters: material_id={material_id}, "
+            f"material_type_id={material_type_id}, location_id={location_id}"
+        )
+
+        try:
+            # Set a safe limit to prevent memory errors
+            MAX_RESULTS = 500
+            actual_limit = min(limit, MAX_RESULTS)
+
+            # Use repository methods that leverage relationships
+            if material_id:
+                assignments_db = self.assignment_repository.get_assignments_by_material(material_id)
+            elif material_type_id:
+                assignments_db = self.assignment_repository.get_assignments_by_material_type(
+                    material_type_id, skip=skip, limit=actual_limit
+                )
+            elif location_id:
+                assignments_db = self.assignment_repository.get_assignments_by_storage(location_id)
+            else:
+                # Get all assignments with pagination
+                assignments_db = self.assignment_repository.list(
+                    skip=skip, limit=actual_limit
                 )
 
-            # Set default values if not provided
-            if "status" not in data:
-                data["status"] = "ACTIVE"
+            # Apply manual pagination if not already applied by repository
+            if not (material_type_id and skip == 0):
+                assignments_db = assignments_db[skip:skip + actual_limit]
 
-            if "utilized" not in data:
-                data["utilized"] = 0
+            # Process assignments for API
+            assignments = []
+            for assignment in assignments_db:
+                formatted = self._format_assignment_for_api(assignment)
+                assignments.append(formatted)
 
-            # Remove relationship fields that might cause issues
-            clean_data = {
-                k: v
-                for k, v in data.items()
-                if k not in ["cells", "assignments", "moves_from", "moves_to"]
+            logger.info(f"Retrieved {len(assignments)} storage assignments")
+            return assignments
+
+        except Exception as e:
+            logger.error(f"Error fetching storage assignments: {e}")
+            return []
+
+    def _format_assignment_for_api(self, assignment) -> Dict[str, Any]:
+        """
+        Format a storage assignment for API response using relationships.
+        """
+        if not assignment:
+            return None
+
+        # Create base result with safe defaults
+        result = {
+            "id": str(getattr(assignment, "id", "")),
+            "storage_id": str(getattr(assignment, "storage_id", "")),
+            "material_id": getattr(assignment, "material_id", None),
+            "quantity": float(getattr(assignment, "quantity", 0)),
+            "position": assignment.position,
+            "assigned_date": None,
+            "assigned_by": getattr(assignment, "assigned_by", None),
+            "notes": getattr(assignment, "notes", ""),
+        }
+
+        # Add material information via relationship
+        if assignment.material:
+            result["material"] = {
+                "id": assignment.material.id,
+                "name": assignment.material.name,
+                "unit": assignment.material.unit,
+                "sku": assignment.material.sku,
+                "status": assignment.material.status,
+                "material_type": {
+                    "id": assignment.material.material_type.id,
+                    "name": assignment.material.material_type.name
+                } if assignment.material.material_type else None
             }
 
-            # Create storage location
-            location = self.repository.create(clean_data)
+        # Add location information via relationship
+        if assignment.location:
+            result["location"] = {
+                "id": str(assignment.location.id),
+                "name": assignment.location.name,
+                "storage_location_type": {
+                    "id": assignment.location.storage_location_type.id,
+                    "name": assignment.location.storage_location_type.name,
+                    "icon": assignment.location.storage_location_type.icon,
+                    "color_scheme": assignment.location.storage_location_type.color_scheme
+                } if assignment.location.storage_location_type else None,
+                "section": assignment.location.section
+            }
 
-            # Create cells if dimensions are provided
-            if "dimensions" in data and isinstance(data["dimensions"], dict):
-                self._create_cells_for_location(location.id, data["dimensions"])
+        # Handle assigned date
+        assigned_date = getattr(assignment, "assigned_date", None)
+        if assigned_date:
+            if hasattr(assigned_date, "isoformat"):
+                result["assigned_date"] = assigned_date.isoformat()
+            else:
+                result["assigned_date"] = str(assigned_date)
 
-            if self._location_exists_by_name_and_section(name, section):
-                # Simplify the exception to only use the message
-                raise DuplicateEntityException(
-                    f"Storage location with name '{name}' already exists in section '{section}'"
+        return result
+
+    def get_storage_moves(
+            self,
+            skip: int = 0,
+            limit: int = 100,
+            material_id: Optional[int] = None,
+            material_type_id: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Get storage moves with optional filtering and pagination using relationships.
+        """
+        logger.info(
+            f"Getting storage moves with filters: material_id={material_id}, "
+            f"material_type_id={material_type_id}"
+        )
+
+        try:
+            # Use repository methods that leverage relationships
+            if material_id:
+                moves = self.move_repository.get_moves_by_material(
+                    material_id, skip=skip, limit=limit
+                )
+            elif material_type_id:
+                moves = self.move_repository.get_moves_by_material_type(
+                    material_type_id, skip=skip, limit=limit
+                )
+            else:
+                moves = self.move_repository.list(skip=skip, limit=limit)
+
+            # Format moves for API
+            formatted_moves = []
+            for move in moves:
+                formatted = self._format_move_for_api(move)
+                formatted_moves.append(formatted)
+
+            logger.info(f"Retrieved {len(formatted_moves)} storage moves")
+            return formatted_moves
+
+        except Exception as e:
+            logger.error(f"Error retrieving storage moves: {e}")
+            return []
+
+    def _format_move_for_api(self, move) -> Dict[str, Any]:
+        """
+        Format a storage move for API response using relationships.
+        """
+        if not move:
+            return None
+
+        result = {
+            "id": str(getattr(move, "id", "")),
+            "material_id": getattr(move, "material_id", None),
+            "from_storage_id": str(getattr(move, "from_storage_id", "")),
+            "to_storage_id": str(getattr(move, "to_storage_id", "")),
+            "quantity": float(getattr(move, "quantity", 0)),
+            "move_date": getattr(move, "move_date", None),
+            "moved_by": getattr(move, "moved_by", None),
+            "reason": getattr(move, "reason", None),
+            "notes": getattr(move, "notes", None),
+        }
+
+        # Add material information via relationship
+        if move.material:
+            result["material"] = {
+                "id": move.material.id,
+                "name": move.material.name,
+                "unit": move.material.unit,
+                "sku": move.material.sku,
+                "material_type": {
+                    "id": move.material.material_type.id,
+                    "name": move.material.material_type.name
+                } if move.material.material_type else None
+            }
+
+        # Add location information via relationships
+        if move.from_location:
+            result["from_location"] = {
+                "id": str(move.from_location.id),
+                "name": move.from_location.name,
+                "storage_location_type": {
+                    "name": move.from_location.storage_location_type.name
+                } if move.from_location.storage_location_type else None
+            }
+
+        if move.to_location:
+            result["to_location"] = {
+                "id": str(move.to_location.id),
+                "name": move.to_location.name,
+                "storage_location_type": {
+                    "name": move.to_location.storage_location_type.name
+                } if move.to_location.storage_location_type else None
+            }
+
+        return result
+
+    def create_storage_assignment(
+            self,
+            assignment_data: Dict[str, Any],
+            user_id: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        Create a new storage assignment with proper material validation.
+        """
+        with self.transaction():
+            # Extract data
+            assignment_dict = (
+                assignment_data.dict()
+                if hasattr(assignment_data, "dict")
+                else dict(assignment_data)
+            )
+
+            # Validate material exists using proper query
+            material_id = assignment_dict.get("material_id")
+            if material_id:
+                material = self.session.query(DynamicMaterial).get(material_id)
+                if not material:
+                    raise EntityNotFoundException(f"Material with ID {material_id} not found")
+
+            # Validate storage location exists
+            storage_id = assignment_dict.get("storage_id")
+            if storage_id:
+                location = self.repository.get_by_id(storage_id)
+                if not location:
+                    raise EntityNotFoundException(f"Storage location with ID {storage_id} not found")
+
+            # Add assigned_by if provided
+            if user_id and "assigned_by" not in assignment_dict:
+                assignment_dict["assigned_by"] = str(user_id)
+
+            # Set assigned date if not provided
+            if "assigned_date" not in assignment_dict:
+                assignment_dict["assigned_date"] = datetime.now().isoformat()
+
+            # Create assignment
+            assignment = self.assignment_repository.create(assignment_dict)
+
+            # Update location utilization
+            quantity = assignment_dict.get("quantity", 0)
+            if location and quantity > 0:
+                current_utilized = location.utilized or 0
+                self.repository.update(
+                    storage_id, {"utilized": current_utilized + 1}  # Count as 1 item regardless of quantity
                 )
 
             # Publish event if event bus exists
             if self.event_bus:
                 user_id_for_event = user_id or (
                     self.security_context.current_user.id
-                    if self.security_context
+                    if self.security_context and hasattr(self.security_context, 'current_user')
                     else None
                 )
                 self.event_bus.publish(
-                    StorageLocationCreated(
-                        location_id=location.id,
-                        location_name=location.name,
-                        location_type=location.type,
+                    StorageAssignmentCreated(
+                        assignment_id=str(assignment.id),
+                        material_id=material_id,
+                        location_id=storage_id,
+                        quantity=quantity,
                         user_id=user_id_for_event,
                     )
                 )
 
-            # Ensure ID is string for API compatibility
-            location_formatted = self._format_location_for_api(location)
+            # Invalidate cache if needed
+            if self.cache_service:
+                self.cache_service.invalidate_pattern("storage_assignments:*")
+                self.cache_service.invalidate_pattern("storage_locations:*")
 
-            return location_formatted
-
-    def update_storage_utilization_from_materials(self):
-        """
-        Synchronize storage utilization counts based on material assignments.
-
-        This method scans all materials with storage location assignments and
-        updates the 'utilized' count for each storage location accordingly.
-
-        Returns:
-            bool: True if synchronization was successful
-        """
-        logger.info("Synchronizing storage utilization from material assignments")
-
-        try:
-            # Get all materials with storage locations
-            from app.db.models.material import Material
-
-            materials_with_location = (
-                self.session.query(Material)
-                .filter(Material.storage_location.isnot(None))
-                .all()
-            )
+            # Format assignment for API response
+            formatted_assignment = self._format_assignment_for_api(assignment)
 
             logger.info(
-                f"Found {len(materials_with_location)} materials with storage assignments"
+                f"Created storage assignment for material {material_id} in location {storage_id}"
+            )
+            return formatted_assignment
+
+    def create_storage_move(
+            self,
+            move_data: Dict[str, Any],
+            user_id: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        Create a new storage move with proper material validation.
+        """
+        with self.transaction():
+            # Extract data
+            move_dict = move_data.dict() if hasattr(move_data, "dict") else dict(move_data)
+
+            # Validate material exists
+            material_id = move_dict.get("material_id")
+            if material_id:
+                material = self.session.query(DynamicMaterial).get(material_id)
+                if not material:
+                    raise EntityNotFoundException(f"Material with ID {material_id} not found")
+
+            # Validate storage locations exist
+            from_storage_id = move_dict.get("from_storage_id")
+            to_storage_id = move_dict.get("to_storage_id")
+
+            if from_storage_id:
+                from_location = self.repository.get_by_id(from_storage_id)
+                if not from_location:
+                    raise EntityNotFoundException(f"Source storage location with ID {from_storage_id} not found")
+
+            if to_storage_id:
+                to_location = self.repository.get_by_id(to_storage_id)
+                if not to_location:
+                    raise EntityNotFoundException(f"Destination storage location with ID {to_storage_id} not found")
+
+            # Add moved_by if provided
+            if user_id and "moved_by" not in move_dict:
+                move_dict["moved_by"] = str(user_id)
+
+            # Set move date if not provided
+            if "move_date" not in move_dict:
+                move_dict["move_date"] = datetime.now().isoformat()
+
+            # Create move record
+            move = self.move_repository.create(move_dict)
+
+            # Execute the actual move (update assignments)
+            move.execute_move(self.session)
+
+            # Publish event if event bus exists
+            if self.event_bus:
+                user_id_for_event = user_id or (
+                    self.security_context.current_user.id
+                    if self.security_context and hasattr(self.security_context, 'current_user')
+                    else None
+                )
+                self.event_bus.publish(
+                    StorageMoveCreated(
+                        move_id=str(move.id),
+                        material_id=material_id,
+                        from_location_id=from_storage_id,
+                        to_location_id=to_storage_id,
+                        quantity=move_dict.get("quantity", 0),
+                        user_id=user_id_for_event,
+                    )
+                )
+
+            # Invalidate cache if needed
+            if self.cache_service:
+                self.cache_service.invalidate_pattern("storage_moves:*")
+                self.cache_service.invalidate_pattern("storage_assignments:*")
+                self.cache_service.invalidate_pattern("storage_locations:*")
+
+            # Format move for API response
+            formatted_move = self._format_move_for_api(move)
+
+            logger.info(
+                f"Created storage move for material {material_id} from {from_storage_id} to {to_storage_id}"
+            )
+            return formatted_move
+
+    def delete_storage_assignment(
+            self,
+            assignment_id: str,
+            user_id: Optional[int] = None
+    ) -> bool:
+        """
+        Delete a storage assignment.
+        """
+        with self.transaction():
+            # Get assignment first to update location utilization
+            assignment = self.assignment_repository.get_by_id(assignment_id)
+            if not assignment:
+                return False
+
+            location_id = assignment.storage_id
+
+            # Delete assignment
+            result = self.assignment_repository.delete(assignment_id)
+
+            # Update location utilization
+            if result:
+                location = self.repository.get_by_id(location_id)
+                if location:
+                    current_utilized = location.utilized or 0
+                    new_utilized = max(0, current_utilized - 1)
+                    self.repository.update(location_id, {"utilized": new_utilized})
+
+            # Invalidate cache if needed
+            if self.cache_service and result:
+                self.cache_service.invalidate_pattern("storage_assignments:*")
+                self.cache_service.invalidate_pattern("storage_locations:*")
+
+            return result
+
+    def get_storage_occupancy_report(
+            self,
+            section: Optional[str] = None,
+            location_type_id: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        Generate a storage occupancy report with accurate utilization calculations.
+        Updated to use dynamic storage location types.
+        """
+        logger.info(
+            f"Generating storage occupancy report. Filters: section={section}, type_id={location_type_id}"
+        )
+
+        # Initialize results dictionary
+        result = {
+            "total_locations": 0,
+            "total_capacity": 0.0,
+            "total_utilized": 0.0,
+            "total_items": 0,
+            "utilization_percentage": 0.0,
+            "overall_usage_percentage": 0.0,
+            "items_by_type": {},
+            "by_type": {},
+            "by_section": {},
+            "locations_by_type": {},
+            "locations_by_section": {},
+            "locations_at_capacity": 0,
+            "locations_nearly_empty": 0,
+            "most_utilized_locations": [],
+            "least_utilized_locations": [],
+            "recommendations": [],
+        }
+
+        try:
+            # Get locations with filters
+            filters = {}
+            if section:
+                filters["section"] = section
+            if location_type_id:
+                filters["storage_location_type_id"] = location_type_id
+
+            locations, _ = self.get_storage_locations(
+                skip=0, limit=10000, apply_settings=False, **filters
+            )
+            result["total_locations"] = len(locations)
+
+            if not locations:
+                logger.warning("No storage locations found matching criteria. Returning empty report.")
+                return result
+
+            # Process location statistics
+            total_capacity = 0.0
+            total_utilized = 0.0
+            by_type = {}
+            by_section = {}
+            locations_by_type = {}
+            locations_by_section = {}
+            location_utilization_details = {}
+            locations_at_capacity = 0
+            locations_nearly_empty = 0
+
+            for location in locations:
+                loc_id = str(location.id)
+                capacity = float(location.capacity or 0)
+                utilized = float(location.utilized or 0)
+
+                total_capacity += capacity
+                total_utilized += utilized
+
+                utilization_pct = (utilized / capacity * 100) if capacity > 0 else 0.0
+
+                # Store details for sorting later
+                location_utilization_details[loc_id] = {
+                    "id": loc_id,
+                    "name": location.name,
+                    "capacity": int(capacity),
+                    "utilized": int(utilized),
+                    "utilization_percentage": round(utilization_pct, 1),
+                }
+
+                # Group by storage location type
+                if location.storage_location_type:
+                    type_name = location.storage_location_type.name
+                    locations_by_type[type_name] = locations_by_type.get(type_name, 0) + 1
+
+                    type_stats = by_type.setdefault(type_name, {
+                        "capacity": 0.0,
+                        "utilized": 0.0,
+                        "locations": 0,
+                        "utilization_percentage": 0.0,
+                    })
+                    type_stats["capacity"] += capacity
+                    type_stats["utilized"] += utilized
+                    type_stats["locations"] += 1
+
+                # Group by section
+                section_name = location.section or "Unknown"
+                locations_by_section[section_name] = locations_by_section.get(section_name, 0) + 1
+
+                section_stats = by_section.setdefault(section_name, {
+                    "capacity": 0.0,
+                    "utilized": 0.0,
+                    "locations": 0,
+                    "utilization_percentage": 0.0,
+                })
+                section_stats["capacity"] += capacity
+                section_stats["utilized"] += utilized
+                section_stats["locations"] += 1
+
+                # Check capacity thresholds
+                if capacity > 0:
+                    if utilization_pct >= 95:
+                        locations_at_capacity += 1
+                    elif utilization_pct <= 10:
+                        locations_nearly_empty += 1
+
+            # Calculate material type distribution
+            try:
+                items_by_type_query = (
+                    self.session.query(
+                        MaterialType.name,
+                        func.count(StorageAssignment.material_id.distinct()).label("unique_materials"),
+                        func.sum(StorageAssignment.quantity).label("total_quantity")
+                    )
+                    .join(StorageAssignment.material)
+                    .join(DynamicMaterial.material_type)
+                    .group_by(MaterialType.name)
+                    .all()
+                )
+
+                items_by_type_calc = {}
+                total_items_count = 0
+
+                for material_type_name, unique_count, total_qty in items_by_type_query:
+                    type_name_lower = str(material_type_name).lower()
+                    items_by_type_calc[type_name_lower] = {
+                        "unique_materials": unique_count,
+                        "total_quantity": float(total_qty) if total_qty else 0.0
+                    }
+                    total_items_count += unique_count
+
+                result["items_by_type"] = items_by_type_calc
+                result["total_items"] = total_items_count
+
+            except Exception as e:
+                logger.error(f"Error calculating items_by_type: {e}")
+                result["items_by_type"] = {"error": "Calculation failed"}
+                result["total_items"] = 0
+
+            # Final calculations
+            result["total_capacity"] = total_capacity
+            result["total_utilized"] = total_utilized
+            result["locations_at_capacity"] = locations_at_capacity
+            result["locations_nearly_empty"] = locations_nearly_empty
+
+            if total_capacity > 0:
+                usage_pct = (total_utilized / total_capacity) * 100
+                result["utilization_percentage"] = round(usage_pct, 1)
+                result["overall_usage_percentage"] = round(usage_pct, 1)
+
+            # Calculate final percentages for breakdowns
+            for stats in by_type.values():
+                cap = stats.get("capacity", 0.0)
+                ut = stats.get("utilized", 0.0)
+                stats["utilization_percentage"] = round((ut / cap) * 100, 1) if cap > 0 else 0.0
+
+            for stats in by_section.values():
+                cap = stats.get("capacity", 0.0)
+                ut = stats.get("utilized", 0.0)
+                stats["utilization_percentage"] = round((ut / cap) * 100, 1) if cap > 0 else 0.0
+
+            result["by_type"] = by_type
+            result["by_section"] = by_section
+            result["locations_by_type"] = locations_by_type
+            result["locations_by_section"] = locations_by_section
+
+            # Sort locations by utilization
+            sorted_locations = sorted(
+                location_utilization_details.values(),
+                key=lambda x: x["utilization_percentage"],
+                reverse=True,
             )
 
-            # Count materials per location
+            result["most_utilized_locations"] = sorted_locations[:5]
+            result["least_utilized_locations"] = [
+                                                     loc for loc in reversed(sorted_locations)
+                                                     if loc["capacity"] > 0 and loc["utilization_percentage"] > 0
+                                                 ][:5]
+
+            # Generate recommendations
+            recommendations = []
+            usage_pct_final = result["utilization_percentage"]
+            if usage_pct_final > 85:
+                recommendations.append(
+                    "Overall utilization is high. Consider expanding storage or optimizing existing space."
+                )
+            elif usage_pct_final < 25:
+                recommendations.append(
+                    "Overall utilization is low. Consider consolidating storage."
+                )
+            if result["locations_at_capacity"] > 0:
+                recommendations.append(
+                    f"Address {result['locations_at_capacity']} locations at or near capacity (>=95%)."
+                )
+            if result["locations_nearly_empty"] > 0:
+                recommendations.append(
+                    f"Review {result['locations_nearly_empty']} nearly empty locations (<=10%) for potential consolidation."
+                )
+            result["recommendations"] = recommendations
+
+            logger.info("Generated storage occupancy report successfully.")
+            return result
+
+        except Exception as e:
+            logger.error(f"Error generating storage occupancy report: {e}", exc_info=True)
+            result["recommendations"] = ["Error generating report."]
+            return result
+
+    def update_storage_utilization_from_assignments(self) -> Dict[str, Any]:
+        """
+        Synchronize storage utilization counts based on material assignments.
+        """
+        logger.info("Synchronizing storage utilization from assignments")
+
+        try:
+            # Get all storage assignments
+            all_assignments = self.assignment_repository.list()
+            logger.info(f"Found {len(all_assignments)} storage assignments")
+
+            # Count assignments per location
             location_counts = {}
-            for material in materials_with_location:
-                loc_id = material.storage_location
-                location_counts[loc_id] = location_counts.get(loc_id, 0) + 1
+            for assignment in all_assignments:
+                loc_id = getattr(assignment, "storage_id", None)
+                if loc_id:
+                    location_counts[loc_id] = location_counts.get(loc_id, 0) + 1
 
             # Update each storage location's utilized count
             updated_count = 0
+            updated_locations = []
+
             for loc_id, count in location_counts.items():
                 try:
                     loc = self.repository.get_by_id(loc_id)
@@ -1862,215 +1520,31 @@ class StorageLocationService(BaseService[StorageLocation]):
                         self.repository.update(loc_id, {"utilized": count})
 
                         updated_count += 1
+                        updated_locations.append({
+                            "id": loc_id,
+                            "name": getattr(loc, "name", "Unknown"),
+                            "previous_count": previous_count,
+                            "new_count": count,
+                        })
+
                         logger.debug(
-                            f"Updated location {loc.name} (ID: {loc_id}): utilized from {previous_count} to {count}"
+                            f"Updated location {getattr(loc, 'name', 'Unknown')} (ID: {loc_id}): "
+                            f"utilized from {previous_count} to {count}"
                         )
                 except Exception as loc_error:
                     logger.error(f"Error updating location {loc_id}: {loc_error}")
 
-            logger.info(
-                f"Successfully updated utilization for {updated_count} storage locations"
-            )
-            return True
-
-        except Exception as e:
-            logger.error(f"Error synchronizing storage utilization: {e}")
-            import traceback
-
-            logger.error(traceback.format_exc())
-            return False
-
-    def update_storage_location(
-        self, location_id: str, data: Dict[str, Any], user_id: Optional[int] = None
-    ) -> StorageLocation:
-        """
-        Update an existing storage location.
-
-        Args:
-            location_id: ID of the storage location
-            data: Updated storage location data
-            user_id: Optional ID of the user updating the location
-
-        Returns:
-            Updated storage location entity
-
-        Raises:
-            StorageLocationNotFoundException: If location not found
-            ValidationException: If validation fails
-            DuplicateEntityException: If name change would create a duplicate
-        """
-        with self.transaction():
-            # Check if location exists
-            location = self.repository.get_by_id(location_id)
-            if not location:
-                raise StorageLocationNotFoundException(location_id)
-
-            # Check for duplicate name if changing name
-            if "name" in data and data["name"] != location.name and "section" in data:
-                if self._location_exists_by_name_and_section(
-                    data["name"], data["section"]
-                ):
-                    raise DuplicateEntityException(
-                        f"Storage location with name '{data['name']}' already exists in section '{data['section']}'",
-                        "STORAGE_001",
-                        {
-                            "field": "name",
-                            "value": data["name"],
-                            "section": data["section"],
-                        },
-                    )
-
-            # Check for capacity changes
-            previous_capacity = location.capacity
-            previous_utilized = location.utilized
-
-            # Update location
-            updated_location = self.repository.update(location_id, data)
-
-            # If capacity or utilization changed, publish event
-            if ("capacity" in data or "utilized" in data) and self.event_bus:
-                user_id_for_event = user_id or (
-                    self.security_context.current_user.id
-                    if self.security_context
-                    else None
-                )
-
-                # Get updated values from the repository result
-                new_capacity = (
-                    updated_location.capacity
-                    if hasattr(updated_location, "capacity")
-                    else 0
-                )
-                new_utilized = (
-                    updated_location.utilized
-                    if hasattr(updated_location, "utilized")
-                    else 0
-                )
-
-                self.event_bus.publish(
-                    StorageSpaceUpdated(
-                        location_id=location_id,
-                        previous_capacity=previous_capacity,
-                        new_capacity=new_capacity,
-                        previous_utilized=previous_utilized,
-                        new_utilized=new_utilized,
-                        user_id=user_id_for_event,
-                    )
-                )
-
-            # Invalidate cache if cache service exists
-            if self.cache_service:
-                self.cache_service.invalidate(f"StorageLocation:{location_id}")
-                self.cache_service.invalidate(f"StorageLocation:detail:{location_id}")
-
-            # Format for API response
-            updated_formatted = self._format_location_for_api(updated_location)
-
-            return updated_formatted
-
-    @validate_input(validate_storage_assignment)
-    def assign_material_to_location(
-        self, data: Dict[str, Any], user_id: Optional[int] = None
-    ) -> StorageAssignment:
-        """
-        Assign a material to a storage location.
-
-        Args:
-            data: Assignment data with material ID, location ID, quantity, etc.
-            user_id: Optional ID of the user making the assignment
-
-        Returns:
-            Created storage assignment entity
-
-        Raises:
-            ValidationException: If validation fails
-            StorageLocationNotFoundException: If location not found
-            MaterialNotFoundException: If material not found
-            StorageCapacityExceededException: If assignment would exceed location capacity
-        """
-        with self.transaction():
-            # Get location using repository
-            location_id = data.get("storage_id")
-            location = self.repository.get_by_id(location_id)
-            if not location:
-                raise StorageLocationNotFoundException(location_id)
-
-            # Check if material exists if material service is available
-            material_id = data.get("material_id")
-            if self.material_service and material_id:
-                material = self.material_service.get_by_id(material_id)
-                if not material:
-                    from app.core.exceptions import MaterialNotFoundException
-
-                    raise MaterialNotFoundException(material_id)
-
-            # Check capacity constraints
-            quantity = data.get("quantity", 0)
-            if not self._has_sufficient_capacity(location_id, quantity):
-                from app.core.exceptions import StorageCapacityExceededException
-
-                raise StorageCapacityExceededException(
-                    f"Assignment would exceed capacity of storage location {location_id}",
-                    "STORAGE_002",
-                    {
-                        "location_id": location_id,
-                        "current_utilized": location.utilized,
-                        "capacity": location.capacity,
-                        "requested_quantity": quantity,
-                    },
-                )
-
-            # Set assigned date and user if not provided
-            if "assigned_date" not in data:
-                data["assigned_date"] = datetime.now()
-
-            if "assigned_by" not in data and user_id:
-                data["assigned_by"] = str(user_id)
-            elif "assigned_by" not in data and self.security_context:
-                data["assigned_by"] = str(self.security_context.current_user.id)
-
-            # Create assignment
-            assignment = self.assignment_repository.create(data)
-
-            # Update location utilization
-            current_utilized = location.utilized or 0
-            self.repository.update(
-                location_id, {"utilized": current_utilized + quantity}
-            )
-
-            # Publish event if event bus exists
-            if self.event_bus:
-                user_id_for_event = user_id or (
-                    self.security_context.current_user.id
-                    if self.security_context
-                    else None
-                )
-                self.event_bus.publish(
-                    StorageAssignmentCreated(
-                        assignment_id=assignment.id,
-                        material_id=material_id,
-                        location_id=location_id,
-                        quantity=quantity,
-                        user_id=user_id_for_event,
-                    )
-                )
-
-            # Update material's storage location if material service is available
-            if self.material_service and hasattr(
-                self.material_service, "update_storage_location"
-            ):
-                self.material_service.update_storage_location(
-                    material_id=material_id, storage_location_id=location_id
-                )
-
             # Invalidate cache
             if self.cache_service:
-                self.cache_service.invalidate(f"StorageLocation:detail:{location_id}")
+                self.cache_service.invalidate_pattern("storage_locations:*")
 
-            # Format assignment for API response
-            formatted_assignment = self._format_assignment_for_api(assignment)
+            logger.info(f"Successfully updated utilization for {updated_count} storage locations")
 
-            logger.info(
-                f"Created storage assignment for material {material_id} in location {location_id}"
-            )
-            return formatted_assignment
+            return {
+                "updated_count": updated_count,
+                "updated_locations": updated_locations,
+            }
+
+        except Exception as e:
+            logger.error(f"Error synchronizing storage utilization: {e}", exc_info=True)
+            raise
