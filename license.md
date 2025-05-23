@@ -1,5 +1,5 @@
 HideSync Commercial Use License
-Copyright (c) 2025 [Your Name/Organization]
+Copyright (c) 2025 [Pascal Bernard]
 License Grant
 Permission is hereby granted, free of charge, to any person or organization obtaining a copy of this software and associated documentation files (the "Software"), to use the Software for internal business operations, including commercial use, subject to the following conditions:
 Permitted Uses
