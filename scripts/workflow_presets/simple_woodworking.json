@@ -1,0 +1,610 @@
+{
+  "preset_info": {
+    "name": "Simple Wooden Box",
+    "description": "Learn basic woodworking by creating a small decorative box with hinged lid. Perfect for storing jewelry or small items.",
+    "difficulty": "intermediate",
+    "estimated_time": 360,
+    "tags": ["woodworking", "box", "joinery", "intermediate"],
+    "category": "woodworking"
+  },
+  "workflow": {
+    "name": "Simple Wooden Box Construction",
+    "description": "Step-by-step process to build a small wooden box with traditional joinery",
+    "has_multiple_outcomes": true,
+    "estimated_duration": 360,
+    "difficulty_level": "intermediate",
+    "steps": [
+      {
+        "id": 1,
+        "name": "Design and Planning",
+        "description": "Plan the box dimensions and create cutting list",
+        "instructions": "Decide on final box size (recommend 6\"x4\"x3\"). Create detailed cutting list with all pieces. Choose joinery method for your skill level.",
+        "display_order": 1,
+        "step_type": "instruction",
+        "estimated_duration": 30,
+        "is_milestone": false,
+        "is_decision_point": true,
+        "is_outcome": false,
+        "decision_options": [
+          {
+            "option_text": "Simple butt joints with screws (easier)",
+            "display_order": 1,
+            "is_default": true,
+            "result_action": "{\"set_variable\": {\"joinery_type\": \"butt_joints\"}}"
+          },
+          {
+            "option_text": "Dado joints for stronger construction",
+            "display_order": 2,
+            "is_default": false,
+            "result_action": "{\"set_variable\": {\"joinery_type\": \"dado_joints\"}}"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "name": "Select and Prepare Wood",
+        "description": "Choose appropriate wood and check for defects",
+        "instructions": "Select hardwood boards (maple, oak, or cherry recommended). Check for straight grain, no knots in critical areas. Acclimate wood to shop humidity for 24 hours.",
+        "display_order": 2,
+        "step_type": "material",
+        "estimated_duration": 20,
+        "is_milestone": false,
+        "is_decision_point": false,
+        "is_outcome": false,
+        "resources": [
+          {
+            "resource_type": "material",
+            "name": "Hardwood Board",
+            "quantity": 2,
+            "unit": "board_feet",
+            "is_optional": false,
+            "notes": "3/4 inch thick, maple or oak preferred"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "name": "Mill Wood to Thickness",
+        "description": "Prepare wood to final thickness and smoothness",
+        "instructions": "Joint one face flat, then plane to final thickness of 5/8\". Keep pieces slightly oversized for now.",
+        "display_order": 3,
+        "step_type": "tool",
+        "estimated_duration": 45,
+        "is_milestone": true,
+        "is_decision_point": false,
+        "is_outcome": false,
+        "resources": [
+          {
+            "resource_type": "tool",
+            "name": "Jointer",
+            "quantity": 1,
+            "unit": "machine",
+            "is_optional": true,
+            "notes": "6-8 inch jointer preferred, or hand planes"
+          },
+          {
+            "resource_type": "tool",
+            "name": "Thickness Planer",
+            "quantity": 1,
+            "unit": "machine",
+            "is_optional": true,
+            "notes": "12+ inch planer, or hand planes"
+          },
+          {
+            "resource_type": "tool",
+            "name": "Hand Planes",
+            "quantity": 1,
+            "unit": "set",
+            "is_optional": false,
+            "notes": "No. 4 smoothing plane minimum"
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "name": "Cut Pieces to Size",
+        "description": "Cut all box components to final dimensions",
+        "instructions": "Cut: 2 sides (6\"x3\"), 2 ends (4\"x3\"), 1 bottom (5.5\"x3.5\"), 1 lid (6.25\"x4.25\"). Use stop blocks for consistent cuts.",
+        "display_order": 4,
+        "step_type": "tool",
+        "estimated_duration": 30,
+        "is_milestone": false,
+        "is_decision_point": false,
+        "is_outcome": false,
+        "resources": [
+          {
+            "resource_type": "tool",
+            "name": "Table Saw",
+            "quantity": 1,
+            "unit": "machine",
+            "is_optional": false,
+            "notes": "With appropriate blade for clean cuts"
+          },
+          {
+            "resource_type": "tool",
+            "name": "Miter Saw",
+            "quantity": 1,
+            "unit": "machine",
+            "is_optional": true,
+            "notes": "For crosscuts, alternative to table saw"
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "name": "Create Joinery - Butt Joints",
+        "description": "Prepare simple butt joints (if selected)",
+        "instructions": "Sand all pieces to 220 grit. Mark screw locations. Pre-drill pilot holes to prevent splitting.",
+        "display_order": 5,
+        "step_type": "tool",
+        "estimated_duration": 25,
+        "is_milestone": false,
+        "is_decision_point": false,
+        "is_outcome": false,
+        "condition_logic": "{\"joinery_type\": \"butt_joints\"}",
+        "resources": [
+          {
+            "resource_type": "tool",
+            "name": "Drill Press",
+            "quantity": 1,
+            "unit": "machine",
+            "is_optional": true,
+            "notes": "Or cordless drill with bits"
+          },
+          {
+            "resource_type": "material",
+            "name": "Wood Screws",
+            "quantity": 8,
+            "unit": "pieces",
+            "is_optional": false,
+            "notes": "1.25 inch #8 screws"
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "name": "Create Joinery - Dado Joints",
+        "description": "Cut dado joints for stronger construction (if selected)",
+        "instructions": "Set up dado blade on table saw. Cut 1/4\" deep dados in sides for bottom panel. Test fit with scrap wood first.",
+        "display_order": 6,
+        "step_type": "tool",
+        "estimated_duration": 40,
+        "is_milestone": false,
+        "is_decision_point": false,
+        "is_outcome": false,
+        "condition_logic": "{\"joinery_type\": \"dado_joints\"}",
+        "resources": [
+          {
+            "resource_type": "tool",
+            "name": "Dado Blade Set",
+            "quantity": 1,
+            "unit": "set",
+            "is_optional": false,
+            "notes": "For table saw, 6-8 inch diameter"
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "name": "Test Fit Assembly",
+        "description": "Dry fit all pieces to check fit and alignment",
+        "instructions": "Assemble box without glue to check all joints. Make any adjustments needed. Mark pieces for easy reassembly.",
+        "display_order": 7,
+        "step_type": "quality_check",
+        "estimated_duration": 15,
+        "is_milestone": false,
+        "is_decision_point": true,
+        "is_outcome": false,
+        "decision_options": [
+          {
+            "option_text": "Perfect fit, ready for glue-up",
+            "display_order": 1,
+            "is_default": true
+          },
+          {
+            "option_text": "Joints need adjustment",
+            "display_order": 2,
+            "is_default": false,
+            "result_action": "{\"goto_step\": 5}"
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "name": "Sand All Surfaces",
+        "description": "Sand all interior surfaces before assembly",
+        "instructions": "Sand all inside surfaces that will be hard to reach after assembly. Progress through 120, 150, 220 grit. Remove all dust.",
+        "display_order": 8,
+        "step_type": "tool",
+        "estimated_duration": 35,
+        "is_milestone": false,
+        "is_decision_point": false,
+        "is_outcome": false,
+        "resources": [
+          {
+            "resource_type": "tool",
+            "name": "Random Orbital Sander",
+            "quantity": 1,
+            "unit": "machine",
+            "is_optional": true,
+            "notes": "5-inch sander preferred"
+          },
+          {
+            "resource_type": "material",
+            "name": "Sandpaper Assortment",
+            "quantity": 1,
+            "unit": "pack",
+            "is_optional": false,
+            "notes": "120, 150, 220 grits"
+          }
+        ]
+      },
+      {
+        "id": 9,
+        "name": "Glue Up Box Body",
+        "description": "Assemble the main box structure",
+        "instructions": "Apply wood glue to joints. Assemble sides, ends, and bottom. Use clamps to ensure tight joints. Check for square using diagonal measurements.",
+        "display_order": 9,
+        "step_type": "tool",
+        "estimated_duration": 30,
+        "is_milestone": true,
+        "is_decision_point": false,
+        "is_outcome": false,
+        "resources": [
+          {
+            "resource_type": "material",
+            "name": "Wood Glue",
+            "quantity": 1,
+            "unit": "bottle",
+            "is_optional": false,
+            "notes": "PVA or Titebond preferred"
+          },
+          {
+            "resource_type": "tool",
+            "name": "Bar Clamps",
+            "quantity": 4,
+            "unit": "pieces",
+            "is_optional": false,
+            "notes": "12-inch clamps minimum"
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "name": "Drying Time",
+        "description": "Allow glue to cure completely",
+        "instructions": "Let glue cure for minimum 4 hours, preferably overnight. Keep clamps in place and avoid moving the assembly.",
+        "display_order": 10,
+        "step_type": "time",
+        "estimated_duration": 240,
+        "is_milestone": false,
+        "is_decision_point": false,
+        "is_outcome": false,
+        "resources": []
+      },
+      {
+        "id": 11,
+        "name": "Remove Clamps and Clean Up",
+        "description": "Remove clamps and clean up any glue squeeze-out",
+        "instructions": "Carefully remove clamps. Scrape off dried glue with sharp chisel. Sand any rough areas smooth.",
+        "display_order": 11,
+        "step_type": "tool",
+        "estimated_duration": 20,
+        "is_milestone": false,
+        "is_decision_point": false,
+        "is_outcome": false,
+        "resources": [
+          {
+            "resource_type": "tool",
+            "name": "Chisel Set",
+            "quantity": 1,
+            "unit": "set",
+            "is_optional": false,
+            "notes": "1/4, 1/2, 3/4 inch chisels"
+          }
+        ]
+      },
+      {
+        "id": 12,
+        "name": "Prepare Lid",
+        "description": "Size and shape the lid piece",
+        "instructions": "Sand lid piece smooth. Round over edges slightly with sandpaper or router. Test fit on box opening.",
+        "display_order": 12,
+        "step_type": "tool",
+        "estimated_duration": 25,
+        "is_milestone": false,
+        "is_decision_point": false,
+        "is_outcome": false,
+        "resources": [
+          {
+            "resource_type": "tool",
+            "name": "Router",
+            "quantity": 1,
+            "unit": "machine",
+            "is_optional": true,
+            "notes": "With roundover bit"
+          }
+        ]
+      },
+      {
+        "id": 13,
+        "name": "Install Hinges",
+        "description": "Mount hinges to attach lid to box",
+        "instructions": "Mark hinge locations on box and lid. Cut hinge mortises with chisel. Install hinges with screws. Test lid operation.",
+        "display_order": 13,
+        "step_type": "tool",
+        "estimated_duration": 45,
+        "is_milestone": true,
+        "is_decision_point": false,
+        "is_outcome": false,
+        "resources": [
+          {
+            "resource_type": "material",
+            "name": "Small Brass Hinges",
+            "quantity": 2,
+            "unit": "pieces",
+            "is_optional": false,
+            "notes": "1 inch brass butt hinges"
+          },
+          {
+            "resource_type": "material",
+            "name": "Hinge Screws",
+            "quantity": 8,
+            "unit": "pieces",
+            "is_optional": false,
+            "notes": "Usually included with hinges"
+          }
+        ]
+      },
+      {
+        "id": 14,
+        "name": "Final Sanding",
+        "description": "Sand entire box to final smoothness",
+        "instructions": "Sand all exterior surfaces through 320 grit. Pay attention to corners and edges. Remove all dust with tack cloth.",
+        "display_order": 14,
+        "step_type": "tool",
+        "estimated_duration": 30,
+        "is_milestone": false,
+        "is_decision_point": false,
+        "is_outcome": false,
+        "resources": [
+          {
+            "resource_type": "material",
+            "name": "Fine Sandpaper",
+            "quantity": 1,
+            "unit": "pack",
+            "is_optional": false,
+            "notes": "280 and 320 grit"
+          }
+        ]
+      },
+      {
+        "id": 15,
+        "name": "Choose Finish Type",
+        "description": "Select appropriate finish for the wood",
+        "instructions": "Consider the intended use and desired appearance. Oil finishes are easier for beginners, polyurethane provides more protection.",
+        "display_order": 15,
+        "step_type": "decision",
+        "estimated_duration": 5,
+        "is_milestone": false,
+        "is_decision_point": true,
+        "is_outcome": false,
+        "decision_options": [
+          {
+            "option_text": "Tung oil finish (natural, easy to apply)",
+            "display_order": 1,
+            "is_default": true,
+            "result_action": "{\"set_variable\": {\"finish_type\": \"tung_oil\"}}"
+          },
+          {
+            "option_text": "Polyurethane finish (durable, protective)",
+            "display_order": 2,
+            "is_default": false,
+            "result_action": "{\"set_variable\": {\"finish_type\": \"polyurethane\"}}"
+          },
+          {
+            "option_text": "No finish (natural wood)",
+            "display_order": 3,
+            "is_default": false,
+            "result_action": "{\"goto_step\": 18}"
+          }
+        ]
+      },
+      {
+        "id": 16,
+        "name": "Apply Finish",
+        "description": "Apply chosen finish to protect and beautify the wood",
+        "instructions": "Apply finish according to manufacturer's instructions. Use thin, even coats. Allow proper drying time between coats.",
+        "display_order": 16,
+        "step_type": "material",
+        "estimated_duration": 60,
+        "is_milestone": false,
+        "is_decision_point": false,
+        "is_outcome": false,
+        "resources": [
+          {
+            "resource_type": "material",
+            "name": "Wood Finish",
+            "quantity": 1,
+            "unit": "bottle",
+            "is_optional": false,
+            "notes": "Tung oil or polyurethane as selected"
+          },
+          {
+            "resource_type": "material",
+            "name": "Brushes or Rags",
+            "quantity": 1,
+            "unit": "set",
+            "is_optional": false,
+            "notes": "Natural bristle brushes or lint-free rags"
+          }
+        ]
+      },
+      {
+        "id": 17,
+        "name": "Finish Curing Time",
+        "description": "Allow finish to cure completely",
+        "instructions": "Allow finish to cure according to manufacturer's specifications. This usually takes 24-72 hours depending on finish type and humidity.",
+        "display_order": 17,
+        "step_type": "time",
+        "estimated_duration": 1440,
+        "is_milestone": false,
+        "is_decision_point": false,
+        "is_outcome": false,
+        "resources": []
+      },
+      {
+        "id": 18,
+        "name": "Final Assembly and Quality Check",
+        "description": "Complete final assembly and inspect finished box",
+        "instructions": "Ensure all hardware operates smoothly. Check finish quality. Install any felt lining if desired. Test lid alignment and closure.",
+        "display_order": 18,
+        "step_type": "quality_check",
+        "estimated_duration": 15,
+        "is_milestone": true,
+        "is_decision_point": false,
+        "is_outcome": true,
+        "resources": [
+          {
+            "resource_type": "material",
+            "name": "Felt Lining",
+            "quantity": 1,
+            "unit": "sheet",
+            "is_optional": true,
+            "notes": "Self-adhesive felt for interior"
+          }
+        ]
+      }
+    ],
+    "connections": [
+      {"source_step": 1, "target_step": 2, "connection_type": "sequential"},
+      {"source_step": 2, "target_step": 3, "connection_type": "sequential"},
+      {"source_step": 3, "target_step": 4, "connection_type": "sequential"},
+      {"source_step": 4, "target_step": 5, "connection_type": "conditional", "condition": "joinery_type == 'butt_joints'"},
+      {"source_step": 4, "target_step": 6, "connection_type": "conditional", "condition": "joinery_type == 'dado_joints'"},
+      {"source_step": 5, "target_step": 7, "connection_type": "sequential"},
+      {"source_step": 6, "target_step": 7, "connection_type": "sequential"},
+      {"source_step": 7, "target_step": 8, "connection_type": "conditional", "condition": "fit_approved"},
+      {"source_step": 7, "target_step": 5, "connection_type": "conditional", "condition": "needs_adjustment && joinery_type == 'butt_joints'"},
+      {"source_step": 7, "target_step": 6, "connection_type": "conditional", "condition": "needs_adjustment && joinery_type == 'dado_joints'"},
+      {"source_step": 8, "target_step": 9, "connection_type": "sequential"},
+      {"source_step": 9, "target_step": 10, "connection_type": "sequential"},
+      {"source_step": 10, "target_step": 11, "connection_type": "sequential"},
+      {"source_step": 11, "target_step": 12, "connection_type": "sequential"},
+      {"source_step": 12, "target_step": 13, "connection_type": "sequential"},
+      {"source_step": 13, "target_step": 14, "connection_type": "sequential"},
+      {"source_step": 14, "target_step": 15, "connection_type": "sequential"},
+      {"source_step": 15, "target_step": 16, "connection_type": "conditional", "condition": "finish_type != 'none'"},
+      {"source_step": 15, "target_step": 18, "connection_type": "conditional", "condition": "finish_type == 'none'"},
+      {"source_step": 16, "target_step": 17, "connection_type": "sequential"},
+      {"source_step": 17, "target_step": 18, "connection_type": "sequential"}
+    ],
+    "outcomes": [
+      {
+        "name": "Simple Storage Box",
+        "description": "A basic wooden box with hinged lid, perfect for storage",
+        "display_order": 1,
+        "is_default": true,
+        "success_criteria": "Box opens and closes smoothly, joints are strong, finish is even"
+      },
+      {
+        "name": "Jewelry Box",
+        "description": "Refined box with felt lining, suitable for jewelry storage",
+        "display_order": 2,
+        "is_default": false,
+        "success_criteria": "Professional finish quality, felt lining installed, smooth operation"
+      }
+    ]
+  },
+  "required_resources": {
+    "materials": [
+      {
+        "name": "Hardwood Board",
+        "quantity": 2,
+        "unit": "board_feet",
+        "is_optional": false,
+        "notes": "Maple, oak, or cherry recommended"
+      },
+      {
+        "name": "Wood Glue",
+        "quantity": 1,
+        "unit": "bottle",
+        "is_optional": false
+      },
+      {
+        "name": "Small Brass Hinges",
+        "quantity": 2,
+        "unit": "pieces",
+        "is_optional": false
+      },
+      {
+        "name": "Wood Finish",
+        "quantity": 1,
+        "unit": "bottle",
+        "is_optional": true,
+        "notes": "Tung oil or polyurethane"
+      },
+      {
+        "name": "Sandpaper Assortment",
+        "quantity": 1,
+        "unit": "pack",
+        "is_optional": false,
+        "notes": "120 through 320 grit"
+      }
+    ],
+    "tools": [
+      {
+        "name": "Table Saw",
+        "quantity": 1,
+        "unit": "machine",
+        "is_optional": false
+      },
+      {
+        "name": "Hand Planes",
+        "quantity": 1,
+        "unit": "set",
+        "is_optional": false
+      },
+      {
+        "name": "Chisel Set",
+        "quantity": 1,
+        "unit": "set",
+        "is_optional": false
+      },
+      {
+        "name": "Bar Clamps",
+        "quantity": 4,
+        "unit": "pieces",
+        "is_optional": false
+      },
+      {
+        "name": "Random Orbital Sander",
+        "quantity": 1,
+        "unit": "machine",
+        "is_optional": true
+      },
+      {
+        "name": "Router",
+        "quantity": 1,
+        "unit": "machine",
+        "is_optional": true
+      }
+    ],
+    "documentation": []
+  },
+  "metadata": {
+    "version": "1.0",
+    "created_by": "system",
+    "created_at": "2024-01-15T10:00:00Z",
+    "tags": ["woodworking", "box", "joinery", "intermediate"],
+    "export_format_version": "1.0",
+    "estimated_skill_level": "intermediate",
+    "safety_notes": [
+      "Always wear safety glasses when using power tools",
+      "Use dust collection when sanding",
+      "Keep blades sharp for safer operation",
+      "Never remove safety guards from machines",
+      "Ensure proper ventilation when applying finishes"
+    ]
+  }
+}

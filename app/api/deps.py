@@ -55,6 +55,10 @@ from app.repositories.material_repository import MaterialRepository
 from app.repositories.property_definition_repository import PropertyDefinitionRepository
 from app.repositories.material_type_repository import MaterialTypeRepository
 from app.repositories.dynamic_material_repository import DynamicMaterialRepository
+from app.services.workflow_service import WorkflowService
+from app.services.workflow_execution_service import WorkflowExecutionService
+from app.services.workflow_navigation_service import WorkflowNavigationService
+from app.services.workflow_import_export_service import WorkflowImportExportService
 
 logger = logging.getLogger(__name__)
 
@@ -297,4 +301,48 @@ def get_product_service(
         inventory_service=inventory_service,
         pattern_service=pattern_service,
         material_service=material_service,
+    )
+
+def get_workflow_service(
+    db: Session = Depends(get_db),
+    security_context=Depends(get_security_context)
+) -> WorkflowService:
+    """Provides an instance of WorkflowService."""
+    logger.debug("Providing WorkflowService instance.")
+    return WorkflowService(
+        session=db,
+        security_context=security_context
+    )
+
+def get_workflow_execution_service(
+    db: Session = Depends(get_db),
+    workflow_service: WorkflowService = Depends(get_workflow_service)
+) -> WorkflowExecutionService:
+    """Provides an instance of WorkflowExecutionService."""
+    logger.debug("Providing WorkflowExecutionService instance.")
+    return WorkflowExecutionService(
+        session=db,
+        workflow_service=workflow_service
+    )
+
+def get_workflow_navigation_service(
+    db: Session = Depends(get_db),
+    execution_service: WorkflowExecutionService = Depends(get_workflow_execution_service)
+) -> WorkflowNavigationService:
+    """Provides an instance of WorkflowNavigationService."""
+    logger.debug("Providing WorkflowNavigationService instance.")
+    return WorkflowNavigationService(
+        session=db,
+        execution_service=execution_service
+    )
+
+def get_workflow_import_export_service(
+    db: Session = Depends(get_db),
+    workflow_service: WorkflowService = Depends(get_workflow_service)
+) -> WorkflowImportExportService:
+    """Provides an instance of WorkflowImportExportService."""
+    logger.debug("Providing WorkflowImportExportService instance.")
+    return WorkflowImportExportService(
+        session=db,
+        workflow_service=workflow_service
     )

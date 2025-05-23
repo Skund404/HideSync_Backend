@@ -5,6 +5,13 @@ import re
 import sys
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
+from app.db.models.enums import (
+    WorkflowStepType,
+    WorkflowConnectionType,
+    WorkflowStatus,
+    WorkflowThemeStyle
+)
+
 
 # --- Path Adjustment ---
 # Get the directory containing the 'scripts' folder (project root)

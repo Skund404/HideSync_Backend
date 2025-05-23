@@ -37,6 +37,7 @@ from app.api.endpoints import (
     tools,
     users,
     webhooks,
+    workflows,
     # Import new dynamic material endpoints
     material_types,
     property_definitions,
@@ -84,3 +85,8 @@ api_router.include_router(material_types.router, prefix="/material-types", tags=
 api_router.include_router(property_definitions.router, prefix="/property-definitions", tags=["Property Definitions"])
 api_router.include_router(dynamic_materials.router, prefix="/dynamic-materials", tags=["Dynamic Materials"])
 api_router.include_router(presets.router, prefix="/presets", tags=["presets"])
+api_router.include_router(
+    workflows.router,
+    prefix="/workflows",
+    tags=["workflows"]
+)

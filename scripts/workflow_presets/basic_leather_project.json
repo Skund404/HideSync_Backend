@@ -1,0 +1,419 @@
+{
+  "preset_info": {
+    "name": "Basic Leather Wallet",
+    "description": "Simple bi-fold leather wallet project perfect for beginners. Learn fundamental leather working skills while creating a practical everyday item.",
+    "difficulty": "beginner",
+    "estimated_time": 240,
+    "tags": ["leather", "wallet", "beginner", "accessories"],
+    "category": "leatherwork"
+  },
+  "workflow": {
+    "name": "Basic Leather Wallet Workflow",
+    "description": "Step by step process to create a simple leather wallet with card slots",
+    "has_multiple_outcomes": false,
+    "estimated_duration": 240,
+    "difficulty_level": "beginner",
+    "steps": [
+      {
+        "id": 1,
+        "name": "Prepare Workspace",
+        "description": "Set up your leatherworking area with proper lighting and ventilation",
+        "instructions": "Clear a large, flat work surface. Ensure good lighting and ventilation. Lay out a cutting mat to protect your work surface.",
+        "display_order": 1,
+        "step_type": "instruction",
+        "estimated_duration": 10,
+        "is_milestone": false,
+        "is_decision_point": false,
+        "is_outcome": false,
+        "resources": [
+          {
+            "resource_type": "tool",
+            "name": "Cutting Mat",
+            "quantity": 1,
+            "unit": "piece",
+            "is_optional": false,
+            "notes": "Large enough for wallet pattern pieces"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "name": "Select and Inspect Leather",
+        "description": "Choose appropriate leather and check for defects",
+        "instructions": "Select vegetable-tanned leather, 4-5oz thickness. Inspect for cuts, holes, or weak spots. Mark any areas to avoid.",
+        "display_order": 2,
+        "step_type": "material",
+        "estimated_duration": 15,
+        "is_milestone": false,
+        "is_decision_point": false,
+        "is_outcome": false,
+        "resources": [
+          {
+            "resource_type": "material",
+            "name": "Vegetable Tanned Leather",
+            "quantity": 1,
+            "unit": "sq_ft",
+            "is_optional": false,
+            "notes": "4-5oz thickness, natural or light brown preferred"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "name": "Cut Pattern Pieces",
+        "description": "Cut leather pieces according to wallet pattern",
+        "instructions": "Using a sharp knife and metal ruler, cut: 2 main body pieces (4\"x3.5\"), 2 card slot pieces (3.5\"x2.5\"). Cut slowly and steadily for clean edges.",
+        "display_order": 3,
+        "step_type": "tool",
+        "estimated_duration": 30,
+        "is_milestone": true,
+        "is_decision_point": false,
+        "is_outcome": false,
+        "resources": [
+          {
+            "resource_type": "tool",
+            "name": "Leather Knife",
+            "quantity": 1,
+            "unit": "piece",
+            "is_optional": false,
+            "notes": "Sharp craft knife or rotary cutter"
+          },
+          {
+            "resource_type": "tool",
+            "name": "Metal Ruler",
+            "quantity": 1,
+            "unit": "piece",
+            "is_optional": false,
+            "notes": "24 inch steel ruler preferred"
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "name": "Mark Stitch Lines",
+        "description": "Mark even stitch lines on all pieces",
+        "instructions": "Using a wing divider or ruler, mark stitch lines 1/8\" from edges. Mark hole positions every 1/8\" along the stitch line.",
+        "display_order": 4,
+        "step_type": "tool",
+        "estimated_duration": 20,
+        "is_milestone": false,
+        "is_decision_point": false,
+        "is_outcome": false,
+        "resources": [
+          {
+            "resource_type": "tool",
+            "name": "Wing Divider",
+            "quantity": 1,
+            "unit": "piece",
+            "is_optional": true,
+            "notes": "Or use ruler and awl"
+          },
+          {
+            "resource_type": "tool",
+            "name": "Awl",
+            "quantity": 1,
+            "unit": "piece",
+            "is_optional": false,
+            "notes": "For marking hole positions"
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "name": "Punch Stitch Holes",
+        "description": "Create holes for stitching",
+        "instructions": "Using a stitching awl or pricking iron, carefully punch holes at marked positions. Keep holes consistent in size and spacing.",
+        "display_order": 5,
+        "step_type": "tool",
+        "estimated_duration": 25,
+        "is_milestone": false,
+        "is_decision_point": false,
+        "is_outcome": false,
+        "resources": [
+          {
+            "resource_type": "tool",
+            "name": "Stitching Awl",
+            "quantity": 1,
+            "unit": "piece",
+            "is_optional": false,
+            "notes": "Diamond-shaped awl preferred"
+          },
+          {
+            "resource_type": "tool",
+            "name": "Hammer",
+            "quantity": 1,
+            "unit": "piece",
+            "is_optional": true,
+            "notes": "Light hammer for pricking iron"
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "name": "Prepare Thread",
+        "description": "Cut and prepare waxed thread for stitching",
+        "instructions": "Cut thread 4 times the length of seam to be sewn. Wax the thread thoroughly. Thread needles on both ends.",
+        "display_order": 6,
+        "step_type": "material",
+        "estimated_duration": 10,
+        "is_milestone": false,
+        "is_decision_point": false,
+        "is_outcome": false,
+        "resources": [
+          {
+            "resource_type": "material",
+            "name": "Waxed Leather Thread",
+            "quantity": 2,
+            "unit": "yards",
+            "is_optional": false,
+            "notes": "Polyester or linen thread, natural color"
+          },
+          {
+            "resource_type": "tool",
+            "name": "Leather Needles",
+            "quantity": 2,
+            "unit": "pieces",
+            "is_optional": false,
+            "notes": "Blunt tip needles, size 18-20"
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "name": "Stitch Card Slots",
+        "description": "Sew card slot pieces to main body",
+        "instructions": "Using saddle stitch technique, sew card slot pieces to inside of main body pieces. Start and end with backstitches for security.",
+        "display_order": 7,
+        "step_type": "tool",
+        "estimated_duration": 45,
+        "is_milestone": true,
+        "is_decision_point": false,
+        "is_outcome": false,
+        "resources": []
+      },
+      {
+        "id": 8,
+        "name": "Quality Check - Stitching",
+        "description": "Inspect all stitching for consistency and strength",
+        "instructions": "Check that all stitches are even and tight. Test seam strength gently. Re-stitch any loose or uneven sections.",
+        "display_order": 8,
+        "step_type": "quality_check",
+        "estimated_duration": 10,
+        "is_milestone": false,
+        "is_decision_point": true,
+        "is_outcome": false,
+        "decision_options": [
+          {
+            "option_text": "Stitching looks good, proceed to assembly",
+            "display_order": 1,
+            "is_default": true
+          },
+          {
+            "option_text": "Need to re-stitch some areas",
+            "display_order": 2,
+            "is_default": false,
+            "result_action": "{\"goto_step\": 7}"
+          }
+        ]
+      },
+      {
+        "id": 9,
+        "name": "Assemble Wallet Body",
+        "description": "Join the two main pieces together",
+        "instructions": "Place main pieces together with card slots facing inward. Align edges carefully. Stitch around three sides, leaving top open for bills.",
+        "display_order": 9,
+        "step_type": "tool",
+        "estimated_duration": 35,
+        "is_milestone": true,
+        "is_decision_point": false,
+        "is_outcome": false,
+        "resources": []
+      },
+      {
+        "id": 10,
+        "name": "Trim and Finish Edges",
+        "description": "Clean up edges and apply edge finish",
+        "instructions": "Trim any uneven edges with sharp knife. Sand edges smooth with fine sandpaper. Apply edge paint or burnish for professional finish.",
+        "display_order": 10,
+        "step_type": "tool",
+        "estimated_duration": 25,
+        "is_milestone": false,
+        "is_decision_point": false,
+        "is_outcome": false,
+        "resources": [
+          {
+            "resource_type": "material",
+            "name": "Edge Paint",
+            "quantity": 1,
+            "unit": "bottle",
+            "is_optional": true,
+            "notes": "Match leather color, or use neutral brown"
+          },
+          {
+            "resource_type": "tool",
+            "name": "Edge Burnisher",
+            "quantity": 1,
+            "unit": "piece",
+            "is_optional": true,
+            "notes": "Wood or bone burnisher"
+          },
+          {
+            "resource_type": "tool",
+            "name": "Fine Sandpaper",
+            "quantity": 1,
+            "unit": "sheet",
+            "is_optional": false,
+            "notes": "220-400 grit"
+          }
+        ]
+      },
+      {
+        "id": 11,
+        "name": "Final Conditioning",
+        "description": "Apply leather conditioner for protection and flexibility",
+        "instructions": "Apply a thin, even coat of leather conditioner. Allow to absorb for 15 minutes, then buff with soft cloth.",
+        "display_order": 11,
+        "step_type": "material",
+        "estimated_duration": 20,
+        "is_milestone": false,
+        "is_decision_point": false,
+        "is_outcome": false,
+        "resources": [
+          {
+            "resource_type": "material",
+            "name": "Leather Conditioner",
+            "quantity": 1,
+            "unit": "bottle",
+            "is_optional": false,
+            "notes": "Neutral conditioner, avoid colored products"
+          },
+          {
+            "resource_type": "material",
+            "name": "Soft Cloth",
+            "quantity": 1,
+            "unit": "piece",
+            "is_optional": false,
+            "notes": "Microfiber or cotton cloth"
+          }
+        ]
+      },
+      {
+        "id": 12,
+        "name": "Final Quality Check",
+        "description": "Inspect completed wallet and test functionality",
+        "instructions": "Check all stitching, edge finish, and card slot functionality. Test wallet flexibility and ensure it folds properly.",
+        "display_order": 12,
+        "step_type": "quality_check",
+        "estimated_duration": 10,
+        "is_milestone": true,
+        "is_decision_point": false,
+        "is_outcome": true,
+        "resources": []
+      }
+    ],
+    "connections": [
+      {"source_step": 1, "target_step": 2, "connection_type": "sequential"},
+      {"source_step": 2, "target_step": 3, "connection_type": "sequential"},
+      {"source_step": 3, "target_step": 4, "connection_type": "sequential"},
+      {"source_step": 4, "target_step": 5, "connection_type": "sequential"},
+      {"source_step": 5, "target_step": 6, "connection_type": "sequential"},
+      {"source_step": 6, "target_step": 7, "connection_type": "sequential"},
+      {"source_step": 7, "target_step": 8, "connection_type": "sequential"},
+      {"source_step": 8, "target_step": 9, "connection_type": "conditional", "condition": "stitching_approved"},
+      {"source_step": 8, "target_step": 7, "connection_type": "conditional", "condition": "stitching_needs_work"},
+      {"source_step": 9, "target_step": 10, "connection_type": "sequential"},
+      {"source_step": 10, "target_step": 11, "connection_type": "sequential"},
+      {"source_step": 11, "target_step": 12, "connection_type": "sequential"}
+    ],
+    "outcomes": [
+      {
+        "name": "Completed Basic Wallet",
+        "description": "A functional bi-fold leather wallet with card slots",
+        "display_order": 1,
+        "is_default": true,
+        "success_criteria": "Wallet folds properly, holds cards securely, and has professional finish"
+      }
+    ]
+  },
+  "required_resources": {
+    "materials": [
+      {
+        "name": "Vegetable Tanned Leather",
+        "quantity": 1,
+        "unit": "sq_ft",
+        "is_optional": false,
+        "notes": "4-5oz thickness"
+      },
+      {
+        "name": "Waxed Leather Thread",
+        "quantity": 2,
+        "unit": "yards",
+        "is_optional": false
+      },
+      {
+        "name": "Edge Paint",
+        "quantity": 1,
+        "unit": "bottle",
+        "is_optional": true
+      },
+      {
+        "name": "Leather Conditioner",
+        "quantity": 1,
+        "unit": "bottle",
+        "is_optional": false
+      }
+    ],
+    "tools": [
+      {
+        "name": "Cutting Mat",
+        "quantity": 1,
+        "unit": "piece",
+        "is_optional": false
+      },
+      {
+        "name": "Leather Knife",
+        "quantity": 1,
+        "unit": "piece",
+        "is_optional": false
+      },
+      {
+        "name": "Metal Ruler",
+        "quantity": 1,
+        "unit": "piece",
+        "is_optional": false
+      },
+      {
+        "name": "Stitching Awl",
+        "quantity": 1,
+        "unit": "piece",
+        "is_optional": false
+      },
+      {
+        "name": "Leather Needles",
+        "quantity": 2,
+        "unit": "pieces",
+        "is_optional": false
+      },
+      {
+        "name": "Edge Burnisher",
+        "quantity": 1,
+        "unit": "piece",
+        "is_optional": true
+      }
+    ],
+    "documentation": []
+  },
+  "metadata": {
+    "version": "1.0",
+    "created_by": "system",
+    "created_at": "2024-01-15T10:00:00Z",
+    "tags": ["leather", "wallet", "beginner", "tutorial"],
+    "export_format_version": "1.0",
+    "estimated_skill_level": "beginner",
+    "safety_notes": [
+      "Always cut away from your body",
+      "Keep knives sharp for safer cutting",
+      "Use proper ventilation when working with leather dyes"
+    ]
+  }
+}

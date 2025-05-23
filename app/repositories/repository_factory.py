@@ -75,7 +75,11 @@ from app.repositories.user_repository import UserRepository
 from app.repositories.media_asset_repository import MediaAssetRepository
 from app.repositories.tag_repository import TagRepository
 from app.repositories.media_asset_tag_repository import MediaAssetTagRepository
-
+from app.repositories.workflow_repository import WorkflowRepository
+from app.repositories.workflow_step_repository import WorkflowStepRepository
+from app.repositories.workflow_execution_repository import (
+    WorkflowExecutionRepository, WorkflowStepExecutionRepository
+)
 
 class RepositoryFactory:
     """
@@ -327,3 +331,19 @@ class RepositoryFactory:
     def create_preset_repository(self) -> PresetRepository:
         """Create a PresetRepository instance."""
         return PresetRepository(self.session, self.encryption_service)
+
+    def create_workflow_repository(self) -> WorkflowRepository:
+        """Create a WorkflowRepository instance."""
+        return WorkflowRepository(self.session, self.encryption_service)
+
+    def create_workflow_step_repository(self) -> WorkflowStepRepository:
+        """Create a WorkflowStepRepository instance."""
+        return WorkflowStepRepository(self.session, self.encryption_service)
+
+    def create_workflow_execution_repository(self) -> WorkflowExecutionRepository:
+        """Create a WorkflowExecutionRepository instance."""
+        return WorkflowExecutionRepository(self.session, self.encryption_service)
+
+    def create_workflow_step_execution_repository(self) -> WorkflowStepExecutionRepository:
+        """Create a WorkflowStepExecutionRepository instance."""
+        return WorkflowStepExecutionRepository(self.session, self.encryption_service)

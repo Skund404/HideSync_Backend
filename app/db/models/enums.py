@@ -1768,3 +1768,37 @@ class WoodFinish(Enum):
     DISTRESSED = "distressed"
     ANTIQUED = "antiqued"
     OTHER = "other"
+
+# --- Workflow System Enums ---
+class WorkflowStepType(str, Enum):
+    INSTRUCTION = "instruction"
+    MATERIAL = "material"
+    TOOL = "tool"
+    TIME = "time"
+    DECISION = "decision"
+    MILESTONE = "milestone"
+    REPEATING = "repeating"
+    OUTCOME = "outcome"
+
+class WorkflowConnectionType(str, Enum):
+    SEQUENTIAL = "sequential"
+    DEPENDENCY = "dependency"
+    CONDITIONAL = "conditional"
+    OPTIONAL = "optional"
+    PARALLEL = "parallel"
+
+class WorkflowStatus(str, Enum):
+    DRAFT = "draft"
+    ACTIVE = "active"
+    COMPLETED = "completed"
+    ARCHIVED = "archived"
+
+class WorkflowThemeStyle(str, Enum):
+    DEFAULT = "default"
+    LEATHER = "leather"
+    WOODWORKING = "woodworking"
+    METALWORK = "metalwork"
+    SEWING = "sewing"
+    JEWELRY = "jewelry"
+    COOKING = "cooking"
+    MIXOLOGY = "mixology"
