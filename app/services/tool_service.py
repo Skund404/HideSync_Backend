@@ -26,6 +26,7 @@ from app.repositories.tool_repository import (
 )
 from app.services.base_service import BaseService
 from app.schemas.tool import ToolSearchParams, MaintenanceSchedule, MaintenanceScheduleItem
+from app.services.localization_service import LocalizationService
 
 # Configure logger
 # Set logging level based on environment or config if needed
@@ -115,17 +116,21 @@ class ToolService(BaseService[Tool]):
             checkout_repository: Optional[ToolCheckoutRepository] = None,
             event_bus=None, cache_service=None, inventory_service=None,
             project_service=None, supplier_service=None,
+            localization_service: Optional[LocalizationService] = None  # Add this parameter
     ):
         self.session = session
         self.repository = repository or ToolRepository(session)
         self.maintenance_repository = maintenance_repository or ToolMaintenanceRepository(session)
         self.checkout_repository = checkout_repository or ToolCheckoutRepository(session)
+        # Add localization service with lazy initialization
+        self.localization_service = localization_service or LocalizationService(session)
+
         # Inject other services if needed
         self.inventory_service = inventory_service
         self.project_service = project_service
         self.supplier_service = supplier_service
         super().__init__(session=session, repository=self.repository, event_bus=event_bus, cache_service=cache_service)
-        logger.info("ToolService initialized.")
+        logger.info("ToolService initialized with localization support.")
 
     # --- COMPLETE METHOD DEFINITION ---
     def _preprocess_data_dates(self, data: Dict[str, Any], field_map: Dict[str, bool], is_update: bool = False):
@@ -438,6 +443,120 @@ class ToolService(BaseService[Tool]):
             self._invalidate_tool_caches(tool.id, list_too=True)
             return tool
 
+    def get_tool_with_locale(self, tool_id: int, locale: Optional[str] = None) -> Tool:
+        """
+        Get tool by ID with optional localization.
+
+        Args:
+            tool_id: Tool ID
+            locale: Optional locale for translations
+
+        Returns:
+            Tool with translations applied if locale provided
+        """
+        # Get tool using existing method
+        tool = self.get_tool(tool_id)
+
+        # Apply translations if locale provided
+        if tool and locale:
+            tool = self.localization_service.hydrate_entity_with_translations(
+                entity=tool,
+                entity_type="tool",
+                locale=locale,
+                fields_to_translate=["name", "description", "specifications"]
+            )
+
+        return tool
+
+    def get_tools_with_locale(
+            self,
+            skip: int = 0,
+            limit: int = 100,
+            search_params: Optional[ToolSearchParams] = None,
+            locale: Optional[str] = None
+    ) -> List[Tool]:
+        """
+        Get tools with optional localization and pagination.
+
+        Args:
+            skip: Number of tools to skip
+            limit: Maximum number of tools to return
+            search_params: Search and filter parameters
+            locale: Optional locale for translations
+
+        Returns:
+            List of tools with translations applied if locale provided
+        """
+        # Get tools using existing method
+        tools = self.get_tools(skip=skip, limit=limit, search_params=search_params)
+
+        # Apply translations if locale provided
+        if tools and locale:
+            tools = self.localization_service.bulk_hydrate_entities(
+                entities=tools,
+                entity_type="tool",
+                locale=locale,
+                fields_to_translate=["name", "description", "specifications"]
+            )
+
+        return tools
+
+    def get_tool_localized_fields(
+            self,
+            tool_id: int,
+            locale: str
+    ) -> Dict[str, str]:
+        """
+        Get all translated fields for a tool in specific locale.
+
+        Args:
+            tool_id: Tool ID
+            locale: Locale code
+
+        Returns:
+            Dictionary of field_name -> translated_value
+        """
+        return self.localization_service.get_translations_for_entity_by_locale(
+            entity_type="tool",
+            entity_id=tool_id,
+            locale=locale
+        )
+
+    def create_tool_translation(
+            self,
+            tool_id: int,
+            locale: str,
+            field_name: str,
+            translated_value: str,
+            user_id: Optional[int] = None
+    ) -> bool:
+        """
+        Create or update translation for a tool field.
+
+        Args:
+            tool_id: Tool ID
+            locale: Locale code
+            field_name: Field to translate
+            translated_value: Translation text
+            user_id: User creating the translation
+
+        Returns:
+            True if successful
+        """
+        try:
+            self.localization_service.create_or_update_translation(
+                entity_type="tool",
+                entity_id=tool_id,
+                locale=locale,
+                field_name=field_name,
+                translated_value=translated_value,
+                user_id=user_id
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Failed to create tool translation: {e}", exc_info=True)
+            return False
+
     # --- COMPLETE METHOD DEFINITION ---
     def update_tool(self, tool_id: int, data: Dict[str, Any], user_id: Optional[int] = None) -> Tool:
         """ Update an existing tool, converting date strings to objects and handling key cases. """
@@ -606,6 +725,33 @@ class ToolService(BaseService[Tool]):
              logger.error(f"Error retrieving checkouts from repository: {e}", exc_info=True)
              raise HideSyncException("Failed to retrieve checkouts.") from e
 
+    def get_checkouts_with_locale(
+            self,
+            status: Optional[str] = None,
+            tool_id: Optional[int] = None,
+            project_id: Optional[int] = None,
+            user_id: Optional[int] = None,
+            skip: int = 0,
+            limit: int = 100,
+            locale: Optional[str] = None
+    ) -> List[ToolCheckout]:
+        """Get tool checkouts with optional localization."""
+        # Get checkouts using existing method
+        checkouts = self.get_checkouts(
+            status=status, tool_id=tool_id, project_id=project_id,
+            user_id=user_id, skip=skip, limit=limit
+        )
+
+        # Apply translations if locale provided
+        if checkouts and locale:
+            checkouts = self.localization_service.bulk_hydrate_entities(
+                entities=checkouts,
+                entity_type="tool_checkout",
+                locale=locale,
+                fields_to_translate=["notes", "issue_description"]
+            )
+
+        return checkouts
 
     def checkout_tool(self, data: Dict[str, Any], user_id: Optional[int] = None) -> ToolCheckout:
         """ Check out a tool, converting date strings to objects. """
@@ -794,6 +940,33 @@ class ToolService(BaseService[Tool]):
         except Exception as e:
              logger.error(f"Error retrieving maintenance from repository: {e}", exc_info=True)
              raise HideSyncException("Failed to retrieve maintenance records.") from e
+
+    def get_maintenance_records_with_locale(
+            self,
+            status: Optional[str] = None,
+            tool_id: Optional[int] = None,
+            upcoming_only: bool = False,
+            skip: int = 0,
+            limit: int = 100,
+            locale: Optional[str] = None
+    ) -> List[ToolMaintenance]:
+        """Get tool maintenance records with optional localization."""
+        # Get maintenance records using existing method
+        records = self.get_maintenance_records(
+            status=status, tool_id=tool_id, upcoming_only=upcoming_only,
+            skip=skip, limit=limit
+        )
+
+        # Apply translations if locale provided
+        if records and locale:
+            records = self.localization_service.bulk_hydrate_entities(
+                entities=records,
+                entity_type="tool_maintenance",
+                locale=locale,
+                fields_to_translate=["maintenance_type", "details", "parts"]
+            )
+
+        return records
 
     def get_maintenance_schedule(self, start_date_str: Optional[str] = None,
                                  end_date_str: Optional[str] = None) -> MaintenanceSchedule:

@@ -56,10 +56,18 @@ class LocalizationService:
             "main_repo_method": "create_product_repository",
             "translatable_fields": ["name", "description", "summary", "features"]
         },
-        "tool": {
-            "main_repo_method": "create_tool_repository",
-            "translatable_fields": ["name", "description", "usage_notes", "specifications"]
-        },
+           "tool": {
+        "model": "Tool",
+        "translatable_fields": ["name", "description", "specifications"]
+    },
+    "tool_maintenance": {
+        "model": "ToolMaintenance",
+        "translatable_fields": ["maintenance_type", "details", "parts"]
+    },
+    "tool_checkout": {
+        "model": "ToolCheckout",
+        "translatable_fields": ["notes", "issue_description"]
+    },
         "dynamic_material": {
             "main_repo_method": "create_dynamic_material_repository",
             "translatable_fields": ["name", "description", "notes"]

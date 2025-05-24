@@ -428,3 +428,21 @@ def get_dynamic_material_service_with_localization(
         settings_service=settings_service,
         localization_service=localization_service
     )
+
+
+# Add this to app/api/deps.py - Update the existing get_tool_service function
+
+def get_tool_service(
+        db: Session = Depends(get_db),
+        localization_service: LocalizationService = Depends(get_localization_service)
+) -> ToolService:
+    """
+    Provides an instance of ToolService with localization support.
+
+    Enhanced to include LocalizationService for translation support.
+    """
+    logger.debug("Providing ToolService instance with localization.")
+    return ToolService(
+        session=db,
+        localization_service=localization_service
+    )
