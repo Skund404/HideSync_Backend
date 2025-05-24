@@ -44,6 +44,7 @@ from app.services.enum_service import EnumService
 from app.services.property_definition_service import PropertyDefinitionService
 from app.services.material_type_service import MaterialTypeService
 from app.services.dynamic_material_service import DynamicMaterialService
+from app.services.localization_service import LocalizationService
 
 # --- Repositories needed for direct instantiation within service getters ---
 from app.repositories.user_repository import UserRepository
@@ -198,6 +199,18 @@ def get_enum_service(db: Session = Depends(get_db)) -> EnumService:
     return EnumService(db=db)
 
 
+def get_localization_service(db: Session = Depends(get_db)) -> LocalizationService:
+    """
+    Provides an instance of LocalizationService.
+
+    The LocalizationService handles all entity translation operations across
+    the HideSync system, following the same pattern as EnumService for
+    consistency with the Dynamic Enum System.
+    """
+    logger.debug("Providing LocalizationService instance.")
+    return LocalizationService(session=db)
+
+
 def get_property_definition_service(
         db: Session = Depends(get_db),
         enum_service: EnumService = Depends(get_enum_service)
@@ -291,8 +304,13 @@ def get_product_service(
         inventory_service: InventoryService = Depends(get_inventory_service),
         pattern_service: PatternService = Depends(get_pattern_service),
         material_service: MaterialService = Depends(get_material_service),
+        localization_service: LocalizationService = Depends(get_localization_service)
 ) -> ProductService:
-    """Injector providing ProductService with necessary dependencies."""
+    """
+    Injector providing ProductService with necessary dependencies.
+
+    Enhanced to include LocalizationService for translation support.
+    """
     logger.debug("Providing ProductService instance (deps).")
     product_repo = ProductRepository(session=db)
     return ProductService(
@@ -301,22 +319,31 @@ def get_product_service(
         inventory_service=inventory_service,
         pattern_service=pattern_service,
         material_service=material_service,
+        localization_service=localization_service
     )
 
+
 def get_workflow_service(
-    db: Session = Depends(get_db),
-    security_context=Depends(get_security_context)
+        db: Session = Depends(get_db),
+        security_context=Depends(get_security_context),
+        localization_service: LocalizationService = Depends(get_localization_service)
 ) -> WorkflowService:
-    """Provides an instance of WorkflowService."""
+    """
+    Provides an instance of WorkflowService.
+
+    Enhanced to include LocalizationService for translation support.
+    """
     logger.debug("Providing WorkflowService instance.")
     return WorkflowService(
         session=db,
-        security_context=security_context
+        security_context=security_context,
+        localization_service=localization_service
     )
 
+
 def get_workflow_execution_service(
-    db: Session = Depends(get_db),
-    workflow_service: WorkflowService = Depends(get_workflow_service)
+        db: Session = Depends(get_db),
+        workflow_service: WorkflowService = Depends(get_workflow_service)
 ) -> WorkflowExecutionService:
     """Provides an instance of WorkflowExecutionService."""
     logger.debug("Providing WorkflowExecutionService instance.")
@@ -325,9 +352,10 @@ def get_workflow_execution_service(
         workflow_service=workflow_service
     )
 
+
 def get_workflow_navigation_service(
-    db: Session = Depends(get_db),
-    execution_service: WorkflowExecutionService = Depends(get_workflow_execution_service)
+        db: Session = Depends(get_db),
+        execution_service: WorkflowExecutionService = Depends(get_workflow_execution_service)
 ) -> WorkflowNavigationService:
     """Provides an instance of WorkflowNavigationService."""
     logger.debug("Providing WorkflowNavigationService instance.")
@@ -336,13 +364,67 @@ def get_workflow_navigation_service(
         execution_service=execution_service
     )
 
+
 def get_workflow_import_export_service(
-    db: Session = Depends(get_db),
-    workflow_service: WorkflowService = Depends(get_workflow_service)
+        db: Session = Depends(get_db),
+        workflow_service: WorkflowService = Depends(get_workflow_service)
 ) -> WorkflowImportExportService:
     """Provides an instance of WorkflowImportExportService."""
     logger.debug("Providing WorkflowImportExportService instance.")
     return WorkflowImportExportService(
         session=db,
         workflow_service=workflow_service
+    )
+
+
+# --- Enhanced Service Dependencies for Future Integration ---
+# These are examples showing how other services could be enhanced with localization
+
+def get_material_service_with_localization(
+        db: Session = Depends(get_db),
+        security_context=Depends(get_security_context),
+        settings_service: SettingsService = Depends(get_settings_service),
+        localization_service: LocalizationService = Depends(get_localization_service)
+) -> MaterialService:
+    """
+    Enhanced MaterialService with localization support.
+
+    Use this when MaterialService is updated to support translations.
+    Currently commented out to avoid breaking existing implementations.
+    """
+    logger.debug("Providing MaterialService instance with localization.")
+    material_repo = MaterialRepository(session=db)
+    return MaterialService(
+        session=db,
+        repository=material_repo,
+        security_context=security_context,
+        settings_service=settings_service,
+        localization_service=localization_service
+    )
+
+
+def get_dynamic_material_service_with_localization(
+        db: Session = Depends(get_db),
+        property_service: PropertyDefinitionService = Depends(get_property_definition_service),
+        material_type_service: MaterialTypeService = Depends(get_material_type_service),
+        security_context=Depends(get_security_context),
+        settings_service: SettingsService = Depends(get_settings_service),
+        localization_service: LocalizationService = Depends(get_localization_service)
+) -> DynamicMaterialService:
+    """
+    Enhanced DynamicMaterialService with localization support.
+
+    Use this when DynamicMaterialService is updated to support translations.
+    Currently commented out to avoid breaking existing implementations.
+    """
+    logger.debug("Providing DynamicMaterialService instance with localization.")
+    dynamic_material_repo = DynamicMaterialRepository(session=db)
+    return DynamicMaterialService(
+        session=db,
+        repository=dynamic_material_repo,
+        property_service=property_service,
+        material_type_service=material_type_service,
+        security_context=security_context,
+        settings_service=settings_service,
+        localization_service=localization_service
     )

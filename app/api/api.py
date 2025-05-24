@@ -35,6 +35,7 @@ from app.api.endpoints import (
     suppliers,
     tags,
     tools,
+    translations,
     users,
     webhooks,
     workflows,
@@ -89,4 +90,15 @@ api_router.include_router(
     workflows.router,
     prefix="/workflows",
     tags=["workflows"]
+)
+api_router.include_router(
+    translations.router,
+    prefix="/translations",
+    tags=["translations"],
+    responses={
+        404: {"description": "Translation not found"},
+        400: {"description": "Invalid translation data"},
+        403: {"description": "Insufficient permissions"},
+        500: {"description": "Internal server error"}
+    }
 )

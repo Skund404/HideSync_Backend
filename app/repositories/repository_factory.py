@@ -1,6 +1,7 @@
 # File: app/repositories/repository_factory.py
 
 from sqlalchemy.orm import Session
+from typing import Optional
 
 from app.repositories.customer_repository import CustomerRepository
 from app.repositories.material_repository import MaterialRepository
@@ -81,6 +82,10 @@ from app.repositories.workflow_execution_repository import (
     WorkflowExecutionRepository, WorkflowStepExecutionRepository
 )
 
+# Localization System Repository
+from app.repositories.entity_translation_repository import EntityTranslationRepository
+
+
 class RepositoryFactory:
     """
     Factory for creating repository instances.
@@ -103,6 +108,9 @@ class RepositoryFactory:
         """
         self.session = session
         self.encryption_service = encryption_service
+
+        # Cache for localization repository
+        self._entity_translation_repository: Optional[EntityTranslationRepository] = None
 
     # Customer repositories
     def create_customer_repository(self) -> CustomerRepository:
@@ -197,25 +205,25 @@ class RepositoryFactory:
 
     # Documentation repositories
     def create_documentation_resource_repository(
-        self,
+            self,
     ) -> DocumentationResourceRepository:
         """Create a DocumentationResourceRepository instance."""
         return DocumentationResourceRepository(self.session, self.encryption_service)
 
     def create_documentation_category_repository(
-        self,
+            self,
     ) -> DocumentationCategoryRepository:
         """Create a DocumentationCategoryRepository instance."""
         return DocumentationCategoryRepository(self.session, self.encryption_service)
 
     def create_application_context_repository(
-        self,
+            self,
     ) -> ApplicationContextRepository:
         """Create an ApplicationContextRepository instance."""
         return ApplicationContextRepository(self.session, self.encryption_service)
 
     def create_contextual_help_mapping_repository(
-        self,
+            self,
     ) -> ContextualHelpMappingRepository:
         """Create a ContextualHelpMappingRepository instance."""
         return ContextualHelpMappingRepository(self.session, self.encryption_service)
@@ -271,7 +279,7 @@ class RepositoryFactory:
         return CommunicationRepository(self.session, self.encryption_service)
 
     def create_customer_communication_repository(
-        self,
+            self,
     ) -> CustomerCommunicationRepository:
         """Create a CustomerCommunicationRepository instance."""
         return CustomerCommunicationRepository(self.session, self.encryption_service)
@@ -347,3 +355,135 @@ class RepositoryFactory:
     def create_workflow_step_execution_repository(self) -> WorkflowStepExecutionRepository:
         """Create a WorkflowStepExecutionRepository instance."""
         return WorkflowStepExecutionRepository(self.session, self.encryption_service)
+
+    # ================================
+    # Localization System Repository
+    # ================================
+
+    def create_entity_translation_repository(self) -> EntityTranslationRepository:
+        """
+        Create or return cached EntityTranslationRepository instance.
+
+        This repository handles all translation operations for any entity type
+        in the system, providing a centralized translation management solution
+        that mirrors the pattern used by the Dynamic Enum System.
+
+        Returns:
+            EntityTranslationRepository instance
+        """
+        if self._entity_translation_repository is None:
+            self._entity_translation_repository = EntityTranslationRepository(self.session)
+
+        return self._entity_translation_repository
+
+    def get_translation_repository(self) -> EntityTranslationRepository:
+        """
+        Alias for create_entity_translation_repository for backward compatibility.
+
+        Returns:
+            EntityTranslationRepository instance
+        """
+        return self.create_entity_translation_repository()
+
+    def get_localization_repositories(self) -> dict:
+        """
+        Get all repositories needed for localization operations.
+
+        Returns a dictionary containing all repositories that the LocalizationService
+        might need to access for entity validation and default value retrieval.
+
+        Returns:
+            Dictionary mapping entity types to their repository instances
+        """
+        repositories = {
+            'translation': self.create_entity_translation_repository(),
+        }
+
+        # Add main entity repositories that support translation
+        # Based on the LocalizationService.ENTITY_REGISTRY configuration
+
+        # Workflow domain repositories
+        repositories['workflow'] = self.create_workflow_repository()
+        repositories['workflow_step'] = self.create_workflow_step_repository()
+
+        # Product domain repositories
+        repositories['product'] = self.create_product_repository()
+
+        # Tool domain repositories
+        repositories['tool'] = self.create_tool_repository()
+
+        # Material domain repositories
+        repositories['material'] = self.create_material_repository()
+
+        # Project domain repositories
+        repositories['project'] = self.create_project_repository()
+
+        return repositories
+
+    def validate_translation_dependencies(self) -> dict:
+        """
+        Validate that all repositories needed for translation are available.
+
+        This method checks if the main entity repositories referenced in the
+        LocalizationService.ENTITY_REGISTRY are actually available through
+        the repository factory.
+
+        Returns:
+            Dictionary with validation results
+        """
+        validation_results = {
+            'valid': True,
+            'available_repositories': [],
+            'missing_repositories': [],
+            'errors': []
+        }
+
+        try:
+            # Check if translation repository can be created
+            translation_repo = self.create_entity_translation_repository()
+            validation_results['available_repositories'].append('entity_translation')
+
+            # Expected repository methods based on LocalizationService.ENTITY_REGISTRY
+            expected_repositories = {
+                'workflow': 'create_workflow_repository',
+                'workflow_step': 'create_workflow_step_repository',
+                'product': 'create_product_repository',
+                'tool': 'create_tool_repository',
+                'material': 'create_material_repository',
+                'project': 'create_project_repository',
+            }
+
+            # Check each expected repository
+            for entity_type, repo_method_name in expected_repositories.items():
+                if hasattr(self, repo_method_name):
+                    try:
+                        # Try to create the repository
+                        repo_method = getattr(self, repo_method_name)
+                        repo = repo_method()
+                        validation_results['available_repositories'].append(entity_type)
+                    except Exception as e:
+                        validation_results['missing_repositories'].append(entity_type)
+                        validation_results['errors'].append(
+                            f"Error creating {entity_type} repository: {str(e)}"
+                        )
+                        validation_results['valid'] = False
+                else:
+                    validation_results['missing_repositories'].append(entity_type)
+                    validation_results['errors'].append(
+                        f"Repository method {repo_method_name} not found for {entity_type}"
+                    )
+                    validation_results['valid'] = False
+
+        except Exception as e:
+            validation_results['valid'] = False
+            validation_results['errors'].append(f"Failed to create translation repository: {str(e)}")
+
+        return validation_results
+
+    def cleanup_translation_caches(self) -> None:
+        """
+        Clear all translation-related repository caches.
+
+        Useful for testing or when you need to ensure fresh repository instances.
+        """
+        self._entity_translation_repository = None
