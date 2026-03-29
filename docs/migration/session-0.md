@@ -27,7 +27,9 @@ scripts/generate_key.py
 ```
 
 ### Remove from `requirements.txt`
-Delete the line: `pysqlcipher3`
+Delete both lines:
+- `pysqlcipher3`
+- `sqlcipher3` (also encryption-only, confirmed present)
 
 ### Rewrite `app/core/config.py`
 
@@ -466,17 +468,213 @@ check_path.py
 
 Also delete:
 ```
-scripts/migrations/          (entire directory)
+scripts/migrations/               (entire directory)
+scripts/register_material_settings.py
 db_tools/populate_enums.py
 app/db/enum_patch.py
-app/settings/                (entire directory)
+app/settings/                     (entire directory)
 ```
 
 ---
 
 ## Step I — Fix surviving files
 
-### `app/db/init_db.py`
+> **Audit note:** Pre-execution audit found 23 hidden couplings in surviving
+> files and 9 FK conflicts pointing to deleted tables. Every item below is a
+> confirmed breakage that will prevent the app from starting if not fixed.
+> Work through them in the order listed (blockers first).
+
+---
+
+### I-1 — BLOCKER: Rewrite `app/db/session.py`
+
+Current file imports `SQLCipherDialect` and `KeyManager` — both deleted.
+Full rewrite required (content specified in Step A above).
+**Must be done before any other Step I work** — everything imports session.py.
+
+---
+
+### I-2 — BLOCKER: `app/api/deps.py`
+
+Remove the four workflow service dependency getters and their imports.
+The file imports from deleted services at module level — this breaks startup.
+
+Remove these imports:
+```python
+from app.services.workflow_service import WorkflowService
+from app.services.workflow_execution_service import WorkflowExecutionService
+from app.services.workflow_navigation_service import WorkflowNavigationService
+from app.services.workflow_import_export_service import WorkflowImportExportService
+```
+
+Remove these functions:
+```python
+def get_workflow_service(...) -> WorkflowService: ...
+def get_workflow_execution_service(...) -> WorkflowExecutionService: ...
+def get_workflow_navigation_service(...) -> WorkflowNavigationService: ...
+def get_workflow_import_export_service(...) -> WorkflowImportExportService: ...
+```
+
+Session 5 will add new workflow execution dependencies to this file.
+
+---
+
+### I-3 — BLOCKER: `app/main.py`
+
+Three issues found:
+
+**a) Remove startup handler for material settings:**
+```python
+# Delete this import (top of file):
+from scripts.register_material_settings import register_settings
+
+# Delete this entire handler:
+@app.on_event("startup")
+async def register_material_settings_on_startup():
+    ...
+```
+
+**b) Remove tool_service logger references:**
+```python
+# Delete these lines:
+logging.getLogger("app.services.tool_service").setLevel(logging.DEBUG)
+tool_service_logger = logging.getLogger('app.services.tool_service')
+```
+
+**c) Audit `setup_event_handlers(app)` call** — see I-4.
+
+---
+
+### I-4 — BLOCKER: `app/core/events.py`
+
+Contains Tool event handlers (ToolCreated, ToolStatusChanged,
+ToolMaintenanceScheduled, ToolCheckoutCreated) that reference the deleted
+Tool model. Remove all Tool-related event classes and their registrations.
+If the file becomes empty, delete it and remove the `setup_event_handlers`
+call from `app/main.py`.
+
+---
+
+### I-5 — BLOCKER: Commerce models with FKs to deleted tables
+
+The following FK columns must be **removed** (not nulled — the referenced
+tables will not exist). Remove both the Column definition and the
+corresponding `relationship()`.
+
+**`app/db/models/sales.py` — SaleItem:**
+- Remove: `pattern_id = Column(Integer, ForeignKey("patterns.id"), ...)`
+- Remove: `project_id = Column(Integer, ForeignKey("projects.id"), ...)`
+- Remove: `pattern = relationship("Pattern")`
+- Remove: `project = relationship("Project")`
+
+**`app/db/models/product.py` — Product:**
+- Remove: `pattern_id = Column(Integer, ForeignKey("patterns.id"), ...)`
+- Remove: `project_id = Column(Integer, ForeignKey("projects.id"), ...)`
+- Remove: `pattern = relationship("Pattern")`
+- Remove: `project = relationship("Project")`
+- Remove: `from app.db.models.enums import ProjectType` (line ~38)
+- Change `product_type` column from `Enum(ProjectType)` to `String` —
+  this field categorises the kind of product (bag, wallet, repair, etc.)
+  and can just be a free string now.
+
+**`app/db/models/picking_list.py` — PickingList:**
+- Remove: `project_id = Column(Integer, ForeignKey("projects.id"), ...)`
+- Remove: `project = relationship("Project")`
+
+**`app/db/models/picking_list.py` — PickingListItem:**
+- Remove: `material_id = Column(Integer, ForeignKey("materials.id"), ...)`
+- Remove: `component_id = Column(Integer, ForeignKey("components.id"), ...)`
+- Remove: `material = relationship("Material")`
+- Remove: `component = relationship("Component")`
+- Add: `core_path = Column(String, nullable=True)` — for Core primitive reference
+
+**`app/db/models/inventory.py` — Inventory:**
+- Remove: `material = relationship("Material", ...)`
+- Remove: `tool = relationship("Tool", ...)`
+- Keep: `product = relationship("Product", ...)` — Product survives
+
+**`app/db/models/inventory.py` — InventoryTransaction:**
+- Remove: `project_id = Column(Integer, ForeignKey("projects.id"), ...)`
+- Remove: `project = relationship("Project")`
+- (session 7 will rewrite this model fully — just unblock the FK for now)
+
+---
+
+### I-6 — `app/services/service_factory.py`
+
+Remove these imports (both deleted):
+```python
+from app.core.key_manager import KeyManager
+from app.services.enum_service import EnumService
+```
+
+Remove all factory methods for deleted services. Keep only methods for
+services in the Step E keep list. If any factory method instantiates a
+deleted service, remove the method entirely.
+
+---
+
+### I-7 — `app/services/product_service.py`
+
+Remove these imports (both deleted):
+```python
+from app.services.pattern_service import PatternService
+from app.services.material_service import MaterialService
+```
+
+Remove or stub any method that calls these services.
+If a method fetched a pattern or material by ID to attach to a product,
+it will be replaced in session 9 with a `core_path` string lookup.
+For now, remove the method body and leave a `# TODO session-9` comment.
+
+---
+
+### I-8 — `app/repositories/inventory_repository.py`
+
+Remove conditional import:
+```python
+from app.db.models.material import Material  # DELETE
+```
+
+Remove any method that queries or filters by Material or Tool.
+These will be replaced in session 7 with core_path-based queries.
+Leave `# TODO session-7` comments for removed logic.
+
+---
+
+### I-9 — `app/repositories/user_repository.py`
+
+Remove the import from the deleted associations module:
+```python
+from app.db.models.associations import user_role  # DELETE
+```
+
+Replace with direct ORM access if the role assignment logic uses
+the User.roles relationship defined in the User model itself.
+
+---
+
+### I-10 — `app/repositories/storage_repository.py`
+
+Remove imports from deleted dynamic material module:
+```python
+from app.db.models.dynamic_material import DynamicMaterial, MaterialType  # DELETE
+```
+
+Remove any method or query that uses these classes.
+Leave `# TODO session-8` comments for removed logic.
+
+---
+
+### I-11 — `app/db/models/__init__.py`
+
+Remove all imports for deleted models. The file must only import surviving models.
+After Step B completes, any model imported here that no longer exists will
+cause a collection error.
+
+---
+
+### I-12 — `app/db/init_db.py`
 
 Rewrite to only import and create tables for surviving models:
 
@@ -495,7 +693,6 @@ logger = logging.getLogger(__name__)
 
 def init(db: Session) -> None:
     init_db()
-
     user_service = UserService(db)
     admin = user_service.get_by_email(email=settings.FIRST_SUPERUSER)
     if not admin:
@@ -520,40 +717,38 @@ if __name__ == "__main__":
     main()
 ```
 
-### Scan surviving files for broken imports
+---
 
-For each surviving file in `app/`, run:
+### I-13 — General import scan
+
+After all specific fixes above, run the full grep battery to catch anything
+missed:
+
 ```bash
-python -c "import app.path.to.module"
+grep -r "from app.db.models.material"      app/
+grep -r "from app.db.models.tool"          app/
+grep -r "from app.db.models.pattern"       app/
+grep -r "from app.db.models.workflow"      app/
+grep -r "from app.db.models.project import" app/
+grep -r "from app.db.models.component"     app/
+grep -r "from app.db.models.timeline"      app/
+grep -r "from app.db.models.dynamic"       app/
+grep -r "from app.db.models.entity_trans"  app/
+grep -r "from app.db.models.preset"        app/
+grep -r "from app.db.models.associations"  app/
+grep -r "from app.core.key_manager"        app/
+grep -r "sqlcipher\|pragma key"            app/
+grep -r "from app.services.tool_service"   app/
+grep -r "from app.services.pattern_service" app/
+grep -r "from app.services.workflow_service" app/
+grep -r "from app.services.project_service" app/
+grep -r "from app.services.enum_service"   app/
+grep -r "from app.services.dynamic_material" app/
+grep -r "register_material_settings"       app/ scripts/
 ```
 
-For every `ImportError`:
-- If it imports from a **deleted module** → remove the import line.
-- Do NOT recreate the deleted module to fix the error.
-- If a model field uses a deleted enum → remove the field or change to `String`.
-- If a service method calls a deleted service → remove the method.
-
-Common patterns to grep for and fix:
-```bash
-grep -r "from app.db.models.material"     app/
-grep -r "from app.db.models.tool"         app/
-grep -r "from app.db.models.pattern"      app/
-grep -r "from app.db.models.workflow"     app/
-grep -r "from app.db.models.project"      app/
-grep -r "from app.db.models.component"    app/
-grep -r "from app.db.models.timeline"     app/
-grep -r "from app.db.models.dynamic"      app/
-grep -r "from app.db.models.entity_trans" app/
-grep -r "from app.db.models.preset"       app/
-grep -r "from app.db.models.associations" app/
-grep -r "from app.core.key_manager"       app/
-grep -r "sqlcipher\|pragma key"           app/
-```
-
-### `app/main.py`
-
-Remove imports of deleted modules (events.py may reference deleted services,
-db_metrics.py may reference SQLCipher). Fix or stub as needed.
+For each match in a **surviving** file: remove the import.
+Do not recreate deleted modules to satisfy imports.
 
 ---
 
